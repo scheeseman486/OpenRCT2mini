@@ -620,7 +620,7 @@ OPENRCT2mini for Miyoo Mini (OnionUI)
 
 This archive is OpenRCT2mini v${FORK_VERSION} (commit ${GITREV}), packaged
 as an OnionUI port. After install, OpenRCT2mini appears in your Game
-Library under "Simulation" alongside any ROMs.
+Library under "Simulation".
 
 INSTALLING
 ----------
@@ -636,7 +636,7 @@ INSTALLING
                                        OpenRCT2mini.port (or .notfound)
 
    If your card already has a Roms/PORTS/ folder from other ports, just
-   merge — nothing in this archive overlaps with anything Onion ships.
+   merge, nothing in this archive overlaps with anything Onion ships.
 
 2. Copy your legitimate RollerCoaster Tycoon 2 install to:
 
@@ -654,25 +654,15 @@ INSTALLING
    scenarios then appear in the scenario list.
 
 3. From the OnionUI Game Switcher, run "Refresh roms". OpenRCT2mini will
-   appear in the **Simulation** category in your Game Library. While the
-   sentinel rct2/Data/g1.dat is missing, the port shortcut is renamed to
-   .notfound and stays hidden — that's the cue your RCT2 copy isn't in
-   the right folder yet.
+   appear in the **Simulation** category in your Game Library.
 
-   The supplemental asset packs (title sequences, objects, OpenSFX,
-   OpenMusic) are bundled by default — see BUNDLED ASSET PACKS below.
-
-CONTROLS (cut 60)
+CONTROLS
 -----------------
 
-The Miyoo Mini has no mouse and no hardware cursor, so we draw the cursor
-ourselves and drive it from the gamepad.
-
-  D-pad        Move cursor (accelerates after 300 ms hold)
+  D-pad        Move cursor
   A            Left click
   B            Right click
-  X            Cycle game speed (Normal -> Quick -> Fast -> Turbo
-               -> Pause -> Normal)
+  X            Cycle game speed
   Y            Rotate construction object clockwise
   L1           Shift modifier (raise placement Z, vertical stack, etc.)
   R1           Hold for fast cursor (~2.5x speed); also acts as the
@@ -680,75 +670,13 @@ ourselves and drive it from the gamepad.
   L2           Rotate view counter-clockwise
   R2           Rotate view clockwise
   L1 + R1      Ctrl modifier (sample-and-lock placement Z onto a
-               clicked element -- footpaths, track, scenery). Fast
-               cursor is suppressed while the chord is held so the
-               cursor stays precise.
+               clicked element -- footpaths, track, scenery)
   R1 + L2      Zoom out
   R1 + R2      Zoom in
   R1 + Y       Rotate construction object counter-clockwise
   Start        Confirm / open in-game menu
   Select       Cancel / back
 
-If you connect a USB keyboard via the OTG dock (or run on the dev host):
-
-  Arrow keys   Move cursor (same as D-pad)
-  Z            Left click
-  X            Right click
-  Shift        Shift modifier (same role as L1)
-  Alt          Fast cursor + gamepad modifier (same role as R1).
-               Holding Alt also clears it from SDL's mod state, so
-               ALT+RETURN windowed-mode toggle won't fire while
-               testing on a host.
-  Ctrl         Ctrl modifier (same role as L1+R1; suppresses fast
-               cursor)
-
-LOGS / TROUBLESHOOTING
-----------------------
-
-If something crashes, the run log is at:
-
-       /SDCARD/Roms/PORTS/Games/OpenRCT2mini/log/run.log
-
-Each run gets a header/footer block; scroll to the END of the file for
-the latest run. The footer includes the exit code; if exit_code is >= 128
-the binary was killed by a signal — the log decodes which one (SIGSEGV is
-the most common: null deref or bad pointer).
-
-Pull that file off the card and report it. The save dir is:
-
-       /SDCARD/Roms/PORTS/Games/OpenRCT2mini/save/OpenRCT2/
-
-Saves you make on the device land there. They are interchangeable with
-desktop OpenRCT2 saves.
-
-BUNDLED ASSET PACKS
--------------------
-
-This tarball includes the four supplemental asset packs the OpenRCT2
-project publishes alongside its own binaries:
-
-  data/sequence/       Title-sequence demo parks  (CC-BY-4.0)
-  data/object/         Stock object pack          (CC-BY-4.0)
-  data/assetpack/openrct2.sound.parkap   OpenSFX  (MIT)
-  data/assetpack/openrct2.music.parkap   OpenMusic (CC-BY-SA-4.0)
-
-Each pack ships with its own LICENSE file alongside the data; the
-high-level summary is in data/ASSETPACKS.md inside this tarball, and
-THIRD_PARTY_NOTICES.md in the OpenRCT2mini source tree.
-
-If your tarball was rebuilt with --no-assets these directories are
-absent and you can fetch the packs from
-<https://github.com/OpenRCT2/OpenRCT2/releases> manually.
-
-KNOWN LIMITS
-------------
-
-  * Audio uses Vorbis only — no FLAC. Custom-music FLAC files will silently
-    drop. (Cut: DISABLE_FLAC.)
-  * Networking, plugins, and the version checker are disabled. Local play
-    only. (Cuts: DISABLE_NETWORK, ENABLE_SCRIPTING=OFF.)
-  * Map size is capped at 256x256 to fit the device's 128 MB RAM. Larger
-    maps will be rejected at load time. (Cut 1.)
 EOF
 
 ##############################################################################
