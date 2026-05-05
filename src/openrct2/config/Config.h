@@ -127,6 +127,26 @@ namespace OpenRCT2::Config
         ParkPreviewPref fileBrowserPreviewType;
     };
 
+    // OPENRCT2MINI revision 59 / 61: cursor "themes". Persisted as a name
+    // string in [interface] for forward-compatibility — adding new presets
+    // won't shuffle int IDs out from under existing configs.
+    //
+    //   Classic       — original RCT2 look. pi10 outline + pi17 fill on mono
+    //                   bitmaps; paletted full-gradient pointer.
+    //   Default       — high-readability mono. pi0 (true black) outline +
+    //                   pi255 (true white) fill on every bitmap. Uses the
+    //                   project's hand-drawn HC pointer instead of the
+    //                   paletted one.
+    //   HighContrast  — inverted Default. pi255 outline + pi0 fill, same
+    //                   bitmaps. Most aggressive readability against light
+    //                   backgrounds.
+    enum class CursorStyle : uint8_t
+    {
+        Classic = 0,
+        Default = 1,
+        HighContrast = 2,
+    };
+
     struct Interface
     {
         bool toolbarButtonsCentred;
@@ -149,6 +169,7 @@ namespace OpenRCT2::Config
         bool windowButtonsOnTheLeft;
         bool enlargedUi;
         bool touchEnhancements;
+        CursorStyle cursorStyle;
     };
 
     struct Sound

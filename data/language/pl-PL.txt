@@ -3778,13 +3778,13 @@ STR_6781    :Zrzuty ekranu
 STR_6782    :Powiadomienia parku
 STR_6783    :Powiadomienia przejażdżki
 STR_6784    :Powiadomienia gości
-STR_6785    :Kontroler
-STR_6786    :Martwa strefa:
-STR_6787    :Martwa strefa gałki analogowej (minimalny wymagany ruch gałką)
-STR_6788    :Czułość:
-STR_6789    :Mnożnik czułości gałki analogowej
-STR_6790    :Martwa strefa: {COMMA32}%
-STR_6791    :Czułość: {COMMA32}%
+STR_6785    :Wirtualna mysz
+STR_6786    :Przyspieszenie:
+STR_6787    :Jak szybko D-pad osiąga maksymalną prędkość wirtualnej myszy
+STR_6788    :Prędkość:
+STR_6789    :Mnożnik prędkości wirtualnej myszy
+STR_6790    :Przyspieszenie: {COMMA32}%
+STR_6791    :Prędkość: {COMMA32}%
 STR_6792    :Budynki wejściowe
 STR_6793    :Goście i pracownicy
 STR_6794    :Scenerie i style
@@ -3811,3 +3811,9 @@ STR_7014    :Posiadam grę na platformie Steam, ale jej jeszcze nie zainstalowa�
 STR_7015    :Zamknij aplikację Steam, jeśli jest uruchomiona i kliknij ‘OK’.
 STR_7016    :OpenRCT2 próbował zainicjować pobieranie w aplikacji Steam. Otwórz aplikację Steam i manualnie rozpocznij pobieranie gry. Kiedy Steam zakończy pobieranie, kliknij ‘OK’.
 STR_7017    :Wyjdź
+STR_7030    :Kursory
+STR_7031    :Styl kursora:
+STR_7032    :Wybierz, jak rysowany jest kursor na ekranie
+STR_7033    :Domyślny
+STR_7034    :Wysoki kontrast
+STR_7035    :Klasyczny

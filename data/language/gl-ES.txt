@@ -3779,13 +3779,13 @@ STR_6781    :Capturas de pantalla
 STR_6782    :Notificacións do parque
 STR_6783    :Notificacións das atraccións
 STR_6784    :Notificacións dos visitantes
-STR_6785    :Mando
-STR_6786    :Zona morta:
-STR_6787    :Zona morta do mando analóxico (movemento mínimo requirido)
-STR_6788    :Sensibilidade:
-STR_6789    :Multiplicador de sensibilidade do mando analóxico
-STR_6790    :Zona morta: {COMMA32}%
-STR_6791    :Sensibilidade: {COMMA32}%
+STR_6785    :Rato virtual
+STR_6786    :Aceleración:
+STR_6787    :Que rápido o D-pad acada a velocidade máxima do rato virtual
+STR_6788    :Velocidade:
+STR_6789    :Multiplicador da velocidade do rato virtual
+STR_6790    :Aceleración: {COMMA32}%
+STR_6791    :Velocidade: {COMMA32}%
 STR_6792    :Edificios de entrada
 STR_6793    :Visitantes e persoal
 STR_6794    :Decoración e temáticas
@@ -3818,3 +3818,9 @@ STR_7025    :Facer visible
 STR_7026    :Fai toda a atracción visible
 STR_7028    :Cuarto de hélice ascendente
 STR_7029    :Cuarto de hélice descendente
+STR_7030    :Cursores
+STR_7031    :Estilo do cursor:
+STR_7032    :Elixe como se debuxa o cursor na pantalla
+STR_7033    :Predeterminado
+STR_7034    :Alto contraste
+STR_7035    :Clásico

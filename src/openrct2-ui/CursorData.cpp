@@ -157,6 +157,47 @@ namespace OpenRCT2::Ui
         "                                "
     );
 
+    // OPENRCT2MINI revision 59: high-contrast pointer for the "High contrast"
+    // cursor style (Options > Interface > Cursors). Replaces the soft-shaded
+    // paletted variant when style == HighContrast — see SoftwareCursor's
+    // GetOrCreateSprite. The mono blob below was generated from
+    // cursors/orct2mini_cursor_pointer_mono.png via cursors/png_to_cursordata.py.
+    static constexpr CursorData kArrowCursorDataHighContrast = cursorFromBitMap(
+        0, 0,
+        "XXXXXXXXXXXXXX                  "
+        "X............X                  "
+        "X............X                  "
+        "X............X                  "
+        "X............X                  "
+        "X...........X                   "
+        "X..........X                    "
+        "X...........X                   "
+        "X............X                  "
+        "X.............X                 "
+        "X..............X                "
+        "X.....X.........X               "
+        "X....X X.........X              "
+        "XXXXX   X.........X             "
+        "         X.........X            "
+        "          X.........X           "
+        "           X.........X          "
+        "            X.........X         "
+        "             X.........X        "
+        "              X.......X         "
+        "               X.....X          "
+        "                X...X           "
+        "                 X.X            "
+        "                  X             "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+    );
+
     static constexpr CursorData kHandPointCursorData = cursorFromBitMap(
         8, 0,
         "        XXX                     "
@@ -1130,5 +1171,20 @@ namespace OpenRCT2::Ui
         if (idx >= EnumValue(CursorID::Count))
             return nullptr;
         return kRawPalettedCursorData[idx];
+    }
+
+    // OPENRCT2MINI revision 59: high-contrast overrides. Return a mono CursorData
+    // for cursors that have a hand-drawn HC variant (currently only Arrow);
+    // other cursors return nullptr and the SoftwareCursor falls back to
+    // getCursorData() with the HC palette indices applied at decode time.
+    const CursorData* getHighContrastCursorData(CursorID cursorId)
+    {
+        switch (cursorId)
+        {
+            case CursorID::Arrow:
+                return &kArrowCursorDataHighContrast;
+            default:
+                return nullptr;
+        }
     }
 } // namespace OpenRCT2::Ui

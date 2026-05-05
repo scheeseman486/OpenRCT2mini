@@ -3781,14 +3781,14 @@ STR_6781    :Snímky obrazovky
 STR_6782    :Upozornění o parku
 STR_6783    :Upozornění o atrakcích
 STR_6784    :Upozornění o návštěvnících
-STR_6785    :Gamepad
-STR_6786    :Mrtvá zóna:
+STR_6785    :Virtuální myš
+STR_6786    :Akcelerace:
 
-STR_6787    :Mrtvá zóna analogové páčky (minimální vyžadovaný pohyb)
-STR_6788    :Citlivost:
-STR_6789    :Násobitel citlivosti analogové páčky
-STR_6790    :Mrtvá zóna: {COMMA32}%
-STR_6791    :Citlivost: {COMMA32}%
+STR_6787    :Jak rychle D-pad dosáhne maximální rychlosti virtuální myši
+STR_6788    :Rychlost:
+STR_6789    :Násobitel rychlosti virtuální myši
+STR_6790    :Akcelerace: {COMMA32}%
+STR_6791    :Rychlost: {COMMA32}%
 STR_6792    :Budovy vstupů
 STR_6793    :Návštěvníci a personál
 STR_6794    :Kulisy a motivy
@@ -3806,3 +3806,9 @@ STR_7005    :Stavět cesty v oblasti označené tažením
 STR_7006    :Vykreslit okraje tlačítek s obrázky
 STR_7007    :Typ atrakce
 STR_7008    :Neznámá atrakce ({INT32})
+STR_7030    :Kurzory
+STR_7031    :Styl kurzoru:
+STR_7032    :Vyberte, jak se vykresluje kurzor na obrazovce
+STR_7033    :Výchozí
+STR_7034    :Vysoký kontrast
+STR_7035    :Klasický

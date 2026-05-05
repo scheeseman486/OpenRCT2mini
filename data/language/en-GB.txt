@@ -3781,13 +3781,13 @@ STR_6781    :Screenshots
 STR_6782    :Park notifications
 STR_6783    :Ride notifications
 STR_6784    :Guest notifications
-STR_6785    :Gamepad
-STR_6786    :Deadzone:
-STR_6787    :Analogue stick deadzone (minimum movement required)
-STR_6788    :Sensitivity:
-STR_6789    :Analogue stick sensitivity multiplier
-STR_6790    :Deadzone: {COMMA32}%
-STR_6791    :Sensitivity: {COMMA32}%
+STR_6785    :Virtual mouse
+STR_6786    :Acceleration:
+STR_6787    :How quickly the D-pad reaches its maximum virtual mouse speed
+STR_6788    :Speed:
+STR_6789    :Virtual mouse movement speed multiplier
+STR_6790    :Acceleration: {COMMA32}%
+STR_6791    :Speed: {COMMA32}%
 STR_6792    :Entrance Buildings
 STR_6793    :Guests and Staff
 STR_6794    :Scenery and Themes
@@ -3826,3 +3826,11 @@ STR_7026    :Makes the whole ride visible
 STR_7027    :{MOVE_X}{29}{STRINGID}
 STR_7028    :Quarter Helix up
 STR_7029    :Quarter Helix down
+# OPENRCT2MINI revision 59: Options > Interface > Cursors group + Cursor Style dropdown.
+STR_7030    :Cursors
+STR_7031    :Cursor style:
+STR_7032    :Choose how the on-screen cursor is drawn
+STR_7033    :Default
+STR_7034    :High contrast
+# OPENRCT2MINI revision 61: third cursor style — RCT2-look paletted gradient.
+STR_7035    :Classic

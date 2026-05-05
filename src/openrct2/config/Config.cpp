@@ -249,8 +249,13 @@ namespace OpenRCT2::Config
             model->trapCursor = reader->GetBoolean("trap_cursor", false);
             model->autoOpenShops = reader->GetBoolean("auto_open_shops", false);
 
-            // Gamepad settings
-            model->gamepadDeadzone = reader->GetInt32("gamepad_deadzone", 3600);
+            // OPENRCT2MINI cut 58: these two config slots were repurposed
+            // for software-cursor speed/accel. The Options > Controls >
+            // Cursor section is the only writer/reader; original gamepad
+            // semantics are gone. Defaults pick a moderate ramp (~430 ms
+            // hold to reach max) and a 1.5× speed multiplier — close to
+            // the previous hard-coded behaviour.
+            model->gamepadDeadzone = reader->GetInt32("gamepad_deadzone", 16000);
             model->gamepadSensitivity = reader->GetFloat("gamepad_sensitivity", 1.5f);
             model->scenarioUnlockingEnabled = reader->GetBoolean("scenario_unlocking_enabled", true);
             model->scenarioHideMegaPark = reader->GetBoolean("scenario_hide_mega_park", true);
@@ -415,6 +420,16 @@ namespace OpenRCT2::Config
             model->windowButtonsOnTheLeft = reader->GetBoolean("window_buttons_on_the_left", kWindowButtonsOnTheLeftDefault);
             model->enlargedUi = reader->GetBoolean("enlarged_ui", kEnlargedUiDefault);
             model->touchEnhancements = reader->GetBoolean("touch_enhancements", kEnlargedUiDefault);
+            // OPENRCT2MINI revision 59 / 61: cursor-style theme. Stored
+            // as a name string ("classic", "default", "high_contrast")
+            // so future themes can be added without renumbering.
+            const auto styleName = reader->GetString("cursor_style", "default");
+            if (styleName == "classic")
+                model->cursorStyle = CursorStyle::Classic;
+            else if (styleName == "high_contrast")
+                model->cursorStyle = CursorStyle::HighContrast;
+            else
+                model->cursorStyle = CursorStyle::Default;
         }
     }
 
@@ -442,6 +457,13 @@ namespace OpenRCT2::Config
         writer->WriteBoolean("window_buttons_on_the_left", model->windowButtonsOnTheLeft);
         writer->WriteBoolean("enlarged_ui", model->enlargedUi);
         writer->WriteBoolean("touch_enhancements", model->touchEnhancements);
+        // OPENRCT2MINI revision 59 / 61: cursor-style theme as a name string.
+        u8string styleName{ "default" };
+        if (model->cursorStyle == CursorStyle::Classic)
+            styleName = "classic";
+        else if (model->cursorStyle == CursorStyle::HighContrast)
+            styleName = "high_contrast";
+        writer->WriteString("cursor_style", styleName);
     }
 
     static void ReadSound(IIniReader* reader)

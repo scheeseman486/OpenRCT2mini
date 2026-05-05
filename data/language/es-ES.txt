@@ -3782,13 +3782,13 @@ STR_6781    :Capturas de pantalla
 STR_6782    :Notificaciones de parque
 STR_6783    :Notificaciones de atracciones
 STR_6784    :Notificaciones de visitantes
-STR_6785    :Mando
-STR_6786    :Zona muerta:
-STR_6787    :Zona muerta del stick analógico (movimiento mínimo requerido)
-STR_6788    :Sensibilidad:
-STR_6789    :Multiplicador de la sensibilidad del stick analógico
-STR_6790    :Zona muerta: {COMMA32}%
-STR_6791    :Sensibilidad: {COMMA32}%
+STR_6785    :Ratón virtual
+STR_6786    :Aceleración:
+STR_6787    :Qué tan rápido el D-pad alcanza la velocidad máxima del ratón virtual
+STR_6788    :Velocidad:
+STR_6789    :Multiplicador de velocidad del ratón virtual
+STR_6790    :Aceleración: {COMMA32}%
+STR_6791    :Velocidad: {COMMA32}%
 STR_6792    :Edificios de entrada
 STR_6793    :Visitantes y personal
 STR_6794    :Decoración y temas
@@ -3804,3 +3804,9 @@ STR_7003    :El archivo de audio ‘{STRING}’ está truncado. Se esperaban {IN
 STR_7004    :Forzar redibujado
 STR_7005    :Arrastrar un área de sendero
 STR_7006    :Dibujar borde alrededor de los botones con imágenes
+STR_7030    :Cursores
+STR_7031    :Estilo del cursor:
+STR_7032    :Elige cómo se dibuja el cursor en la pantalla
+STR_7033    :Predeterminado
+STR_7034    :Alto contraste
+STR_7035    :Clásico

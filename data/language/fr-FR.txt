@@ -3785,13 +3785,13 @@ STR_6781    :Capture d’écran
 STR_6782    :Notifications du parc
 STR_6783    :Notifications des attractions
 STR_6784    :Notifications des visiteurs
-STR_6785    :Manette de jeu
-STR_6786    :Zone morte :
-STR_6787    :Zone morte du stick analogique (mouvement minimum requis)
-STR_6788    :Sensibilité :
-STR_6789    :Multiplicateur de sensibilité du stick analogique
-STR_6790    :Zone morte : {COMMA32}%
-STR_6791    :Sensibilité : {COMMA32}%
+STR_6785    :Souris virtuelle
+STR_6786    :Accélération :
+STR_6787    :Vitesse à laquelle le D-pad atteint la vitesse maximale de la souris virtuelle
+STR_6788    :Vitesse :
+STR_6789    :Multiplicateur de vitesse de la souris virtuelle
+STR_6790    :Accélération : {COMMA32}%
+STR_6791    :Vitesse : {COMMA32}%
 STR_6792    :Bâtiments d’entrée
 STR_6793    :Visiteurs et employés
 STR_6794    :Décor et thèmes
@@ -3824,3 +3824,9 @@ STR_7025    :Rendre visible
 STR_7026    :Rend toute l’attraction visible
 STR_7028    :Quart d’hélice montante
 STR_7029    :Quart d’hélice descendante
+STR_7030    :Curseurs
+STR_7031    :Style du curseur :
+STR_7032    :Choisissez le rendu du curseur à l'écran
+STR_7033    :Par défaut
+STR_7034    :Contraste élevé
+STR_7035    :Classique

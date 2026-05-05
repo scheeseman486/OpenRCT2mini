@@ -3780,13 +3780,13 @@ STR_6781    :Skærmbilleder
 STR_6782    :Park-meddelelser
 STR_6783    :Forlystelses-meddelelser
 STR_6784    :Gæste-meddelelser
-STR_6785    :Gamepad
-STR_6786    :Dødzone:
-STR_6787    :Dødzone for analog‑stick (mindste nødvendige bevægelse)
-STR_6788    :Følsomhed:
-STR_6789    :Følsomhedsmultiplikator for analog‑stick
-STR_6790    :Dødzone: {COMMA32}%
-STR_6791    :Følsomhed: {COMMA32}%
+STR_6785    :Virtuel mus
+STR_6786    :Acceleration:
+STR_6787    :Hvor hurtigt D-pad'en når den virtuelle mus' maksimumhastighed
+STR_6788    :Hastighed:
+STR_6789    :Multiplikator for virtuel mus-hastighed
+STR_6790    :Acceleration: {COMMA32}%
+STR_6791    :Hastighed: {COMMA32}%
 STR_6792    :Indgangsbygninger
 STR_6793    :Gæster og personale
 STR_6794    :Scenarie og Temaer
@@ -3819,3 +3819,9 @@ STR_7025    :Gør Synlig
 STR_7026    :Gør hele forlystelsen synlig
 STR_7028    :Kvart spiral op
 STR_7029    :Kvart spiral ned
+STR_7030    :Markører
+STR_7031    :Markørstil:
+STR_7032    :Vælg hvordan skærmens markør tegnes
+STR_7033    :Standard
+STR_7034    :Høj kontrast
+STR_7035    :Klassisk

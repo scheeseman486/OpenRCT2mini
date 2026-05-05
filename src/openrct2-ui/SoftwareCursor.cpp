@@ -37,6 +37,21 @@ namespace OpenRCT2::Ui
         constexpr uint8_t kBlackIdx = 10;  // pi10 "Black (0-dark)"
         constexpr uint8_t kWhiteIdx = 17;  // pi17 "White (dark)"
 
+        // OPENRCT2MINI revision 59: high-contrast palette indices. pi0 is the
+        // engine's "void colour" reference — never touched by any palette
+        // load (LoadPalette / GfxTransposePalette / UpdatePaletteEffects
+        // all start at pi10), zero-initialised RGB(0,0,0) at static init,
+        // never overwritten. pi255 is force-set to RGB(255,255,255) on
+        // every palette load (Drawing.cpp:732). Both are guaranteed
+        // pure-black / pure-white at the framebuffer level.
+        constexpr uint8_t kHCBlackIdx = 0;
+        constexpr uint8_t kHCWhiteIdx = 255;
+
+        constexpr uint32_t SpriteCacheKey(CursorID id, OpenRCT2::Config::CursorStyle style)
+        {
+            return (static_cast<uint32_t>(style) << 16) | static_cast<uint32_t>(EnumValue(id));
+        }
+
         // X-style packed-bitmap cursor format: each row is `widthBits` bits
         // packed MSB-first into bytes. The CursorData blobs are width=32,
         // height-bytes=4 (32 px tall).
@@ -139,10 +154,24 @@ namespace OpenRCT2::Ui
 
     const SoftwareCursor::Sprite* SoftwareCursor::GetOrCreateSprite(CursorID id)
     {
-        const int key = EnumValue(id);
+        // OPENRCT2MINI revision 59: cache by (style, cursor) so swapping themes
+        // doesn't reuse a stale-palette sprite.
+        const uint32_t key = SpriteCacheKey(id, _style);
         auto it = _sprites.find(key);
         if (it != _sprites.end())
             return &it->second;
+
+        // OPENRCT2MINI revision 61: three themes.
+        //   Classic       — pi10/pi17 mono + paletted-pointer gradient.
+        //   Default       — pi0 outline + pi255 fill + HC mono pointer.
+        //   HighContrast  — pi255 outline + pi0 fill (Default inverted),
+        //                   same bitmaps as Default.
+        // Default and HighContrast share everything except the
+        // outline/fill palette indices, which are swapped.
+        const bool isClassic = (_style == OpenRCT2::Config::CursorStyle::Classic);
+        const bool isInverted = (_style == OpenRCT2::Config::CursorStyle::HighContrast);
+        const uint8_t blackIdx = isClassic ? kBlackIdx : (isInverted ? kHCWhiteIdx : kHCBlackIdx);
+        const uint8_t whiteIdx = isClassic ? kWhiteIdx : (isInverted ? kHCBlackIdx : kHCWhiteIdx);
 
         Sprite spr;
         // Initialise to "transparent" so cursors with no data byte at a
@@ -150,33 +179,45 @@ namespace OpenRCT2::Ui
         // be a visible black box on the panel).
         spr.pixels.fill(kTransparent);
 
-        // OPENRCT2MINI cut 52: prefer the full-palette variant when one
-        // exists for this CursorID. Lets us keep soft-shaded cursors
-        // (e.g. the user's pointer.png with greyscale gradient) without
-        // quantising to the X-cursor 2-colour format.
-        if (const PalettedCursorData* pd = getPalettedCursorData(id); pd != nullptr)
+        // OPENRCT2MINI cut 52 / revision 61: prefer the full-palette variant
+        // when one exists, but ONLY in Classic. The Default and HighContrast
+        // themes drop the paletted gradient and substitute the hand-drawn
+        // mono pointer instead — the gradient defeats the whole point of
+        // a high-readability theme.
+        if (isClassic)
         {
-            for (size_t i = 0; i < kSpriteW * kSpriteH; ++i)
+            if (const PalettedCursorData* pd = getPalettedCursorData(id); pd != nullptr)
             {
-                const uint8_t b = pd->Pixels[i];
-                // The paletted format and our internal sprite both use
-                // 0xFE as the transparent sentinel (kPalettedCursorTransparent
-                // == kTransparent), so we can copy bytes through directly.
-                spr.pixels[i] = b;
+                for (size_t i = 0; i < kSpriteW * kSpriteH; ++i)
+                {
+                    const uint8_t b = pd->Pixels[i];
+                    // The paletted format and our internal sprite both use
+                    // 0xFE as the transparent sentinel (kPalettedCursorTransparent
+                    // == kTransparent), so we can copy bytes through directly.
+                    spr.pixels[i] = b;
+                }
+                spr.hotspotX = pd->HotSpot.X;
+                spr.hotspotY = pd->HotSpot.Y;
+                auto [insIt, _] = _sprites.emplace(key, std::move(spr));
+                return &insIt->second;
             }
-            spr.hotspotX = pd->HotSpot.X;
-            spr.hotspotY = pd->HotSpot.Y;
-            auto [insIt, _] = _sprites.emplace(key, std::move(spr));
-            return &insIt->second;
         }
 
-        const CursorData* cd = getCursorData(id);
+        // OPENRCT2MINI revision 59 / 61: Default and HighContrast prefer a
+        // hand-drawn mono bitmap if one exists for this cursor (currently
+        // only Arrow); otherwise fall back to the regular mono blob and
+        // recolour with the theme's outline/fill palette indices.
+        const CursorData* cd = nullptr;
+        if (!isClassic)
+            cd = getHighContrastCursorData(id);
+        if (cd == nullptr)
+            cd = getCursorData(id);
         if (cd != nullptr)
         {
             // X-cursor pixel rules:
             //   mask=0           → transparent
-            //   mask=1, data=1   → black opaque
-            //   mask=1, data=0   → white opaque
+            //   mask=1, data=1   → black opaque (palette = blackIdx)
+            //   mask=1, data=0   → white opaque (palette = whiteIdx)
             for (int y = 0; y < kSpriteH; ++y)
             {
                 for (int x = 0; x < kSpriteW; ++x)
@@ -184,7 +225,7 @@ namespace OpenRCT2::Ui
                     if (!BitAt(cd->Mask, x, y, kSpriteW))
                         continue;
                     const bool dataBit = BitAt(cd->Data, x, y, kSpriteW);
-                    spr.pixels[y * kSpriteW + x] = dataBit ? kBlackIdx : kWhiteIdx;
+                    spr.pixels[y * kSpriteW + x] = dataBit ? blackIdx : whiteIdx;
                 }
             }
             spr.hotspotX = cd->HotSpot.X;
@@ -206,6 +247,19 @@ namespace OpenRCT2::Ui
 
         auto [insIt, _] = _sprites.emplace(key, std::move(spr));
         return &insIt->second;
+    }
+
+    void SoftwareCursor::SetStyle(OpenRCT2::Config::CursorStyle style)
+    {
+        if (_style == style)
+            return;
+        _style = style;
+        // The (style, id) cache key already partitions sprites — so a fresh
+        // Composite with the new style simply misses the cache and re-decodes
+        // the active cursor with the new palette indices. We don't even need
+        // to evict, but old sprites are now dead weight for any cursors that
+        // never get used again. Clear to keep memory tidy; rebuild is cheap.
+        _sprites.clear();
     }
 
     void SoftwareCursor::SetCursor(CursorID id)

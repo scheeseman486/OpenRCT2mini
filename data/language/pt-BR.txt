@@ -3778,13 +3778,13 @@ STR_6781    :Capturas de tela
 STR_6782    :Notificações de Parque
 STR_6783    :Notificações de Atração
 STR_6784    :Notificações de Visitantes
-STR_6785    :Controle de videogame
-STR_6786    :Zona morta:
-STR_6787    :Zona morta do direcional analógico (movimento mínimo requerido)
-STR_6788    :Sensibilidade:
-STR_6789    :Multiplicador de sensibilidade do direcional analógico
-STR_6790    :Zona morta: {COMMA32}%
-STR_6791    :Sensibilidade: {COMMA32}%
+STR_6785    :Mouse virtual
+STR_6786    :Aceleração:
+STR_6787    :Quão rápido o D-pad atinge a velocidade máxima do mouse virtual
+STR_6788    :Velocidade:
+STR_6789    :Multiplicador de velocidade do mouse virtual
+STR_6790    :Aceleração: {COMMA32}%
+STR_6791    :Velocidade: {COMMA32}%
 STR_6792    :Edifícios de entrada
 STR_6793    :Visitantes e funcionários
 STR_6794    :Cenários e Temas
@@ -3817,3 +3817,9 @@ STR_7025    :Tornar visível
 STR_7026    :Tornar toda a atração visível
 STR_7028    :Quarto de Espiral para Cima
 STR_7029    :Quarto de Espiral para Baixo
+STR_7030    :Cursores
+STR_7031    :Estilo do cursor:
+STR_7032    :Escolha como o cursor é desenhado na tela
+STR_7033    :Padrão
+STR_7034    :Alto contraste
+STR_7035    :Clássico

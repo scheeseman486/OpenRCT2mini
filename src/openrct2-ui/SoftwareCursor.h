@@ -28,6 +28,7 @@
 
 #ifdef ENABLE_SOFTWARE_CURSOR
 
+    #include <openrct2/config/Config.h>  // OPENRCT2MINI revision 59 — OpenRCT2::Config::CursorStyle enum
     #include <openrct2/drawing/Drawing.h>
     #include <openrct2/interface/Cursors.h>
     #include <array>
@@ -52,9 +53,14 @@ namespace OpenRCT2::Ui
             int hotspotY = 0;
         };
 
-        std::unordered_map<int, Sprite> _sprites; // keyed by CursorID
+        // OPENRCT2MINI revision 59: cache key combines cursorId AND active style
+        // so swapping themes never reuses a stale Default-palette sprite for
+        // a HighContrast composite (or vice versa). The bit packing is just
+        // (style << 16) | cursorId — both fit comfortably in 32 bits.
+        std::unordered_map<uint32_t, Sprite> _sprites;
         CursorID _activeCursor = CursorID::Arrow;
         bool _visible = true;
+        OpenRCT2::Config::CursorStyle _style = OpenRCT2::Config::CursorStyle::Default;
 
         const Sprite* GetOrCreateSprite(CursorID id);
 
@@ -67,6 +73,13 @@ namespace OpenRCT2::Ui
 
         void SetCursor(CursorID id);
         void SetVisible(bool visible);
+
+        // OPENRCT2MINI revision 59: change the active cursor theme. Cheap if
+        // the style is unchanged; on an actual change, walks the cache
+        // and drops sprites belonging to the previous style so the next
+        // Composite re-decodes with the new palette.
+        void SetStyle(OpenRCT2::Config::CursorStyle style);
+        OpenRCT2::Config::CursorStyle GetStyle() const { return _style; }
 
         // Composite the active cursor sprite into the paletted framebuffer
         // at screen-pixel position (x, y). Bounds-checks and skips

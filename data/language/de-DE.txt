@@ -3775,13 +3775,13 @@ STR_6781    :Screenshots
 STR_6782    :Parkbenachrichtigungen
 STR_6783    :Fahrgeschäftsbenachrichtigungen
 STR_6784    :Besucherbenachrichtigungen
-STR_6785    :Gamepad
-STR_6786    :Tote Zone:
-STR_6787    :Analogstick-Totzone (minimale Bewegung benötigt)
-STR_6788    :Empfindlichkeit:
-STR_6789    :Analogstickempfindlichkeitsfaktor
-STR_6790    :Tote Zone {COMMA32}%
-STR_6791    :Empfindlichkeit: {COMMA32}%
+STR_6785    :Virtuelle Maus
+STR_6786    :Beschleunigung:
+STR_6787    :Wie schnell das D-Pad die maximale Geschwindigkeit der virtuellen Maus erreicht
+STR_6788    :Geschwindigkeit:
+STR_6789    :Multiplikator der virtuellen Mausgeschwindigkeit
+STR_6790    :Beschleunigung: {COMMA32}%
+STR_6791    :Geschwindigkeit: {COMMA32}%
 STR_6792    :Eingangsgebäude
 STR_6793    :Besucher und Personal
 STR_6794    :Szenerie und Themen
@@ -3814,3 +3814,9 @@ STR_7025    :Sichtbar machen
 STR_7026    :Macht das gesamte Fahrgeschäft sichtbar
 STR_7028    :Viertelspirale n. oben
 STR_7029    :Viertelspirale n. unten
+STR_7030    :Mauszeiger
+STR_7031    :Zeigerstil:
+STR_7032    :Wählt, wie der Bildschirmzeiger gezeichnet wird
+STR_7033    :Standard
+STR_7034    :Hoher Kontrast
+STR_7035    :Klassisch

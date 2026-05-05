@@ -3777,13 +3777,13 @@ STR_6781    :Screenshots
 STR_6782    :Park
 STR_6783    :Attracties
 STR_6784    :Bezoekers
-STR_6785    :Gamepad
-STR_6786    :Dode zone:
-STR_6787    :Dode zone voor de analoge stick (minimaal vereiste beweging voordat het spel reageert)
-STR_6788    :Gevoeligheid:
-STR_6789    :Gevoeligheidsfactor voor de analoge stick
-STR_6790    :Dode zone: {COMMA32}%
-STR_6791    :Gevoeligheid: {COMMA32}%
+STR_6785    :Virtuele muis
+STR_6786    :Versnelling:
+STR_6787    :Hoe snel het D-pad de maximumsnelheid van de virtuele muis bereikt
+STR_6788    :Snelheid:
+STR_6789    :Snelheidsvermenigvuldiger van de virtuele muis
+STR_6790    :Versnelling: {COMMA32}%
+STR_6791    :Snelheid: {COMMA32}%
 STR_6792    :Ingangen
 STR_6793    :Bezoekers en werknemers
 STR_6794    :Decor en thema’s
@@ -3817,3 +3817,9 @@ STR_7026    :Hele attractie zichtbaar maken
 STR_7028    :Kwartspiraal omhoog
 STR_7029    :Kwartspiraal omlaag
 
+STR_7030    :Cursors
+STR_7031    :Cursorstijl:
+STR_7032    :Kies hoe de cursor op het scherm wordt getekend
+STR_7033    :Standaard
+STR_7034    :Hoog contrast
+STR_7035    :Klassiek

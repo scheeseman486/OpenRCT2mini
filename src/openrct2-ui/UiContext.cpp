@@ -1152,11 +1152,31 @@ private:
 
         if (anyDir)
         {
-            // 60 Hz baseline of cut 44 (0.75 → 2.5 px/frame; R1 = 2.5×) in
-            // px/sec: 45 → 150 base, 113 → 375 with R1. Ramp from base to
-            // max after 300 ms of holding the D-pad in any direction.
+            // OPENRCT2MINI cut 58: cursor speed and acceleration are now
+            // exposed through the Options > Controls > Cursor section. The
+            // two pre-existing gamepad scrollbars (Deadzone, Sensitivity)
+            // were repurposed in-place — we kept the underlying config
+            // keys (gamepadDeadzone, gamepadSensitivity) so existing
+            // configs keep working without a migration; only the labels
+            // (en-GB.txt 6785-6791) and this consumer were rewired.
+            //
+            //   gamepadDeadzone     (0..32767, displayed 0..100%) drives
+            //                       acceleration: 0% = slow ramp (800 ms
+            //                       hold to reach max speed), 100% = the
+            //                       max speed kicks in immediately.
+            //   gamepadSensitivity  (0.5..3.0, displayed 50..300%) is a
+            //                       linear multiplier on the cursor speed.
+            //                       1.0 = original cut-44c rate (45 → 150
+            //                       px/sec).
+            //
+            // Fast modifier (R1) still applies its 2.5× boost on top.
             const uint32_t held = now - _vdpadHeldSinceMs;
-            float speedPxPerSec = 45.0f + std::min(105.0f, static_cast<float>(held) / 300.0f * 105.0f);
+            const float accel = std::clamp(
+                static_cast<float>(Config::Get().general.gamepadDeadzone) / 32767.0f, 0.0f, 1.0f);
+            const float rampMs = 800.0f * (1.0f - accel) + 50.0f * accel;
+            const float ramp = std::min(1.0f, static_cast<float>(held) / rampMs);
+            const float speedMult = std::clamp(Config::Get().general.gamepadSensitivity, 0.1f, 5.0f);
+            float speedPxPerSec = (45.0f + 105.0f * ramp) * speedMult;
             if (fastModifier)
                 speedPxPerSec *= 2.5f;
             const float speed = speedPxPerSec * dtSec;

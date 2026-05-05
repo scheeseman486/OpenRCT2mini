@@ -69,6 +69,28 @@ using namespace OpenRCT2::Drawing;
 
 namespace OpenRCT2::Ui::Windows
 {
+    // OPENRCT2MINI: hide languages the build can't render. Cut 34
+    // dropped ICU and we don't ship TTF fallback fonts (CJK + Vietnamese
+    // need them for combining marks / glyph shaping; Arabic also needs
+    // BiDi shaping). The strings still ship in the data tarball — we
+    // just keep them off the dropdown so the user can't pick a setting
+    // that produces empty boxes.
+    static constexpr bool IsLanguageHiddenFromDropdown(size_t langId)
+    {
+        switch (langId)
+        {
+            case LANGUAGE_ARABIC:
+            case LANGUAGE_CHINESE_SIMPLIFIED:
+            case LANGUAGE_CHINESE_TRADITIONAL:
+            case LANGUAGE_JAPANESE:
+            case LANGUAGE_KOREAN:
+            case LANGUAGE_VIETNAMESE:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     enum WindowOptionsPage
     {
         WINDOW_OPTIONS_PAGE_DISPLAY,
@@ -197,6 +219,11 @@ namespace OpenRCT2::Ui::Windows
         WIDX_TOOLBAR_SHOW_CHAT,
         WIDX_TOOLBAR_SHOW_ZOOM,
         WIDX_TOOLBAR_SHOW_ROTATE_ANTI_CLOCKWISE,
+        // OPENRCT2MINI revision 59: Cursors group (Cursor style dropdown).
+        WIDX_CURSORS_GROUP,
+        WIDX_CURSOR_STYLE_LABEL,
+        WIDX_CURSOR_STYLE,
+        WIDX_CURSOR_STYLE_DROPDOWN,
 
         // Controls
         WIDX_CONTROLS_GROUP = WIDX_PAGE_START,
@@ -393,6 +420,10 @@ namespace OpenRCT2::Ui::Windows
 
     constexpr int32_t kThemesGroupStart = 53;
     constexpr int32_t kToolbarGroupStart = kThemesGroupStart + 53;
+    // OPENRCT2MINI revision 59: Cursors group sits 3 px below the Toolbar group
+    // (which is 107 px tall). Single-row dropdown for now; sized for one
+    // future expansion (drop shadow toggle) without redoing the layout.
+    constexpr int32_t kCursorsGroupStart = kToolbarGroupStart + 110;
 
     static const auto window_options_interface_widgets = makeWidgets(
         kMainOptionsWidgets,
@@ -412,7 +443,13 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({ 24, kToolbarGroupStart + 76}, {162, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_MUTE_BUTTON_ON_TOOLBAR,          STR_MUTE_BUTTON_ON_TOOLBAR_TIP               ), // Mute
         makeWidget({155, kToolbarGroupStart + 76}, {145, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_CHAT_BUTTON_ON_TOOLBAR,          STR_CHAT_BUTTON_ON_TOOLBAR_TIP               ), // Chat
         makeWidget({ 24, kToolbarGroupStart + 91}, {122, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_ZOOM_BUTTON_ON_TOOLBAR,          STR_ZOOM_BUTTON_ON_TOOLBAR_TIP               ), // Zoom
-        makeWidget({155, kToolbarGroupStart + 91}, {145, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_ROTATE_ANTI_CLOCKWISE,           STR_ROTATE_VIEW_ANTI_CLOCKWISE_IN_TOOLBAR_TIP)  // Rotate anti-clockwise
+        makeWidget({155, kToolbarGroupStart + 91}, {145, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_ROTATE_ANTI_CLOCKWISE,           STR_ROTATE_VIEW_ANTI_CLOCKWISE_IN_TOOLBAR_TIP),  // Rotate anti-clockwise
+
+        // OPENRCT2MINI revision 59: Cursors group with Cursor Style dropdown.
+        makeWidget({  5, kCursorsGroupStart +  0}, {300, 32}, WidgetType::groupbox,     WindowColour::secondary, STR_OPTIONS_CURSORS_GROUP                                                ),
+        makeWidget({ 10, kCursorsGroupStart + 14}, { 90, 12}, WidgetType::label,        WindowColour::secondary, STR_OPTIONS_CURSOR_STYLE_LABEL,  STR_OPTIONS_CURSOR_STYLE_TIP            ),
+        makeWidget({105, kCursorsGroupStart + 14}, {190, 14}, WidgetType::dropdownMenu, WindowColour::secondary, kStringIdEmpty,                  STR_OPTIONS_CURSOR_STYLE_TIP            ),
+        makeWidget({283, kCursorsGroupStart + 15}, { 11, 12}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH,              STR_OPTIONS_CURSOR_STYLE_TIP            )
     );
 
     constexpr int32_t kTitleSequenceStart = 53;
@@ -1002,6 +1039,30 @@ namespace OpenRCT2::Ui::Windows
             setCheckboxValue(WIDX_MINIMIZE_FOCUS_LOSS, Config::Get().general.minimizeFullscreenFocusLoss);
             setCheckboxValue(WIDX_DISABLE_SCREENSAVER_LOCK, Config::Get().general.disableScreensaver);
 
+            // OPENRCT2MINI: a chunk of the Display section is moot on a
+            // 640x480 fullscreen device. Disable everything that doesn't
+            // make sense; keep Show FPS + Multithreading active because
+            // those still tell the user something useful.
+            //
+            //   Window section: fullscreen mode (we can't switch), resolution
+            //     (panel is fixed), window scale (no point on 640x480).
+            //   Drawing Engine: software is the only path on this build
+            //     (DISABLE_OPENGL).
+            //   Frame rate limit: tied to the drawing pipeline; vsync /
+            //     uncapped variants don't apply.
+            //   Behaviour: minimize-on-focus-loss (we never lose focus on
+            //     OnionUI) and disable-screensaver (the device is always-on
+            //     while powered).
+            for (auto idx : { WIDX_FULLSCREEN_LABEL, WIDX_FULLSCREEN, WIDX_FULLSCREEN_DROPDOWN,
+                              WIDX_RESOLUTION_LABEL, WIDX_RESOLUTION, WIDX_RESOLUTION_DROPDOWN,
+                              WIDX_SCALE_LABEL, WIDX_SCALE, WIDX_SCALE_UP, WIDX_SCALE_DOWN,
+                              WIDX_DRAWING_ENGINE_LABEL, WIDX_DRAWING_ENGINE, WIDX_DRAWING_ENGINE_DROPDOWN,
+                              WIDX_FRAME_RATE_LIMIT_LABEL, WIDX_FRAME_RATE_LIMIT, WIDX_FRAME_RATE_LIMIT_DROPDOWN,
+                              WIDX_MINIMIZE_FOCUS_LOSS, WIDX_DISABLE_SCREENSAVER_LOCK })
+            {
+                widgetSetEnabled(*this, idx, false);
+            }
+
             // Dropdown captions for straightforward strings.
             widgets[WIDX_FULLSCREEN].text = FullscreenModeNames[Config::Get().general.fullscreenMode];
             widgets[WIDX_DRAWING_ENGINE].text = kDrawingEngineStringIds[EnumValue(Config::Get().general.drawingEngine)];
@@ -1235,13 +1296,29 @@ namespace OpenRCT2::Ui::Windows
                     gDropdown.items[static_cast<int32_t>(Config::Get().general.temperatureFormat)].setChecked(true);
                     break;
                 case WIDX_LANGUAGE_DROPDOWN:
+                {
+                    // OPENRCT2MINI: skip languages we can't render
+                    // properly (see IsLanguageHiddenFromDropdown). The
+                    // remapping also means dropdown index no longer
+                    // equals langId-1 — CultureDropdown reverses the
+                    // walk to recover the language id.
+                    int32_t visibleCount = 0;
+                    int32_t checkedIdx = -1;
+                    const auto current = LocalisationService_GetCurrentLanguage();
                     for (size_t i = 1; i < LANGUAGE_COUNT; i++)
                     {
-                        gDropdown.items[i - 1] = Dropdown::MenuLabel(LanguagesDescriptors[i].native_name);
+                        if (IsLanguageHiddenFromDropdown(i))
+                            continue;
+                        gDropdown.items[visibleCount] = Dropdown::MenuLabel(LanguagesDescriptors[i].native_name);
+                        if (static_cast<int32_t>(i) == current)
+                            checkedIdx = visibleCount;
+                        visibleCount++;
                     }
-                    ShowDropdown(widget, LANGUAGE_COUNT - 1);
-                    gDropdown.items[LocalisationService_GetCurrentLanguage() - 1].setChecked(true);
+                    ShowDropdown(widget, visibleCount);
+                    if (checkedIdx >= 0)
+                        gDropdown.items[checkedIdx].setChecked(true);
                     break;
+                }
                 case WIDX_DATE_FORMAT_DROPDOWN:
                     for (size_t i = 0; i < 4; i++)
                     {
@@ -1296,10 +1373,26 @@ namespace OpenRCT2::Ui::Windows
                     break;
                 case WIDX_LANGUAGE_DROPDOWN:
                 {
+                    // OPENRCT2MINI: walk the (filtered) dropdown to recover the
+                    // language id — dropdownIndex is dense over visible entries
+                    // only, no longer langId-1.
                     auto fallbackLanguage = LocalisationService_GetCurrentLanguage();
-                    if (dropdownIndex != LocalisationService_GetCurrentLanguage() - 1)
+                    int32_t targetLanguage = -1;
+                    int32_t visible = 0;
+                    for (size_t i = 1; i < LANGUAGE_COUNT; i++)
                     {
-                        if (!LanguageOpen(dropdownIndex + 1))
+                        if (IsLanguageHiddenFromDropdown(i))
+                            continue;
+                        if (visible == dropdownIndex)
+                        {
+                            targetLanguage = static_cast<int32_t>(i);
+                            break;
+                        }
+                        visible++;
+                    }
+                    if (targetLanguage > 0 && targetLanguage != LocalisationService_GetCurrentLanguage())
+                    {
+                        if (!LanguageOpen(targetLanguage))
                         {
                             // Failed to open language file, try to recover by falling
                             // back to previously used language
@@ -1313,7 +1406,7 @@ namespace OpenRCT2::Ui::Windows
                         }
                         else
                         {
-                            Config::Get().general.language = dropdownIndex + 1;
+                            Config::Get().general.language = targetLanguage;
                             Config::Save();
                             GfxInvalidateScreen();
                         }
@@ -1616,6 +1709,13 @@ namespace OpenRCT2::Ui::Windows
             setCheckboxValue(WIDX_AUDIO_FOCUS_CHECKBOX, Config::Get().sound.audioFocus);
             widgetSetEnabled(*this, WIDX_SOUND_CHECKBOX, Config::Get().sound.masterSoundEnabled);
             widgetSetEnabled(*this, WIDX_MUSIC_CHECKBOX, Config::Get().sound.masterSoundEnabled);
+            // OPENRCT2MINI: the Miyoo Mini has one mi_ao audio output and the
+            // app is always foreground (OnionUI doesn't multitask). Disable
+            // audio device selection (no choice to make) and the
+            // disable-audio-on-focus-loss checkbox (no focus loss).
+            widgetSetEnabled(*this, WIDX_SOUND, false);
+            widgetSetEnabled(*this, WIDX_SOUND_DROPDOWN, false);
+            widgetSetEnabled(*this, WIDX_AUDIO_FOCUS_CHECKBOX, false);
 
             // Initialize only on first frame, otherwise the scrollbars won't be able to be modified
             if (currentFrame == 0)
@@ -1688,6 +1788,9 @@ namespace OpenRCT2::Ui::Windows
         {
             setCheckboxValue(WIDX_SCREEN_EDGE_SCROLLING, Config::Get().general.edgeScrolling);
             setCheckboxValue(WIDX_TRAP_CURSOR, Config::Get().general.trapCursor);
+            // OPENRCT2MINI: trap-mouse-cursor is meaningless on a 640x480
+            // fullscreen device with no real mouse. Disable the checkbox.
+            widgetSetEnabled(*this, WIDX_TRAP_CURSOR, false);
             setCheckboxValue(WIDX_INVERT_DRAG, Config::Get().general.invertViewportDrag);
             setCheckboxValue(WIDX_ZOOM_TO_CURSOR, Config::Get().general.zoomToCursor);
             setCheckboxValue(WIDX_WINDOW_BUTTONS_ON_THE_LEFT, Config::Get().interface.windowButtonsOnTheLeft);
@@ -1768,6 +1871,7 @@ namespace OpenRCT2::Ui::Windows
             switch (widgetIndex)
             {
                 case WIDX_THEMES_DROPDOWN:
+                {
                     uint32_t numItems = static_cast<uint32_t>(ThemeManagerGetNumAvailableThemes());
 
                     for (size_t i = 0; i < numItems; i++)
@@ -1782,6 +1886,25 @@ namespace OpenRCT2::Ui::Windows
                     gDropdown.items[static_cast<int32_t>(ThemeManagerGetAvailableThemeIndex())].setChecked(true);
                     invalidateWidget(WIDX_THEMES_DROPDOWN);
                     break;
+                }
+                // OPENRCT2MINI revision 59 / 61: cursor-style dropdown.
+                // Three themes — the dropdown index matches the
+                // CursorStyle enum value: 0=Classic, 1=Default,
+                // 2=HighContrast.
+                case WIDX_CURSOR_STYLE_DROPDOWN:
+                {
+                    gDropdown.items[0] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_CLASSIC);
+                    gDropdown.items[1] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_DEFAULT);
+                    gDropdown.items[2] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_HIGH_CONTRAST);
+
+                    WindowDropdownShowTextCustomWidth(
+                        { windowPos.x + widget->left, windowPos.y + widget->top }, widget->height(), colours[1], 0,
+                        Dropdown::Flag::StayOpen, 3, widget->width() - 4);
+
+                    gDropdown.items[static_cast<int32_t>(Config::Get().interface.cursorStyle)].setChecked(true);
+                    invalidateWidget(WIDX_CURSOR_STYLE_DROPDOWN);
+                    break;
+                }
             }
         }
 
@@ -1795,6 +1918,22 @@ namespace OpenRCT2::Ui::Windows
                         ThemeManagerSetActiveAvailableTheme(dropdownIndex);
                     }
                     Config::Save();
+                    break;
+                // OPENRCT2MINI revision 59 / 61: persist new cursor style.
+                // Dropdown index matches the enum value (0=Classic, 1=Default,
+                // 2=HighContrast). HardwareDisplayDrawingEngine polls
+                // Config every frame and tells SoftwareCursor to flush
+                // the sprite cache — no explicit invalidation needed
+                // here.
+                case WIDX_CURSOR_STYLE_DROPDOWN:
+                    if (dropdownIndex == 0)
+                        Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::Classic;
+                    else if (dropdownIndex == 1)
+                        Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::Default;
+                    else if (dropdownIndex == 2)
+                        Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::HighContrast;
+                    Config::Save();
+                    invalidate();
                     break;
             }
         }
@@ -1814,6 +1953,23 @@ namespace OpenRCT2::Ui::Windows
             size_t activeAvailableThemeIndex = ThemeManagerGetAvailableThemeIndex();
             _dropdownCaption = ThemeManagerGetAvailableThemeName(activeAvailableThemeIndex);
             widgets[WIDX_THEMES].setString(_dropdownCaption.c_str());
+
+            // OPENRCT2MINI revision 59 / 61: cursor-style dropdown caption.
+            StringId cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_DEFAULT;
+            switch (Config::Get().interface.cursorStyle)
+            {
+                case OpenRCT2::Config::CursorStyle::Classic:
+                    cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_CLASSIC;
+                    break;
+                case OpenRCT2::Config::CursorStyle::HighContrast:
+                    cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_HIGH_CONTRAST;
+                    break;
+                case OpenRCT2::Config::CursorStyle::Default:
+                default:
+                    cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_DEFAULT;
+                    break;
+            }
+            widgets[WIDX_CURSOR_STYLE].text = cursorStyleStr;
         }
 
 #pragma endregion
@@ -2199,6 +2355,9 @@ namespace OpenRCT2::Ui::Windows
 
             setCheckboxValue(WIDX_DEBUGGING_TOOLS, Config::Get().general.debuggingTools);
             setCheckboxValue(WIDX_STAY_CONNECTED_AFTER_DESYNC, Config::Get().network.stayConnected);
+            // OPENRCT2MINI: multiplayer is compiled out (DISABLE_NETWORK), so
+            // there is no desync to stay connected through. Grey out.
+            widgetSetEnabled(*this, WIDX_STAY_CONNECTED_AFTER_DESYNC, false);
 
 #ifdef __EMSCRIPTEN__
             widgets[WIDX_GROUP_ADVANCED].bottom = kAdvancedStart + 84 + getTitleBarDiffNormal();

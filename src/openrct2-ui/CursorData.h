@@ -56,4 +56,11 @@ namespace OpenRCT2::Ui
     // Returns nullptr if the cursor doesn't have a paletted variant.
     // SoftwareCursor checks this FIRST and falls back to getCursorData.
     const PalettedCursorData* getPalettedCursorData(CursorID cursorId);
+
+    // OPENRCT2MINI revision 59: high-contrast cursor-style override. Returns a
+    // mono CursorData* if the cursor has a HC-specific bitmap; nullptr
+    // otherwise (the SoftwareCursor then re-uses getCursorData() with
+    // HC palette indices). Used only when interface.cursorStyle ==
+    // CursorStyle::HighContrast.
+    const CursorData* getHighContrastCursorData(CursorID cursorId);
 } // namespace OpenRCT2::Ui

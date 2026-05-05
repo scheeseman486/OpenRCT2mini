@@ -3784,13 +3784,19 @@ STR_6781    :Skärmdumpar
 STR_6782    :Parknotiser
 STR_6783    :Åknotiser
 STR_6784    :Gästnotiser
-STR_6785    :Handkontroll
-STR_6786    :Dödzon:
-STR_6787    :Dödzon för analog spak (minsta rörelse som krävs)
-STR_6788    :Känslighet:
-STR_6789    :Känslighet multiplikator för analog spak
-STR_6790    :Dödzon: {COMMA32}%
-STR_6791    :Känslighet: {COMMA32}%
+STR_6785    :Virtuell mus
+STR_6786    :Acceleration:
+STR_6787    :Hur snabbt D-paden når den virtuella musens maxhastighet
+STR_6788    :Hastighet:
+STR_6789    :Hastighetsmultiplikator för den virtuella musen
+STR_6790    :Acceleration: {COMMA32}%
+STR_6791    :Hastighet: {COMMA32}%
 STR_6792    :Entrébyggnader
 STR_6793    :Gäster och Personal
 STR_6794    :Landskap och Teman
+STR_7030    :Markörer
+STR_7031    :Markörstil:
+STR_7032    :Välj hur skärmens markör ritas
+STR_7033    :Standard
+STR_7034    :Hög kontrast
+STR_7035    :Klassisk

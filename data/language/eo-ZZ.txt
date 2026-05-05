@@ -3778,13 +3778,13 @@ STR_6781    :Ekrankopioj
 STR_6782    :Sciigoj de parko
 STR_6783    :Sciigoj de atrakcioj
 STR_6784    :Sciigoj de gastoj
-STR_6785    :Ludregilo
-STR_6786    :Morta zono:
-STR_6787    :Morta zono de stirstango (minimuma movado bezonata)
-STR_6788    :Sentemo:
-STR_6789    :Sentema obligilo de stirstango
-STR_6790    :Morta zono: {COMMA32}%
-STR_6791    :Sentemo: {COMMA32}%
+STR_6785    :Virtuala muso
+STR_6786    :Akcelo:
+STR_6787    :Kiel rapide la D-pad atingas la maksimuman rapidon de la virtuala muso
+STR_6788    :Rapido:
+STR_6789    :Obligilo de la rapido de la virtuala muso
+STR_6790    :Akcelo: {COMMA32}%
+STR_6791    :Rapido: {COMMA32}%
 STR_6792    :Enirejo-konstruaĵoj
 STR_6793    :Gastoj kaj dungitaro
 STR_6794    :Pejzaĝo kaj temoj
@@ -3817,3 +3817,9 @@ STR_7025    :Videbligi
 STR_7026    :Videbligas la tutan atrakcion
 STR_7028    :Kvarona kreska helico
 STR_7029    :Kvarona malkreska helico
+STR_7030    :Kursoroj
+STR_7031    :Stilo de kursoro:
+STR_7032    :Elektu kiel la ekrana kursoro estas desegnita
+STR_7033    :Defaŭlta
+STR_7034    :Alta kontrasto
+STR_7035    :Klasika

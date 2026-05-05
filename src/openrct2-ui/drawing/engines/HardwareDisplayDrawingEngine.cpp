@@ -404,6 +404,11 @@ private:
                 Invalidate(_lastCursorRectL, _lastCursorRectT, _lastCursorRectR, _lastCursorRectB);
             }
 
+            // OPENRCT2MINI revision 59: poll the cursor-style theme each frame.
+            // Cheap (one int compare + fast return inside SetStyle on miss);
+            // avoids needing a save-time hook from the Options window.
+            _swCursor->SetStyle(Config::Get().interface.cursorStyle);
+
             CursorID cur = _uiContext.GetCursor();
             if (cur != _lastSwCursor)
             {
@@ -415,15 +420,22 @@ private:
             {
                 // OPENRCT2MINI cut 44d: snapshot the under-cursor pixels
                 // BEFORE compositing, so the next frame's BeginDraw can
-                // restore them. The save area is the same kCursorBackupCap-
-                // sized rect we'll overwrite with the cursor sprite; the
-                // hot-spot offset means the cursor can poke a few pixels
-                // to the upper-left of the position, hence the kCursorBackupCap
-                // > sprite size for safety.
+                // restore them.
+                //
+                // OPENRCT2MINI revision 60: shifted the save origin from
+                // -16 to -32 so the 64x64 rect fully covers any 32x32
+                // cursor sprite regardless of hotspot. The earlier -16
+                // worked for Arrow / HandPoint (small hotspots) but
+                // failed for cursors with `hotspot.y = 31` like
+                // PickerArrow (15, 31) and TreeDown / Bulldozer (6, 31)
+                // — those composite from (state.y - 31) up, leaving
+                // 15 px of cursor pixels above the saved rect, which
+                // produced visible trails until the dirty-block path
+                // eventually repainted them.
                 const int32_t bitsW = static_cast<int32_t>(_width);
                 const int32_t bitsH = static_cast<int32_t>(_height);
-                const int32_t bx = state->position.x - 16;
-                const int32_t by = state->position.y - 16;
+                const int32_t bx = state->position.x - 32;
+                const int32_t by = state->position.y - 32;
                 _cursorBackupX = bx;
                 _cursorBackupY = by;
                 _cursorBackupW = kCursorBackupCap;

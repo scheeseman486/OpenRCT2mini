@@ -3778,13 +3778,13 @@ STR_6781    :Képernyőképek
 STR_6782    :Park értesítések  
 STR_6783    :Játék értesítések  
 STR_6784    :Látogatói értesítések
-STR_6785    :Játékvezérlő
-STR_6786    :Holtzóna:
-STR_6787    :Analóg kar holtzónája (a minimális szükséges elmozdulás)
-STR_6788    :Érzékenység:
-STR_6789    :Analóg kar érzékenységi szorzó
-STR_6790    :Holtzóna: {COMMA32}%
-STR_6791    :Érzékenység: {COMMA32}%
+STR_6785    :Virtuális egér
+STR_6786    :Gyorsulás:
+STR_6787    :Milyen gyorsan éri el a D-pad a virtuális egér maximális sebességét
+STR_6788    :Sebesség:
+STR_6789    :Virtuális egér sebességszorzója
+STR_6790    :Gyorsulás: {COMMA32}%
+STR_6791    :Sebesség: {COMMA32}%
 STR_6792    :Bejárati épületek
 STR_6793    :Vendégek és személyzet
 STR_6794    :Díszletek és témák
@@ -3817,3 +3817,9 @@ STR_7025    :Tedd láthatóvá
 STR_7026    :Az egész játékot láthatóvá teszi
 STR_7028    :Negyed spirál felfelé
 STR_7029    :Negyed spirál lefelé
+STR_7030    :Kurzorok
+STR_7031    :Kurzorstílus:
+STR_7032    :Válassza ki, hogyan jelenjen meg a képernyőkurzor
+STR_7033    :Alapértelmezett
+STR_7034    :Magas kontraszt
+STR_7035    :Klasszikus

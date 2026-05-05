@@ -3783,13 +3783,13 @@ STR_6781    :Captures de pantalla
 STR_6782    :Notificacions de parc
 STR_6783    :Notificacions d’atraccions
 STR_6784    :Notificacions de visitants
-STR_6785    :Comandament de joc
-STR_6786    :Zona morta:
-STR_6787    :Zona morta del pal analògic (cal moviment mínim)
-STR_6788    :Sensitivitat:
-STR_6789    :Multiplicador de la sensivitat del pal analògic
-STR_6790    :Zona morta {COMMA32} %
-STR_6791    :Sensitivitat: {COMMA32} %
+STR_6785    :Ratolí virtual
+STR_6786    :Acceleració:
+STR_6787    :Velocitat a què el D-pad assoleix la velocitat màxima del ratolí virtual
+STR_6788    :Velocitat:
+STR_6789    :Multiplicador de velocitat del ratolí virtual
+STR_6790    :Acceleració: {COMMA32}%
+STR_6791    :Velocitat: {COMMA32}%
 STR_6792    :Entrades d’edificis
 STR_6793    :Visitants i treballadors
 STR_6794    :Decoracions i temes
@@ -3816,3 +3816,9 @@ STR_7014    :Tinc el joc a l’Steam, però no el tinc instal·lat.
 STR_7015    :Tanqueu l'Steam si està en execució i després premeu «D’acord».
 STR_7016    :L’OpenRCT2 ha intentat executar una descàrrega a l’Steam. Executeu l’Steam i deixeu que descarregui el joc. Quan hagi acabat, premeu «D’acord».
 STR_7017    :Surt
+STR_7030    :Cursors
+STR_7031    :Estil de cursor:
+STR_7032    :Tria com es dibuixa el cursor a la pantalla
+STR_7033    :Per defecte
+STR_7034    :Alt contrast
+STR_7035    :Clàssic
