@@ -1,0 +1,84 @@
+name: Build OpenRCT2mini (ARM)
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel an in-flight run when a newer commit lands on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # required for creating releases on tag
+  packages: read
+
+jobs:
+  build-arm:
+    name: Cross-build for Miyoo Mini (armhf)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # We need the full short commit, not the merge commit, in the
+          # tarball name and the version banner.
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build the toolchain image with GHA's docker layer cache. The first
+      # run takes ~10 min (downloads + builds libzstd / libogg / libvorbis /
+      # libzip / nlohmann-json / vendor SDL2 inside the image). Subsequent
+      # runs reuse the cached layers and finish in seconds unless
+      # build-deps.sh or the Dockerfile changed.
+      - name: Build toolchain image
+        uses: docker/build-push-action@v5
+        with:
+          context: Packaging/miyoo_mini
+          file: Packaging/miyoo_mini/Dockerfile
+          tags: openrctmini-toolchain:latest
+          load: true              # leave the image in the local docker daemon
+          push: false             # don't publish — the image is huge and only useful to this workflow
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Run the cross-build inside the image. We bypass build.sh's first
+      # stage (image build) since the docker/build-push-action above
+      # already produced a tagged local image; build.sh would skip stage
+      # 1 anyway when the image exists.
+      - name: Cross-compile openrct2 for armhf
+        run: |
+          ./Packaging/miyoo_mini/build.sh
+
+      - name: Inspect the produced binary
+        run: |
+          ls -la build-arm/openrct2
+          file build-arm/openrct2
+          echo "Tarball:"
+          ls -la dist/OpenRCT2mini-*.tar.gz
+
+      - name: Upload tarball as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenRCT2mini-armhf-${{ github.sha }}
+          path: dist/OpenRCT2mini-*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      # On a v* tag, also publish a GitHub Release with the tarball attached.
+      - name: Create release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/OpenRCT2mini-*.tar.gz
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

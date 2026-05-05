@@ -91,6 +91,12 @@ fetch_asset() {
 
 # Use a short git rev in the artifact name when we can.
 GITREV="$(cd "$PROJECT_ROOT" && git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)"
+# OpenRCT2mini fork version. Single source of truth is src/openrct2/Version.h
+# (kOpenRCT2miniVersion); we re-extract it here so the tarball name and the
+# binary banner can never drift apart.
+FORK_VERSION="$(grep -oE 'kOpenRCT2miniVersion "[^"]*"' \
+    "$PROJECT_ROOT/src/openrct2/Version.h" | sed -E 's/.*"([^"]+)"/\1/' \
+    || echo unknown)"
 STAGE_DIR="$DIST_DIR/stage-$$"
 APP_DIR="$STAGE_DIR/App/OpenRCT2mini"
 mkdir -p "$APP_DIR/data"
@@ -499,7 +505,7 @@ cat > "$APP_DIR/INSTALL.txt" <<EOF
 OPENRCT2mini for Miyoo Mini (OnionUI)
 =====================================
 
-This tarball was built from openrct2mini commit ${GITREV}.
+This tarball is OpenRCT2mini v${FORK_VERSION} (commit ${GITREV}).
 
 INSTALLING
 ----------
@@ -628,7 +634,7 @@ EOF
 # 8. Tarball
 ##############################################################################
 mkdir -p "$DIST_DIR"
-TARBALL="$DIST_DIR/OpenRCT2mini-${GITREV}.tar.gz"
+TARBALL="$DIST_DIR/OpenRCT2mini-${FORK_VERSION}-${GITREV}.tar.gz"
 rm -f "$TARBALL"
 ( cd "$STAGE_DIR" && tar czf "$TARBALL" App )
 rm -rf "$STAGE_DIR"
