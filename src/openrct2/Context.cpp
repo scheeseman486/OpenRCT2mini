@@ -994,12 +994,25 @@ namespace OpenRCT2
                     ft.Add<uint32_t>(kParkFileCurrentVersion);
                     windowManager->ShowError(STR_WARNING_PARK_VERSION_TITLE, STR_WARNING_PARK_VERSION_MESSAGE, ft);
                 }
-                else if (HasObjectsThatUseFallbackImages())
-                {
-                    Console::Error::WriteLine("Park has objects which require RCT1 linked. Fallback images will be used.");
-                    auto windowManager = _uiContext->GetWindowManager();
-                    windowManager->ShowError(STR_PARK_USES_FALLBACK_IMAGES_WARNING, kStringIdEmpty, Formatter());
-                }
+                // OPENRCT2MINI: cut 2 commented out the eager GfxLoadCsg()
+                // in LoadBaseGraphics(), and the deferred-load path was
+                // never wired up — _csgLoaded is permanently false. Any
+                // object whose JSON ships a "noCsgImages" set therefore
+                // takes that branch in ImageTable::ReadJson and gets
+                // _usesFallbackImages permanently stamped, regardless of
+                // whether the user has rct1Path set. The art is fine —
+                // the supplemental object packs ship complete fallback
+                // sprites for this case — but the warning fires on
+                // every RCT1 park load and there's nothing the user
+                // can do about it. Suppress: the underlying check has
+                // no signal value in our build.
+                //
+                // else if (HasObjectsThatUseFallbackImages())
+                // {
+                //     Console::Error::WriteLine("Park has objects which require RCT1 linked. Fallback images will be used.");
+                //     auto windowManager = _uiContext->GetWindowManager();
+                //     windowManager->ShowError(STR_PARK_USES_FALLBACK_IMAGES_WARNING, kStringIdEmpty, Formatter());
+                // }
 
                 CloseProgress();
                 return true;
@@ -1083,7 +1096,10 @@ namespace OpenRCT2
         }
 
     private:
-        bool HasObjectsThatUseFallbackImages()
+        // OPENRCT2MINI: kept defined but no longer called — see the cut-2
+        // explanation at the suppressed warning site above. Marked
+        // [[maybe_unused]] so -Wunused-private-method stays clean.
+        [[maybe_unused]] bool HasObjectsThatUseFallbackImages()
         {
             for (auto objectType : getAllObjectTypes())
             {

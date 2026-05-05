@@ -66,16 +66,25 @@ namespace OpenRCT2::Ui::Windows
         makeRemapWidget({ 94, 17         }, { 91,                kTabHeight - 16                 }, WidgetType::tab,   WindowColour::secondary, SPR_TAB_LARGE)
     );
 
+    // OPENRCT2MINI: removed four upstream-only buttons from the About window:
+    // "Copy version info" (clipboard not useful on a handheld with no host
+    // sharing), "Changelog" (the Changelog window itself renders empty for
+    // our build with networking disabled), "Join OpenRCT2 Discord" (this is
+    // a fork — wrong support channel to point at), and "Contributors..."
+    // (the contributors list is in contributors.md inside the source tree).
+    // The widget slots remain in the enum to keep handler indices stable;
+    // they're just invisible / non-interactive. The corresponding case
+    // statements in onMouseUp become unreachable but are kept for clarity.
     static const auto _windowAboutOpenRCT2Widgets = makeWidgets(
         kMainWidgets,
         makeWidget({10, 60},        {kWindowSize.width - 20, 20}, WidgetType::labelCentred, WindowColour::secondary, STR_ABOUT_OPENRCT2_DESCRIPTION           ), // Introduction
         makeWidget({30, 90},        {128, 128},                   WidgetType::placeholder,  WindowColour::secondary, kStringIdNone                            ), // OpenRCT2 Logo
         makeWidget({168, 100},      {173, 24},                    WidgetType::placeholder,  WindowColour::secondary, kStringIdNone                            ), // Build version
-        makeWidget({344, 100 },     {24, 24},                     WidgetType::imgBtn,       WindowColour::secondary, ImageId(SPR_G2_COPY), STR_COPY_BUILD_HASH), // "Copy build info" button
+        makeWidget({344, 100 },     {24, 24},                     WidgetType::empty,        WindowColour::secondary, ImageId(SPR_G2_COPY), STR_COPY_BUILD_HASH), // "Copy build info" — hidden
         makeWidget({168, 115 + 20}, {200, 14},                    WidgetType::placeholder,  WindowColour::secondary, STR_UPDATE_AVAILABLE                     ), // "new version" button
-        makeWidget({168, 115 + 40}, {200, 14},                    WidgetType::button,       WindowColour::secondary, STR_CHANGELOG_ELLIPSIS                   ), // changelog button
-        makeWidget({168, 115 + 60}, {200, 14},                    WidgetType::button,       WindowColour::secondary, STR_JOIN_DISCORD                         ), // "join discord" button
-        makeWidget({168, 115 + 80}, {200, 14},                    WidgetType::button,       WindowColour::secondary, STR_CONTRIBUTORS_WINDOW_BUTTON           ) // "contributors" button
+        makeWidget({168, 115 + 40}, {200, 14},                    WidgetType::empty,        WindowColour::secondary, STR_CHANGELOG_ELLIPSIS                   ), // changelog — hidden
+        makeWidget({168, 115 + 60}, {200, 14},                    WidgetType::empty,        WindowColour::secondary, STR_JOIN_DISCORD                         ), // "join discord" — hidden
+        makeWidget({168, 115 + 80}, {200, 14},                    WidgetType::empty,        WindowColour::secondary, STR_CONTRIBUTORS_WINDOW_BUTTON           )  // "contributors" — hidden
     );
     // clang-format on
 

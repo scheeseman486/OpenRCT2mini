@@ -44,8 +44,11 @@ namespace OpenRCT2::Ui::Windows
         DDIDX_CONVERT_SAVED_GAME,
         DDIDX_TRACK_DESIGNER,
         DDIDX_TRACK_MANAGER,
-        DDIDX_OPEN_CONTENT_FOLDER,
-        DDIDX_CUSTOM_BEGIN = 6,
+        // OPENRCT2MINI: removed "Open User Content Folder" — irrelevant on
+        // a handheld with a fixed SD-card layout. Custom scripting menu
+        // items now start one slot earlier (separator at i=4, customs at
+        // i=5+), so DDIDX_CUSTOM_BEGIN drops from 6 to 5.
+        DDIDX_CUSTOM_BEGIN = 5,
     };
 
     static constexpr ScreenSize MenuButtonDims = { 82, 82 };
@@ -185,7 +188,7 @@ namespace OpenRCT2::Ui::Windows
                 gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_CONVERT_SAVED_GAME_TO_SCENARIO);
                 gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_ROLLER_COASTER_DESIGNER);
                 gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_TRACK_DESIGNS_MANAGER);
-                gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_OPEN_USER_CONTENT_FOLDER);
+                // OPENRCT2MINI: removed STR_OPEN_USER_CONTENT_FOLDER entry.
 
 #ifdef ENABLE_SCRIPTING
                 auto hasCustomItems = false;
@@ -211,7 +214,10 @@ namespace OpenRCT2::Ui::Windows
 
                 Widget* widget = &widgets[widgetIndex];
                 int32_t yOffset = 0;
-                if (i > 5)
+                // OPENRCT2MINI: baseline is 4 entries now (was 5 before
+                // OPEN_USER_CONTENT_FOLDER was removed). Anything past the
+                // baseline pushes the dropdown upward to fit.
+                if (i > 4)
                 {
                     yOffset = -(widget->height() - 1 + 5 + (i * 12));
                 }
@@ -244,14 +250,7 @@ namespace OpenRCT2::Ui::Windows
                     case DDIDX_TRACK_MANAGER:
                         Editor::LoadTrackManager();
                         break;
-                    case DDIDX_OPEN_CONTENT_FOLDER:
-                    {
-                        auto context = GetContext();
-                        auto& env = context->GetPlatformEnvironment();
-                        auto& uiContext = context->GetUiContext();
-                        uiContext.OpenFolder(env.GetDirectoryPath(DirBase::user));
-                        break;
-                    }
+                    // OPENRCT2MINI: DDIDX_OPEN_CONTENT_FOLDER case removed.
                     default:
                         InvokeCustomToolboxMenuItem(selectedIndex - DDIDX_CUSTOM_BEGIN);
                         break;
