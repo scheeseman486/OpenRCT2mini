@@ -293,7 +293,12 @@ std::unique_ptr<IPlatformEnvironment> OpenRCT2::CreatePlatformEnvironment()
     // Now load the config so we can get the RCT1 and RCT2 paths
     auto configPath = env->GetFilePath(PathId::config);
     Config::SetDefaults();
-    if (!Config::OpenFromPath(configPath))
+    // OPENRCT2MINI: capture first-run state so we can apply auto-detection
+    // policies (e.g. enable RCT1 if found) only on the very first run, and
+    // respect the user's later choices (e.g. clearing the rct1 path to
+    // disable RCT1) on subsequent runs.
+    const bool firstRun = !Config::OpenFromPath(configPath);
+    if (firstRun)
     {
         Config::SaveToPath(configPath);
     }
@@ -344,6 +349,25 @@ std::unique_ptr<IPlatformEnvironment> OpenRCT2::CreatePlatformEnvironment()
         env->SetBasePath(
             DirBase::rct1,
             resolveDataPath(Config::Get().general.rct1Path, { u8"rct1", u8"RCT1", u8"Rct1" }, rct2Resolved));
+    }
+
+    // OPENRCT2MINI: first-run RCT1 auto-enable. The path-resolution above
+    // sets DirBase::rct1 on the runtime env, but the rest of the engine
+    // (Drawing.Sprite.cpp's CSG load, the title-sequence picker, etc.)
+    // gates RCT1 features on Config::Get().general.rct1Path being non-empty.
+    // Mirror the resolved env path back into the config so the user doesn't
+    // have to dig into Options > Advanced and click "Browse" the first time
+    // they boot. After this, the user can clear the path in Options to
+    // disable RCT1, and that choice sticks because we only do this on
+    // firstRun.
+    if (firstRun && Config::Get().general.rct1Path.empty())
+    {
+        const auto& rct1Resolved = env->GetDirectoryPath(DirBase::rct1);
+        if (!rct1Resolved.empty() && Platform::OriginalGameDataExists(rct1Resolved))
+        {
+            Config::Get().general.rct1Path = rct1Resolved;
+            Config::SaveToPath(configPath);
+        }
     }
 
     // Log base paths

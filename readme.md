@@ -32,11 +32,11 @@ If you want a smaller tarball (e.g. for slow SD cards) you can rebuild without t
   Y            Rotate construction object clockwise
   L1           Shift modifier (raise placement Z, vertical-stack scenery, etc.)
   R1           Hold for fast cursor (~2.5x speed); also acts as gamepad modifier button
-  L2           Zoom out
-  R2           Zoom in
+  L2           Rotate view counter-clockwise
+  R2           Rotate view clockwise
   L1 + R1      Ctrl modifier (sample-and-lock placement Z onto a clicked element)
-  R1 + L2      Rotate view counter-clockwise
-  R1 + R2      Rotate view clockwise
+  R1 + L2      Zoom out
+  R1 + R2      Zoom in
   R1 + Y       Rotate construction object counter-clockwise
   Start        Confirm / open in-game menu
   Select       Cancel / back

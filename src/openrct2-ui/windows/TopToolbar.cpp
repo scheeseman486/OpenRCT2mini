@@ -28,6 +28,10 @@
 #include <openrct2/ParkImporter.h>
 #include <openrct2/SpriteIds.h>
 #include <openrct2/Version.h>
+// OPENRCT2MINI: cut 31 polish — pause-bar overlay needs Rectangle::fill +
+// getColourMap to draw two contrasting bars on the FASTFORWARD button.
+#include <openrct2/drawing/ColourMap.h>
+#include <openrct2/drawing/Rectangle.h>
 #include <openrct2/actions/GameActionRunner.h>
 #include <openrct2/actions/general/GameSetSpeedAction.h>
 #include <openrct2/actions/general/LoadOrQuitAction.h>
@@ -1558,18 +1562,37 @@ namespace OpenRCT2::Ui::Windows
                 if (widgetIsPressed(*this, WIDX_FASTFORWARD))
                     screenPos.y++;
 
-                // OPENRCT2MINI: cut 31. With the standalone WIDX_PAUSE button gone,
-                // pause status lives on the FASTFORWARD button. When paused, swap
-                // the fastforward icon for the pause icon and skip the speed
-                // arrows; otherwise draw the normal fastforward + speed arrows.
+                // OPENRCT2MINI: cut 31 / polish. With the standalone WIDX_PAUSE
+                // button gone, pause status lives on the FASTFORWARD button.
+                // The original cut 31 painted SPR_TOOLBAR_PAUSE directly at
+                // the button's top-left — that sprite is a full 30x30
+                // button-face image with its own dark background baked in,
+                // so it overdrew the FASTFORWARD widget's grey trnBtn frame
+                // and looked black-on-grey. Now: keep the FASTFORWARD icon
+                // visible (dimmed by greying the sprite via primary palette
+                // remap) and overlay two pause bars centered on the button
+                // using Rectangle::fill — gives a visually consistent button
+                // background.
                 const bool paused = (gGamePaused & GAME_PAUSED_NORMAL) != 0;
+                GfxDrawSprite(rt, ImageId(SPR_G2_FASTFORWARD), screenPos + ScreenCoordsXY{ 6, 3 });
                 if (paused)
                 {
-                    GfxDrawSprite(rt, ImageId(SPR_TOOLBAR_PAUSE), screenPos);
+                    // Two-bar pause indicator centered on the button. The
+                    // FASTFORWARD icon above provides the grey/colour
+                    // surface; the bars sit on top in a contrasting
+                    // colour-map shade so they read clearly.
+                    const auto barColour = getColourMap(colours[0].colour).darkest;
+                    const auto x0 = screenPos.x + 9;
+                    const auto x1 = screenPos.x + 14;
+                    const auto x2 = screenPos.x + 16;
+                    const auto x3 = screenPos.x + 21;
+                    const auto y0 = screenPos.y + 14;
+                    const auto y1 = screenPos.y + 24;
+                    OpenRCT2::Drawing::Rectangle::fill(rt, ScreenRect{ { x0, y0 }, { x1, y1 } }, barColour);
+                    OpenRCT2::Drawing::Rectangle::fill(rt, ScreenRect{ { x2, y0 }, { x3, y1 } }, barColour);
                 }
                 else
                 {
-                    GfxDrawSprite(rt, ImageId(SPR_G2_FASTFORWARD), screenPos + ScreenCoordsXY{ 6, 3 });
                     for (int32_t i = 0; i < gGameSpeed && gGameSpeed <= 4; i++)
                     {
                         GfxDrawSprite(rt, ImageId(SPR_G2_SPEED_ARROW), screenPos + ScreenCoordsXY{ 5 + i * 5, 15 });

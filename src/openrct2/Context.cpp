@@ -440,16 +440,20 @@ namespace OpenRCT2
             kpt("CrashInit done");
 
             kpt("Config version check start");
-            if (String::equals(Config::Get().general.lastRunVersion, kOpenRCT2Version))
+            // OPENRCT2MINI: never auto-open the Changelog window on launch.
+            // Upstream's behaviour was: on the first run after a version
+            // bump, pop the Changelog. That makes sense for desktop where
+            // OpenRCT2 auto-updates and the user might not know what
+            // changed; on the device the user already saw the changelog
+            // when they downloaded the new tarball, and the window itself
+            // renders empty for our build (no online fetch). Suppress the
+            // auto-show but keep the lastRunVersion bookkeeping in sync.
+            if (!String::equals(Config::Get().general.lastRunVersion, kOpenRCT2Version))
             {
-                gOpenRCT2ShowChangelog = false;
-            }
-            else
-            {
-                gOpenRCT2ShowChangelog = true;
                 Config::Get().general.lastRunVersion = kOpenRCT2Version;
                 Config::Save();
             }
+            gOpenRCT2ShowChangelog = false;
             kpt("Config version check done");
 
             kpt("OpenLanguage start");

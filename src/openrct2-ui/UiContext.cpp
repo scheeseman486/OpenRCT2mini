@@ -197,22 +197,29 @@ private:
             // OPENRCT2MINI cut 59: face X / face Y / L2 / R2 onto F-keys
             // emitted by the cut 43 set_key patch. Action fires on press;
             // release is silent.
-            case SDL_SCANCODE_F14: // L2 — zoom out, or rotate view CCW with R1
+            // OPENRCT2MINI polish: rotate view is the default for L2/R2;
+            // R1 (gamepad-modifier) flips them to zoom. The original
+            // arrangement (zoom default, R1 to rotate) was awkward when
+            // sightseeing — most "I want to look around" actions are
+            // rotation, and zoom is occasional. The chord pattern stays
+            // consistent: the modifier always swaps to the secondary
+            // function.
+            case SDL_SCANCODE_F14: // L2 — rotate view CCW, or zoom out with R1
                 if (down)
                 {
                     if (_vGamepadMod)
-                        ViewportRotateAll(-1);
-                    else
                         Windows::MainWindowZoom(false, false);
+                    else
+                        ViewportRotateAll(-1);
                 }
                 return true;
-            case SDL_SCANCODE_F15: // R2 — zoom in, or rotate view CW with R1
+            case SDL_SCANCODE_F15: // R2 — rotate view CW, or zoom in with R1
                 if (down)
                 {
                     if (_vGamepadMod)
-                        ViewportRotateAll(1);
-                    else
                         Windows::MainWindowZoom(true, false);
+                    else
+                        ViewportRotateAll(1);
                 }
                 return true;
             case SDL_SCANCODE_F16: // face X — cycle game speed (Normal -> Quick

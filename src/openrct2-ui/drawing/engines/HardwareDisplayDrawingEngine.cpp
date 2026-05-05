@@ -25,8 +25,10 @@
 #include <openrct2/interface/Cursors.h>
 #include <openrct2/interface/Window.h>
 #include <openrct2/interface/WindowBase.h>  // OPENRCT2MINI cut 41c: gWindowList
+#include <openrct2/interface/WindowClasses.h> // OPENRCT2MINI: cursor-during-loading suppression
 #include <openrct2/paint/Paint.h>
 #include <openrct2/ui/UiContext.h>
+#include <openrct2/ui/WindowManager.h>       // OPENRCT2MINI: cursor-during-loading suppression
 #include <vector>
 
 // OPENRCT2MINI: cut 38. Software cursor — for platforms with no compositor /
@@ -381,7 +383,20 @@ private:
         // over the trail. Without this the X8 engine's dirty-block grid
         // doesn't know we wrote pixels there — the old cursor lingers
         // indefinitely if nothing else dirties that area.
-        if (_swCursor != nullptr)
+        // OPENRCT2MINI: suppress the cursor whenever a loading window is up.
+        // The progress window (WindowClass::progressWindow, used by park
+        // imports / object pack scans / etc.) is modal-feeling: input is
+        // routed past it and the user can't usefully click anything. Drawing
+        // the cursor on top of it produced visible trails when the user
+        // dragged-via-D-pad and hit the loading window's title bar (the
+        // X8 dirty-block engine doesn't repaint the loading window's
+        // contents, so cursor pixels we composite over it stay forever).
+        // Hiding the cursor outright makes the trails moot.
+        auto* wm = OpenRCT2::Ui::GetWindowManager();
+        const bool loadingWindowVisible
+            = (wm != nullptr && wm->FindByClass(WindowClass::progressWindow) != nullptr);
+
+        if (_swCursor != nullptr && !loadingWindowVisible)
         {
             // Invalidate the previous cursor rect for next frame's repaint.
             if (_lastCursorRectValid)
@@ -448,6 +463,16 @@ private:
                 _lastCursorRectB = by + kCursorBackupCap;
                 _lastCursorRectValid = true;
             }
+        }
+        else if (_swCursor != nullptr && _lastCursorRectValid)
+        {
+            // OPENRCT2MINI: cursor was just suppressed (loadingWindowVisible
+            // flipped from false to true). Invalidate the previous cursor
+            // footprint one last time so the next paint overwrites the old
+            // pixels — without this the cursor sprite remains visible until
+            // some other window happens to dirty that block.
+            Invalidate(_lastCursorRectL, _lastCursorRectT, _lastCursorRectR, _lastCursorRectB);
+            _lastCursorRectValid = false;
         }
 #endif
 
