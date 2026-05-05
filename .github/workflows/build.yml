@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # We need the full short commit, not the merge commit, in the
-          # tarball name and the version banner.
+          # archive name and the version banner.
           fetch-depth: 1
 
       # The four generated .dat files (g2 / fonts / palettes / tracks) are
@@ -42,7 +42,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build g++ pkg-config \
             libsdl2-dev libpng-dev libzip-dev libzstd-dev \
-            libvorbis-dev libogg-dev nlohmann-json3-dev
+            libvorbis-dev libogg-dev nlohmann-json3-dev \
+            p7zip-full python3-pil
 
       - name: Host build (graphics target only — produces *.dat)
         # Demote -Werror for this throwaway host build. The GH runner's GCC
@@ -96,23 +97,23 @@ jobs:
         run: |
           ls -la build-arm/openrct2
           file build-arm/openrct2
-          echo "Tarball:"
-          ls -la dist/OpenRCT2mini-*.tar.gz
+          echo "Port archive:"
+          ls -la dist/OpenRCT2mini-*.7z
 
-      - name: Upload tarball as workflow artifact
+      - name: Upload port archive as workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: OpenRCT2mini-armhf-${{ github.sha }}
-          path: dist/OpenRCT2mini-*.tar.gz
+          path: dist/OpenRCT2mini-*.7z
           if-no-files-found: error
           retention-days: 30
 
-      # On a v* tag, also publish a GitHub Release with the tarball attached.
+      # On a v* tag, also publish a GitHub Release with the port archive attached.
       - name: Create release on tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/OpenRCT2mini-*.tar.gz
+          files: dist/OpenRCT2mini-*.7z
           generate_release_notes: true
           fail_on_unmatched_files: true
         env:

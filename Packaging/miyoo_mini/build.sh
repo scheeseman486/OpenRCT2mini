@@ -113,14 +113,15 @@ if [ -x "$BUILD_DIR/openrct2" ]; then
         fi
     fi
 
-    # OPENRCT2MINI: always package an SD-card-ready tarball so every build is
-    # ready to ship. Pass --no-package to skip if you only want the binary.
+    # OPENRCT2MINI: always package an SD-card-ready Onion port .7z so every
+    # build is ready to ship. Pass --no-package to skip if you only want
+    # the binary.
     if printf '%s\n' "$@" | grep -q -- '--no-package'; then
         echo
         echo "Skipping packaging (--no-package set)."
     else
         echo
-        echo "==[ package SD-card tarball ]=================================="
+        echo "==[ package Onion port .7z ]=================================="
         bash "$PROJECT_ROOT/Packaging/miyoo_mini/package.sh"
     fi
 fi

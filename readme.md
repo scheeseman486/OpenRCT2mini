@@ -10,17 +10,19 @@ OpenRCT2mini is currently playable. We match upstream v0.5.0 minus things that d
 
 ## Installing on the device
 
-The release tarball contains the OpenRCT2mini binary, its bundled libraries, the launch script, OpenRCT2's stock data (language strings, shaders, fonts), and the OpenRCT2 project's supplemental asset packs (title sequences, object pack, OpenSFX, OpenMusic — see `THIRD_PARTY_NOTICES.md` for the per-pack license / attribution).
+OpenRCT2mini ships as an OnionUI **port** — it appears in your Game Library under the **Simulation** category, alongside ROMs and other ports (Doom, Duke3D, etc.), not in the App tab.
+
+The release `.7z` contains the OpenRCT2mini binary, its bundled libraries, the launch script, OpenRCT2's stock data (language strings, shaders, fonts), the supplemental asset packs (title sequences, object pack, OpenSFX, OpenMusic — see `THIRD_PARTY_NOTICES.md` for per-pack license / attribution), and the Onion port shortcut + box art.
 
 It does **not** contain RCT2 game data — that part of the install is yours:
 
-1. Extract the tarball to the root of your Miyoo Mini's SD card. The result will be `/SDCARD/App/OpenRCT2mini/`.
-2. Copy your legitimately-owned RollerCoaster Tycoon 2 install to `/SDCARD/App/OpenRCT2mini/rct2/`. The folder must contain the original `Data/` and `ObjData/` directories with `g1.dat`, `css1.dat`, etc.
-3. Boot OnionUI. "OpenRCT2mini" appears in the App tab.
+1. Extract the `.7z` to the **root** of your Miyoo Mini's SD card. The archive's paths are `Roms/PORTS/...` so it merges cleanly with whatever's already there.
+2. Copy your legitimately-owned RollerCoaster Tycoon 2 install to `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct2/`. The folder must contain the original `Data/` and `ObjData/` directories with `g1.dat`, `css1.dat`, etc.
+3. From the OnionUI Game Switcher, run **Refresh roms**. "OpenRCT2mini" appears in the **Simulation** category in your Game Library. While the sentinel `rct2/Data/g1.dat` is missing, the shortcut is renamed to `.notfound` and stays hidden — that's the cue your RCT2 copy isn't in the right folder yet.
 
-Optionally, RCT1 can be placed at `/SDCARD/App/OpenRCT2mini/rct1/` to enable RCT1 scenarios and CSG sprites. The launcher auto-detects both directories.
+Optionally, RCT1 can be placed at `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct1/` to enable RCT1 scenarios and CSG sprites. The launcher auto-detects both directories.
 
-If you want a smaller tarball (e.g. for slow SD cards) you can rebuild without the asset packs via `./Packaging/miyoo_mini/package.sh --no-assets`. The released tarball ships with them included so the device is playable out of the box.
+If you want a smaller archive (e.g. for slow SD cards) you can rebuild without the asset packs via `./Packaging/miyoo_mini/package.sh --no-assets`. The released `.7z` ships with them included so the device is playable out of the box.
 
 ## Controls
 
@@ -56,7 +58,7 @@ That script will:
 1. Build the `openrctmini-toolchain` Docker image (first run only, ~10 min). The image derives from `ghcr.io/onionui/miyoomini-toolchain` and adds pkg-config plus the libraries OpenRCT2 needs that the upstream image doesn't ship (libzstd, libogg, libvorbis, libzip, nlohmann-json, the patched XK9274/sdl2_miyoo SDL2). Subsequent runs reuse the image.
 2. Run cmake + make inside the image, producing `build-arm/openrct2`.
 3. Smoke-test the binary under `qemu-arm-static` to catch any GLIBC / loader issues before SD-swapping.
-4. Run `package.sh` to produce a release tarball at `dist/OpenRCT2mini-<git-short>.tar.gz`.
+4. Run `package.sh` to produce a release archive at `dist/OpenRCT2mini-<version>-<git-short>.7z` (Onion port-collection format — extract at SD-card root).
 
 A native host build for development iteration is also supported via the project's standard CMake build (the upstream OpenRCT2 path); see `Packaging/miyoo_mini/build.sh` for the cross-compile command-line flags that should be mirrored on host for an apples-to-apples comparison. I've only tested this on Linux.
 

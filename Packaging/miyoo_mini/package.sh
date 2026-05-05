@@ -1,22 +1,32 @@
 #!/bin/bash
-# OPENRCT2MINI: cut 39. Build an SD-card-ready OnionUI app directory.
+# OPENRCT2MINI: revision 63. Build an SD-card-ready OnionUI **port** package.
 #
 # Run from the project root (after build.sh has produced build-arm/openrct2):
 #   ./Packaging/miyoo_mini/package.sh
 #
-# Output: dist/OpenRCT2mini-<git-short>.tar.gz containing
-#   App/OpenRCT2mini/
-#     openrct2          (stripped ARM binary)
-#     launch.sh         (OnionUI entry point)
-#     config.json       (OnionUI launcher metadata)
-#     icon.png          (placeholder icon)
-#     data/             (OpenRCT2 stock data — language, shaders, etc.)
-#     INSTALL.txt       (user-facing instructions for SD-card layout)
+# Output: dist/OpenRCT2mini-<version>-<git-short>.7z containing
 #
-# The user supplies their own RCT2 install — see INSTALL.txt in the tarball
-# for where to drop it.
+#   Roms/PORTS/
+#     Games/OpenRCT2mini/
+#       openrct2        (stripped ARM binary)
+#       launch.sh       (the actual launch script — stays here so all
+#                        port files live in one folder)
+#       lib/            (vendor libpng16 / libz / SDL2)
+#       data/           (OpenRCT2 stock data + supplemental asset packs)
+#       save/           (default config.ini)
+#       INSTALL.txt
+#     Imgs/
+#       OpenRCT2mini.png    (250x376 portrait box art)
+#     Shortcuts/Simulation/
+#       OpenRCT2mini.port   (Onion port shortcut — execs launch.sh)
+#
+# Distributed as 7z so it merges cleanly into Onion's port-collection
+# convention (extract at SD-card root). Game Library detection: the
+# .port shortcut declares GameDataFile so Onion's import-ports script
+# hides the entry until the user has supplied their RCT2 install.
 #
 # Pass --no-strip to keep debug info (24 → 26 MB unstripped, ~6 MB stripped).
+# Pass --no-assets to skip the supplemental-pack download.
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -97,9 +107,16 @@ FORK_VERSION="$(grep -oE 'kOpenRCT2miniVersion "[^"]*"' \
     "$PROJECT_ROOT/src/openrct2/Version.h" | sed -E 's/.*"([^"]+)"/\1/' \
     || echo unknown)"
 STAGE_DIR="$DIST_DIR/stage-$$"
-APP_DIR="$STAGE_DIR/App/OpenRCT2mini"
+# OPENRCT2MINI revision 63: stage Onion's port-collection layout. APP_DIR
+# now points at Roms/PORTS/Games/OpenRCT2mini (where the binary lives).
+# Imgs/ and Shortcuts/ live alongside it in Roms/PORTS/.
+PORTS_ROOT="$STAGE_DIR/Roms/PORTS"
+APP_DIR="$PORTS_ROOT/Games/OpenRCT2mini"
+IMGS_DIR="$PORTS_ROOT/Imgs"
+SHORTCUTS_DIR="$PORTS_ROOT/Shortcuts/Simulation"
 mkdir -p "$APP_DIR/data"
 mkdir -p "$APP_DIR/save/OpenRCT2"
+mkdir -p "$IMGS_DIR" "$SHORTCUTS_DIR"
 
 ##############################################################################
 # 1. Binary — strip in the cross-toolchain so we use arm-linux-gnueabihf-strip
@@ -120,7 +137,7 @@ else
 fi
 if [ "$STRIP" = "1" ]; then
     docker run --rm --user "$(id -u):$(id -g)" -v "$STAGE_DIR:/stage" "$IMAGE_TAG" \
-        bash -c "arm-linux-gnueabihf-strip -s /stage/App/OpenRCT2mini/openrct2"
+        bash -c "arm-linux-gnueabihf-strip -s /stage/Roms/PORTS/Games/OpenRCT2mini/openrct2"
 fi
 chmod 0755 "$APP_DIR/openrct2"
 
@@ -144,10 +161,10 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$STAGE_DIR:/stage" "$IMAGE_TAG" \
             for cand in "$SYSROOT/usr/lib/$libname" "$SYSROOT/lib/$libname" \
                         "$SYSROOT/usr/lib/arm-linux-gnueabihf/$libname"; do
                 if [ -e "$cand" ]; then
-                    cp -L "$cand" "/stage/App/OpenRCT2mini/lib/$libname"
+                    cp -L "$cand" "/stage/Roms/PORTS/Games/OpenRCT2mini/lib/$libname"
                     arm-linux-gnueabihf-strip -s --strip-unneeded \
-                        "/stage/App/OpenRCT2mini/lib/$libname" 2>/dev/null || true
-                    sz=$(du -h "/stage/App/OpenRCT2mini/lib/$libname" | awk "{print \$1}")
+                        "/stage/Roms/PORTS/Games/OpenRCT2mini/lib/$libname" 2>/dev/null || true
+                    sz=$(du -h "/stage/Roms/PORTS/Games/OpenRCT2mini/lib/$libname" | awk "{print \$1}")
                     echo "  bundled $libname ($sz)"
                     break
                 fi
@@ -521,59 +538,65 @@ EOF
 chmod 0755 "$APP_DIR/launch.sh"
 
 ##############################################################################
-# 4. config.json — OnionUI launcher metadata. Keep it minimal; OnionUI
-#    tolerates missing optional fields.
+# 4. Port shortcut + box art. Replaces the old App-style config.json + 74x74
+#    icon.png. Onion's import-ports script reads the shortcut to populate
+#    the Game Library; the .png in Imgs/ becomes the box-art tile.
 ##############################################################################
-cat > "$APP_DIR/config.json" <<'EOF'
-{
-    "label": "OpenRCT2mini",
-    "icon": "./icon.png",
-    "iconsel": "./icon.png",
-    "launch": "launch.sh",
-    "description": "RollerCoaster Tycoon 2, ported via OpenRCT2.",
-    "extlist": "rct2|sv6|sc6|park"
-}
+# 4a. Shortcut script — Onion convention is a /bin/sh script with a few
+#     declarative metadata lines at the top, followed by the actual launch
+#     command. GameDataFile points at a sentinel inside the user's RCT2
+#     install: while it's missing the file is renamed to .notfound and the
+#     port hides from the Game Library, which is exactly the UX we want
+#     (the user supplies their own RCT2 install — see INSTALL.txt).
+cat > "$SHORTCUTS_DIR/OpenRCT2mini.port" <<'EOF'
+#!/bin/sh
+# OpenRCT2mini OnionUI port shortcut (revision 63).
+GameName="OpenRCT2mini"
+GameDir="Roms/PORTS/Games/OpenRCT2mini/"
+GameExecutable="openrct2"
+# Sentinel file: present only after the user copies their RCT2 install into
+# Games/OpenRCT2mini/rct2/. While missing, ~import ports renames us to
+# .notfound and we stay hidden from the Game Library.
+GameDataFile="Roms/PORTS/Games/OpenRCT2mini/rct2/Data/g1.dat"
+cd "/mnt/SDCARD/$GameDir"
+exec ./launch.sh
 EOF
+chmod 0755 "$SHORTCUTS_DIR/OpenRCT2mini.port"
+
+# 4b. Box art. Imgs/<GameName>.png is the portrait tile Onion shows in the
+#     Game Library. The art is generated from the GPL-3 logo by
+#     resources/portbox/build_box_art.py and committed at
+#     Packaging/miyoo_mini/box_art.png; the script is just a copy.
+BOX_ART_SRC="$PROJECT_ROOT/Packaging/miyoo_mini/box_art.png"
+if [[ -f "$BOX_ART_SRC" ]]; then
+    cp "$BOX_ART_SRC" "$IMGS_DIR/OpenRCT2mini.png"
+else
+    echo "[package] WARN: $BOX_ART_SRC missing — port will have no box art." >&2
+    echo "             Run: python3 resources/portbox/build_box_art.py" >&2
+fi
 
 ##############################################################################
 # 5. Default config.ini — points the binary at the user's RCT2 install at a
 #    known SD-card location so they don't have to navigate the file picker
 #    on first run.
 ##############################################################################
-mkdir -p "$APP_DIR/save/OpenRCT2"
 cat > "$APP_DIR/save/OpenRCT2/config.ini" <<'EOF'
-; OPENRCT2MINI default config (cuts 39 / 39j).
+; OPENRCT2MINI default config (revisions 39 / 39j / 63).
 [general]
 ; Path to the user's RCT2 install. OpenRCT2 reads this verbatim and resolves
 ; relative paths against process CWD, NOT the config.ini directory. Our
-; launch.sh does `cd $APPDIR` (= /mnt/SDCARD/App/OpenRCT2mini), so a bare
-; "rct2" resolves to /mnt/SDCARD/App/OpenRCT2mini/rct2 — which is exactly
-; where INSTALL.txt tells the user to place their game files.
+; launch.sh does `cd $APPDIR` (= /mnt/SDCARD/Roms/PORTS/Games/OpenRCT2mini),
+; so a bare "rct2" resolves there — which is exactly where INSTALL.txt
+; tells the user to place their game files.
 game_path = rct2
 
 ; Lock window to the device's native panel — saves overhead and makes the
-; software cursor coordinate space deterministic (cut 29).
+; software cursor coordinate space deterministic (revision 29).
 window_width = 640
 window_height = 480
 fullscreen_mode = 0
 window_scale = 1
 EOF
-
-##############################################################################
-# 6. App icon. OnionUI renders App/<name>/icon.png as the launcher tile;
-#    the established standard size (matches the bundled retroarch / pacman /
-#    commander / themes tiles) is 74x74. We ship a baked PNG derived from
-#    OpenRCT2's resources/logo/icon_x128.png, downscaled with Lanczos.
-##############################################################################
-ICON_SRC="$PROJECT_ROOT/Packaging/miyoo_mini/icon.png"
-if [[ -f "$ICON_SRC" ]]; then
-    cp "$ICON_SRC" "$APP_DIR/icon.png"
-else
-    echo "[package] WARN: $ICON_SRC missing, falling back to 1x1 placeholder" >&2
-    # Smallest valid PNG: 67-byte 1x1 transparent.
-    printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xcf\xc0\xf0\x1f\x00\x05\x00\x01\xff\xa3\xd6\x97\xfb\x00\x00\x00\x00IEND\xaeB`\x82' \
-        > "$APP_DIR/icon.png"
-fi
 
 ##############################################################################
 # 7. INSTALL.txt — user-facing instructions, pinned in the tarball root.
@@ -582,47 +605,49 @@ cat > "$APP_DIR/INSTALL.txt" <<EOF
 OPENRCT2mini for Miyoo Mini (OnionUI)
 =====================================
 
-This tarball is OpenRCT2mini v${FORK_VERSION} (commit ${GITREV}).
+This archive is OpenRCT2mini v${FORK_VERSION} (commit ${GITREV}), packaged
+as an OnionUI port. After install, OpenRCT2mini appears in your Game
+Library under "Simulation" alongside any ROMs.
 
 INSTALLING
 ----------
 
-1. Extract the archive to the *root* of your Miyoo Mini's SD card. The
-   tarball already contains the App/OpenRCT2mini/ path, so the result will
-   be:
+1. Extract the .7z to the *root* of your Miyoo Mini's SD card. The archive
+   already contains the Roms/PORTS/ paths, so the result will be:
 
-       /SDCARD/App/OpenRCT2mini/openrct2
-       /SDCARD/App/OpenRCT2mini/launch.sh
-       /SDCARD/App/OpenRCT2mini/data/...
-       /SDCARD/App/OpenRCT2mini/...
+       /SDCARD/Roms/PORTS/Games/OpenRCT2mini/openrct2
+       /SDCARD/Roms/PORTS/Games/OpenRCT2mini/launch.sh
+       /SDCARD/Roms/PORTS/Games/OpenRCT2mini/data/...
+       /SDCARD/Roms/PORTS/Imgs/OpenRCT2mini.png         (box art)
+       /SDCARD/Roms/PORTS/Shortcuts/Simulation/
+                                       OpenRCT2mini.port (or .notfound)
+
+   If your card already has a Roms/PORTS/ folder from other ports, just
+   merge — nothing in this archive overlaps with anything Onion ships.
 
 2. Copy your legitimate RollerCoaster Tycoon 2 install to:
 
-       /SDCARD/App/OpenRCT2mini/rct2/
+       /SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct2/
 
-   The folder must contain the original Data/ and ObjData/ directories with
-   g1.dat, css1.dat, etc. We cannot ship these — RCT2 is not free.
+   The folder must contain the original Data/ and ObjData/ directories
+   with g1.dat, css1.dat, etc. We cannot ship these — RCT2 is not free.
 
-3. Download OpenRCT2's supplemental asset packs from
-   <https://github.com/OpenRCT2/OpenRCT2/releases> — pin to the same release
-   the build identifies as. From the upstream release zip you need:
+   If you also have RollerCoaster Tycoon 1 (Loopy Landscapes), drop it
+   alongside at:
 
-       title-sequences-*.zip   ->  /SDCARD/App/OpenRCT2mini/data/sequence/
-       objects-*.zip           ->  /SDCARD/App/OpenRCT2mini/data/object/
-       opensound.zip           ->  extracts to /SDCARD/App/OpenRCT2mini/data/
-                                   (creates data/assetpack/openrct2.sound.parkap)
-       openmusic.zip           ->  extracts to /SDCARD/App/OpenRCT2mini/data/
-                                   (creates data/assetpack/openrct2.music.parkap)
+       /SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct1/
 
-   Without title-sequences/, the main-menu background screen will be black.
-   Without object/, custom scenery objects from saved parks won't load.
-   Without the OpenSFX/OpenMusic asset packs, in-game audio is silent.
+   The first run auto-detects RCT1 if it's there; the RCT1-themed
+   scenarios then appear in the scenario list.
 
-   These are GPL-compatible packs published by the OpenRCT2 project; we don't
-   redistribute them so you always get a fresh copy.
+3. From the OnionUI Game Switcher, run "Refresh roms". OpenRCT2mini will
+   appear in the **Simulation** category in your Game Library. While the
+   sentinel rct2/Data/g1.dat is missing, the port shortcut is renamed to
+   .notfound and stays hidden — that's the cue your RCT2 copy isn't in
+   the right folder yet.
 
-4. Eject the card, put it in the Miyoo Mini, boot OnionUI. "OpenRCT2mini"
-   appears in the App tab.
+   The supplemental asset packs (title sequences, objects, OpenSFX,
+   OpenMusic) are bundled by default — see BUNDLED ASSET PACKS below.
 
 CONTROLS (cut 60)
 -----------------
@@ -669,7 +694,7 @@ LOGS / TROUBLESHOOTING
 
 If something crashes, the run log is at:
 
-       /SDCARD/App/OpenRCT2mini/log/run.log
+       /SDCARD/Roms/PORTS/Games/OpenRCT2mini/log/run.log
 
 Each run gets a header/footer block; scroll to the END of the file for
 the latest run. The footer includes the exit code; if exit_code is >= 128
@@ -678,7 +703,7 @@ the most common: null deref or bad pointer).
 
 Pull that file off the card and report it. The save dir is:
 
-       /SDCARD/App/OpenRCT2mini/save/OpenRCT2/
+       /SDCARD/Roms/PORTS/Games/OpenRCT2mini/save/OpenRCT2/
 
 Saves you make on the device land there. They are interchangeable with
 desktop OpenRCT2 saves.
@@ -714,20 +739,28 @@ KNOWN LIMITS
 EOF
 
 ##############################################################################
-# 8. Tarball
+# 8. 7z archive — Onion's port-collection convention is to extract the
+#    archive at the SD-card root so its Roms/PORTS/ paths merge cleanly
+#    with what's already there. 7z is the format Onion's port repo uses;
+#    sticking to it keeps the install instructions simple ("extract to
+#    SD-card root").
 ##############################################################################
 mkdir -p "$DIST_DIR"
-TARBALL="$DIST_DIR/OpenRCT2mini-${FORK_VERSION}-${GITREV}.tar.gz"
-rm -f "$TARBALL"
-( cd "$STAGE_DIR" && tar czf "$TARBALL" App )
+ARCHIVE="$DIST_DIR/OpenRCT2mini-${FORK_VERSION}-${GITREV}.7z"
+rm -f "$ARCHIVE"
+if ! command -v 7z >/dev/null 2>&1; then
+    echo "ERROR: 7z not on host — install p7zip-full." >&2
+    exit 1
+fi
+# 7z 'a' adds; -mx=9 = max compression; relative path "Roms" so the archive
+# entries are Roms/PORTS/... (extract-at-root produces /SDCARD/Roms/PORTS/...).
+( cd "$STAGE_DIR" && 7z a -mx=9 -bd -bb0 "$ARCHIVE" Roms ) >/dev/null
 rm -rf "$STAGE_DIR"
 
 echo
-echo "Packaged: $TARBALL"
-ls -la "$TARBALL"
+echo "Packaged: $ARCHIVE"
+ls -la "$ARCHIVE"
 echo
-echo "Contents:"
-# Cosmetic listing — `tar tzf | head` SIGPIPEs by design and `set -e` would
-# bubble that up as a build failure. Wrap so the script ends successfully.
-{ tar tzf "$TARBALL" | head -20 || true; } 2>/dev/null
-echo "  ... ($(tar tzf "$TARBALL" | wc -l) files total)"
+echo "Contents (top 20):"
+{ 7z l -ba "$ARCHIVE" | awk '{print $NF}' | head -20 || true; } 2>/dev/null
+echo "  ... ($(7z l -ba "$ARCHIVE" | wc -l) entries total)"
