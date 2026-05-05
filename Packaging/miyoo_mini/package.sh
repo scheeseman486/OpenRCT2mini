@@ -644,5 +644,7 @@ echo "Packaged: $TARBALL"
 ls -la "$TARBALL"
 echo
 echo "Contents:"
-tar tzf "$TARBALL" | head -20
+# Cosmetic listing — `tar tzf | head` SIGPIPEs by design and `set -e` would
+# bubble that up as a build failure. Wrap so the script ends successfully.
+{ tar tzf "$TARBALL" | head -20 || true; } 2>/dev/null
 echo "  ... ($(tar tzf "$TARBALL" | wc -l) files total)"

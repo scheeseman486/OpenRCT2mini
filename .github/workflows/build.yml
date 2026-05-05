@@ -30,6 +30,34 @@ jobs:
           # tarball name and the version banner.
           fetch-depth: 1
 
+      # The four generated .dat files (g2 / fonts / palettes / tracks) are
+      # built by openrct2-cli at host architecture. The cross-build can't
+      # run that cli, so we produce just the .dat files first via a host
+      # build. These assets are OpenRCT2-original, GPL-licensed sprites
+      # (resources/{g2,fonts,palettes,tracks}/*.png + .json) — not RCT2
+      # game data. package.sh's "stage 2a" picks them up from build-host/.
+      - name: Install host build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config \
+            libsdl2-dev libpng-dev libzip-dev libzstd-dev \
+            libvorbis-dev libogg-dev nlohmann-json3-dev
+
+      - name: Host build (graphics target only — produces *.dat)
+        run: |
+          cmake -S . -B build-host -G Ninja \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DDISABLE_NETWORK=ON -DDISABLE_HTTP=ON -DDISABLE_OPENGL=ON \
+            -DDISABLE_TTF=ON -DDISABLE_FLAC=ON -DDISABLE_DISCORD_RPC=ON \
+            -DDISABLE_GOOGLE_BENCHMARK=ON -DDISABLE_VERSION_CHECKER=ON \
+            -DENABLE_SCRIPTING=OFF -DDISABLE_ICU=ON \
+            -DDOWNLOAD_TITLE_SEQUENCES=OFF -DDOWNLOAD_OBJECTS=OFF \
+            -DDOWNLOAD_OPENSFX=OFF -DDOWNLOAD_OPENMUSIC=OFF \
+            -DOPENRCT2_USE_CCACHE=OFF
+          cmake --build build-host --target graphics
+          ls -la build-host/*.dat
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
