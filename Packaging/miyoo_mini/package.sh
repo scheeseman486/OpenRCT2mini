@@ -560,12 +560,20 @@ window_scale = 1
 EOF
 
 ##############################################################################
-# 6. Placeholder icon. Real artwork can land here later; for now a 1x1 PNG
-#    keeps the launcher happy.
+# 6. App icon. OnionUI renders App/<name>/icon.png as the launcher tile;
+#    the established standard size (matches the bundled retroarch / pacman /
+#    commander / themes tiles) is 74x74. We ship a baked PNG derived from
+#    OpenRCT2's resources/logo/icon_x128.png, downscaled with Lanczos.
 ##############################################################################
-# Smallest valid PNG: 67-byte 1x1 transparent.
-printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xcf\xc0\xf0\x1f\x00\x05\x00\x01\xff\xa3\xd6\x97\xfb\x00\x00\x00\x00IEND\xaeB`\x82' \
-    > "$APP_DIR/icon.png"
+ICON_SRC="$PROJECT_ROOT/Packaging/miyoo_mini/icon.png"
+if [[ -f "$ICON_SRC" ]]; then
+    cp "$ICON_SRC" "$APP_DIR/icon.png"
+else
+    echo "[package] WARN: $ICON_SRC missing, falling back to 1x1 placeholder" >&2
+    # Smallest valid PNG: 67-byte 1x1 transparent.
+    printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xcf\xc0\xf0\x1f\x00\x05\x00\x01\xff\xa3\xd6\x97\xfb\x00\x00\x00\x00IEND\xaeB`\x82' \
+        > "$APP_DIR/icon.png"
+fi
 
 ##############################################################################
 # 7. INSTALL.txt — user-facing instructions, pinned in the tarball root.
