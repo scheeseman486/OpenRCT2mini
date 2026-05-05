@@ -10,19 +10,15 @@ OpenRCT2mini is currently playable. We match upstream v0.5.0 minus things that d
 
 ## Installing on the device
 
-OpenRCT2mini ships as an OnionUI **port** — it appears in your Game Library under the **Simulation** category, alongside ROMs and other ports (Doom, Duke3D, etc.), not in the App tab.
+OpenRCT2mini ships as an OnionUI **port**. It appears in your Game Library under the **Simulation** category, alongside ROMs and other ports (Doom, Duke3D, etc.), not in the App tab.
 
-The release `.7z` contains the OpenRCT2mini binary, its bundled libraries, the launch script, OpenRCT2's stock data (language strings, shaders, fonts), the supplemental asset packs (title sequences, object pack, OpenSFX, OpenMusic — see `THIRD_PARTY_NOTICES.md` for per-pack license / attribution), and the Onion port shortcut + box art.
+It does **not** contain RCT2 game data.
 
-It does **not** contain RCT2 game data — that part of the install is yours:
-
-1. Extract the `.7z` to the **root** of your Miyoo Mini's SD card. The archive's paths are `Roms/PORTS/...` so it merges cleanly with whatever's already there.
+1. Extract the `.7z` to the **root** of your Miyoo Mini's SD card.
 2. Copy your legitimately-owned RollerCoaster Tycoon 2 install to `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct2/`. The folder must contain the original `Data/` and `ObjData/` directories with `g1.dat`, `css1.dat`, etc.
-3. From the OnionUI Game Switcher, run **Refresh roms**. "OpenRCT2mini" appears in the **Simulation** category in your Game Library. While the sentinel `rct2/Data/g1.dat` is missing, the shortcut is renamed to `.notfound` and stays hidden — that's the cue your RCT2 copy isn't in the right folder yet.
+3. From the OnionUI Game Switcher, run **Refresh roms**. "OpenRCT2mini" appears in the **Simulation** category in your Game Library.
 
-Optionally, RCT1 can be placed at `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct1/` to enable RCT1 scenarios and CSG sprites. The launcher auto-detects both directories.
-
-If you want a smaller archive (e.g. for slow SD cards) you can rebuild without the asset packs via `./Packaging/miyoo_mini/package.sh --no-assets`. The released `.7z` ships with them included so the device is playable out of the box.
+Optionally, RCT1 can be placed at `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct1/` to enable RCT1 scenarios.
 
 ## Controls
 
@@ -43,8 +39,6 @@ If you want a smaller archive (e.g. for slow SD cards) you can rebuild without t
   Start        Confirm / open in-game menu
   Select       Cancel / back
 ```
-
-On the dev host (or with a USB keyboard via OTG), Alt is the keyboard equivalent of R1, and the L1+R1 chord is just real-keyboard Ctrl.
 
 ## Building
 
