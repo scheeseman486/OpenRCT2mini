@@ -17,6 +17,7 @@
 #include "core/Path.hpp"
 #include "core/String.hpp"
 #include "platform/Platform.h"
+#include "rct1/Csg.h"  // OPENRCT2MINI revision 62 — RCT1-specific data probe
 
 using namespace OpenRCT2;
 
@@ -302,7 +303,8 @@ std::unique_ptr<IPlatformEnvironment> OpenRCT2::CreatePlatformEnvironment()
     {
         Config::SaveToPath(configPath);
     }
-    // OPENRCT2MINI cut 46 / 53c: auto-resolve install paths in this order:
+    // OPENRCT2MINI cut 46 / 53c / revision 62: auto-resolve install paths
+    // in this order:
     //   1. configured path (if it actually contains a game install)
     //   2. <exe_dir>/<subdir>          (binary dropped alongside install)
     //   3. <rct2_dir>/../<subdir>      (RCT1-only: sibling of RCT2 install,
@@ -310,27 +312,39 @@ std::unique_ptr<IPlatformEnvironment> OpenRCT2::CreatePlatformEnvironment()
     // Each step does case-insensitive matching for "rct1" / "RCT1" /
     // "Rct1" because Windows installs ship in mixed case and our targets
     // (Linux + ext4 SD card) preserve that case.
+    //
+    // Revision 62: RCT1 vs RCT2 use different on-disk layouts —
+    // Platform::OriginalGameDataExists only knows the RCT2 layout
+    // (Data/g1.dat); RCT1 needs Csg1datPresentAtLocation (Data/CSG1.DAT).
+    // The earlier code used OriginalGameDataExists for both, so a valid
+    // RCT1 install never matched and the first-run auto-enable below
+    // silently no-op'd — user had to set the path manually in Options.
     auto exeDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
-    auto resolveDataPath = [&exeDir](const std::string& configured, std::initializer_list<const char*> names,
-                                     const std::string& siblingOf = {}) {
-        if (!configured.empty() && Platform::OriginalGameDataExists(configured))
+    auto isValidInstall = [](const std::string& p, bool isRct1) {
+        if (p.empty())
+            return false;
+        return isRct1 ? Csg1datPresentAtLocation(p) : Platform::OriginalGameDataExists(p);
+    };
+    auto resolveDataPath = [&exeDir, &isValidInstall](
+                               const std::string& configured, std::initializer_list<const char*> names, bool isRct1,
+                               const std::string& siblingOf = {}) {
+        if (isValidInstall(configured, isRct1))
             return configured;
         for (auto* name : names)
         {
             if (!exeDir.empty())
             {
                 auto candidate = Path::Combine(exeDir, name);
-                if (Platform::OriginalGameDataExists(candidate))
+                if (isValidInstall(candidate, isRct1))
                     return candidate;
             }
             if (!siblingOf.empty())
             {
-                // Parent of <siblingOf>, then append the candidate name.
                 auto parent = Path::GetDirectory(siblingOf);
                 if (!parent.empty())
                 {
                     auto candidate = Path::Combine(parent, name);
-                    if (Platform::OriginalGameDataExists(candidate))
+                    if (isValidInstall(candidate, isRct1))
                         return candidate;
                 }
             }
@@ -340,33 +354,49 @@ std::unique_ptr<IPlatformEnvironment> OpenRCT2::CreatePlatformEnvironment()
     // Resolve rct2 first so we can use it as the sibling reference for rct1.
     if (gCustomRCT2DataPath.empty())
     {
-        env->SetBasePath(DirBase::rct2, resolveDataPath(Config::Get().general.rct2Path, { u8"rct2", u8"RCT2", u8"Rct2" }));
+        env->SetBasePath(
+            DirBase::rct2,
+            resolveDataPath(Config::Get().general.rct2Path, { u8"rct2", u8"RCT2", u8"Rct2" }, /*isRct1=*/false));
     }
     if (gCustomRCT1DataPath.empty())
     {
-        // Use the now-resolved rct2 path as the "next to" reference.
         const auto& rct2Resolved = env->GetDirectoryPath(DirBase::rct2);
         env->SetBasePath(
             DirBase::rct1,
-            resolveDataPath(Config::Get().general.rct1Path, { u8"rct1", u8"RCT1", u8"Rct1" }, rct2Resolved));
+            resolveDataPath(
+                Config::Get().general.rct1Path, { u8"rct1", u8"RCT1", u8"Rct1" }, /*isRct1=*/true, rct2Resolved));
     }
 
-    // OPENRCT2MINI: first-run RCT1 auto-enable. The path-resolution above
-    // sets DirBase::rct1 on the runtime env, but the rest of the engine
+    // OPENRCT2MINI: RCT1 auto-enable. The path-resolution above sets
+    // DirBase::rct1 on the runtime env, but the rest of the engine
     // (Drawing.Sprite.cpp's CSG load, the title-sequence picker, etc.)
     // gates RCT1 features on Config::Get().general.rct1Path being non-empty.
-    // Mirror the resolved env path back into the config so the user doesn't
-    // have to dig into Options > Advanced and click "Browse" the first time
-    // they boot. After this, the user can clear the path in Options to
-    // disable RCT1, and that choice sticks because we only do this on
-    // firstRun.
-    if (firstRun && Config::Get().general.rct1Path.empty())
+    // Mirror the resolved env path back into the config so the user
+    // doesn't have to dig into Options > Advanced and click "Browse"
+    // before RCT1-themed objects load.
+    //
+    // Revision 62: dropped the firstRun gate. The earlier code only
+    // populated on the *very first boot*, which (a) silently no-op'd if
+    // the original probe was broken and (b) left users stuck if they'd
+    // ever booted with that bug. Policy is now: if the resolved
+    // DirBase::rct1 is a real RCT1 install AND the user hasn't set a
+    // path yet, populate it. Users who want to disable RCT1 can either
+    // remove the rct1/ folder (no detection → no auto-populate) or set
+    // a deliberately bogus rct1Path in Options (we only override when
+    // the configured value is empty, so any non-empty value sticks).
+    //
+    // Also revision 62: use the RCT1-specific data probe
+    // (Csg1datPresentAtLocation) instead of OriginalGameDataExists.
+    // OriginalGameDataExists only knows the RCT2 layout (Data/g1.dat)
+    // and silently fails for valid RCT1 installs (Data/CSG1.DAT).
+    if (Config::Get().general.rct1Path.empty())
     {
         const auto& rct1Resolved = env->GetDirectoryPath(DirBase::rct1);
-        if (!rct1Resolved.empty() && Platform::OriginalGameDataExists(rct1Resolved))
+        if (!rct1Resolved.empty() && Csg1datPresentAtLocation(rct1Resolved))
         {
             Config::Get().general.rct1Path = rct1Resolved;
             Config::SaveToPath(configPath);
+            LOG_VERBOSE("[OPENRCT2MINI] RCT1 auto-enable: %s", rct1Resolved.c_str());
         }
     }
 
