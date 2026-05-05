@@ -71,3 +71,6 @@ OpenRCT2mini inherits OpenRCT2's GNU GPL v3 license (`licence.txt`). All OpenRCT
 ## Where the original OpenRCT2 README went
 
 If you're looking for upstream OpenRCT2's documentation that's at <https://github.com/OpenRCT2/OpenRCT2>. If your interest is RCT2 on a desktop or mainstream handheld (Steam Deck, etc.) then upstream is what you want.
+
+## Generative AI notice
+GenAI was used to assist development of this port, caveat emptor.
