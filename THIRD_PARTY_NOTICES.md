@@ -95,9 +95,25 @@ These libraries are SigmaStar proprietary code, present on every Miyoo Mini, and
 
 ## Game data
 
-OpenRCT2mini does NOT package any game-content files in its release tarball. The user supplies:
+OpenRCT2mini distinguishes two categories of game-content files: user-supplied (the original RCT1/RCT2 game data, which we cannot redistribute) and bundled (OpenRCT2's own permissively-licensed supplemental asset packs, which we ship inside the tarball).
 
-- A legally-owned RollerCoaster Tycoon 2 install (`Data/`, `ObjData/`, `g1.dat`, `css1.dat`, etc.), placed at `/SDCARD/App/OpenRCT2mini/rct2/`. Optionally a RollerCoaster Tycoon 1 install at `/SDCARD/App/OpenRCT2mini/rct1/`. Both games' content is © Chris Sawyer / Atari / Infogrames; OpenRCT2mini does not redistribute it.
-- The OpenRCT2 project's downloadable supplemental asset packs — the title-sequence collection, the open object pack, OpenSFX (Creative-Commons-licensed sound effects), and OpenMusic (Creative-Commons-licensed music). These are downloaded directly from <https://github.com/OpenRCT2/OpenRCT2/releases> and dropped into `App/OpenRCT2mini/data/`.
+### User-supplied — NOT in the tarball
 
-The packaging script can fetch these on the build machine for convenience during the developer's own builds (`./Packaging/miyoo_mini/package.sh --with-assets`), but the produced tarball does not embed them by default — see `readme.md` for the user-facing install steps.
+A legally-owned RollerCoaster Tycoon 2 install (`Data/`, `ObjData/`, `g1.dat`, `css1.dat`, etc.) goes at `/SDCARD/App/OpenRCT2mini/rct2/`. Optionally a RollerCoaster Tycoon 1 install at `/SDCARD/App/OpenRCT2mini/rct1/`. Both games' content is © Chris Sawyer / Atari / Infogrames; OpenRCT2mini does not redistribute it. See `readme.md` for the install path.
+
+### Bundled OpenRCT2 supplemental asset packs
+
+The release tarball ships four supplemental asset packs published by the OpenRCT2 project. Each pack ships with its own LICENSE/COPYING file alongside the data it provides (see `App/OpenRCT2mini/data/ASSETPACKS.md` inside the tarball for in-tree pointers). All four are unmodified copies of the corresponding upstream release.
+
+| Pack | Tarball path | Upstream | License | SPDX |
+|---|---|---|---|---|
+| Title sequences | `data/sequence/` | <https://github.com/OpenRCT2/title-sequences> | Creative Commons Attribution 4.0 International | `CC-BY-4.0` |
+| Object pack | `data/object/` | <https://github.com/OpenRCT2/objects> | Creative Commons Attribution 4.0 International | `CC-BY-4.0` |
+| OpenSFX | `data/assetpack/openrct2.sound.parkap` | <https://github.com/OpenRCT2/OpenSoundEffects> | MIT | `MIT` |
+| OpenMusic | `data/assetpack/openrct2.music.parkap` | <https://github.com/OpenRCT2/OpenMusic> | Creative Commons Attribution-ShareAlike 4.0 International | `CC-BY-SA-4.0` |
+
+Copyright holder for each pack: "OpenRCT2 contributors" — see each upstream repo's `contributors.md` (or equivalent) for the per-author roster. None of the packs have been modified by OpenRCT2mini; we redistribute the binary blob (`.zip` extracted into `data/...`) byte-for-byte from the upstream release pinned in `assets.json`.
+
+CC-BY-SA-4.0 (OpenMusic) requires that any *Adapted Material* derived from it be licensed under the same terms. OpenRCT2mini does not adapt the music — the binary is a separate work that consumes `.parkap` files at runtime, not a derivative of them — so the ShareAlike clause does not propagate to the engine. Anyone redistributing the OpenMusic pack as part of their own modified build of OpenRCT2mini (or any other software) must continue to ship it under CC-BY-SA-4.0.
+
+To rebuild the tarball without the bundled asset packs (smaller artifact, but the user has to fetch the packs themselves): `./Packaging/miyoo_mini/package.sh --no-assets`.

@@ -10,18 +10,17 @@ OpenRCT2mini is currently playable. We match upstream v0.5.0 minus things that d
 
 ## Installing on the device
 
-The release tarball contains the binary, its bundled libraries, the launch script, and OpenRCT2's stock data (language strings, shaders, fonts).
+The release tarball contains the OpenRCT2mini binary, its bundled libraries, the launch script, OpenRCT2's stock data (language strings, shaders, fonts), and the OpenRCT2 project's supplemental asset packs (title sequences, object pack, OpenSFX, OpenMusic — see `THIRD_PARTY_NOTICES.md` for the per-pack license / attribution).
 
-It does **not** contain RCT2 game data, and by default does not contain OpenRCT2's optional supplemental asset packs (title sequences, object pack, OpenSFX, OpenMusic). You must provide both:
+It does **not** contain RCT2 game data — that part of the install is yours:
 
 1. Extract the tarball to the root of your Miyoo Mini's SD card. The result will be `/SDCARD/App/OpenRCT2mini/`.
 2. Copy your legitimately-owned RollerCoaster Tycoon 2 install to `/SDCARD/App/OpenRCT2mini/rct2/`. The folder must contain the original `Data/` and `ObjData/` directories with `g1.dat`, `css1.dat`, etc.
-3. Download OpenRCT2's supplemental asset packs from the [OpenRCT2 releases page](https://github.com/OpenRCT2/OpenRCT2/releases) and extract them next to the binary as documented in the tarball's `INSTALL.txt`. Without title-sequences the main menu has no animated background; without the object pack custom-scenery saves won't load.
-4. Boot OnionUI. "OpenRCT2mini" appears in the App tab.
+3. Boot OnionUI. "OpenRCT2mini" appears in the App tab.
 
 Optionally, RCT1 can be placed at `/SDCARD/App/OpenRCT2mini/rct1/` to enable RCT1 scenarios and CSG sprites. The launcher auto-detects both directories.
 
-The release tarball can be built with the supplemental asset packs embedded via `./Packaging/miyoo_mini/package.sh --with-assets`. That option is intended for developers building for their own SD card; the canonical published tarball stays minimal.
+If you want a smaller tarball (e.g. for slow SD cards) you can rebuild without the asset packs via `./Packaging/miyoo_mini/package.sh --no-assets`. The released tarball ships with them included so the device is playable out of the box.
 
 ## Controls
 

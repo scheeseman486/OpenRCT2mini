@@ -31,17 +31,16 @@ if [ ! -x "$BUILD_DIR/openrct2" ]; then
 fi
 
 STRIP=1
-# OPENRCT2MINI: default is to NOT bundle OpenRCT2's optional asset packs
-# (title sequences, the object pack, OpenSFX, OpenMusic). Their licensing is
-# GPL-compatible but we don't want to redistribute them as a courtesy: those
-# files have their own changelogs and the user gets a fresher copy by
-# downloading directly from <https://github.com/OpenRCT2/OpenRCT2/releases>.
-# Pass --with-assets to embed them in the tarball anyway (useful when
-# building for one's own SD card to skip the manual download step).
-BUNDLE_ASSETS=0
+# OPENRCT2MINI: bundle OpenRCT2's supplemental asset packs by default.
+# Each pack's license (CC-BY-4.0 for title-sequences and objects; MIT for
+# OpenSFX; CC-BY-SA-4.0 for OpenMusic) permits redistribution as long as
+# attribution is preserved — see THIRD_PARTY_NOTICES.md. Pass --no-assets
+# to skip the embed (smaller tarball; the user then has to fetch the packs
+# from <https://github.com/OpenRCT2/OpenRCT2/releases>).
+BUNDLE_ASSETS=1
 for arg in "$@"; do
     if [ "$arg" = "--no-strip" ]; then STRIP=0; fi
-    if [ "$arg" = "--with-assets" ]; then BUNDLE_ASSETS=1; fi
+    if [ "$arg" = "--no-assets" ]; then BUNDLE_ASSETS=0; fi
 done
 
 ##############################################################################
@@ -193,12 +192,13 @@ fi
 
 ##############################################################################
 # 2b. Supplemental asset packs (title sequences, objects, OpenSFX, OpenMusic).
-#     Default is OFF — the user downloads them directly from OpenRCT2's
-#     release page (see INSTALL.txt). Pass --with-assets to embed them.
-#     Same URLs the upstream cmake DOWNLOAD_* steps would have used.
+#     Bundled by default. Each pack is shipped under a permissive license
+#     (CC-BY-4.0 / MIT / CC-BY-SA-4.0 — see THIRD_PARTY_NOTICES.md and the
+#     LICENSE file we copy in alongside each pack below). Pass --no-assets
+#     to skip the embed.
 ##############################################################################
 if [ "$BUNDLE_ASSETS" != "1" ]; then
-    echo "Skipping supplemental asset fetch (default — pass --with-assets to bundle)."
+    echo "Skipping supplemental asset fetch (--no-assets set)."
 else
     if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
         echo "ERROR: package.sh needs 'curl' and 'unzip' on the host." >&2
@@ -245,6 +245,75 @@ print(data['$1']['$2'])
         "$(asset_field openmusic url)" \
         "$(asset_field openmusic sha256)" \
         "$APP_DIR/data"
+
+    ##########################################################################
+    # 2b.i. License compliance for the bundled asset packs.
+    #
+    # CC-BY-4.0 (title-sequences, objects), CC-BY-SA-4.0 (OpenMusic), and MIT
+    # (OpenSFX) all require the license text + attribution to travel with the
+    # redistributed material. Fetch each upstream LICENSE/COPYING file and
+    # drop it next to the data the pack created. THIRD_PARTY_NOTICES.md in
+    # the source tree documents the high-level summary; the per-pack files
+    # below satisfy the in-tarball notice requirement on their own.
+    ##########################################################################
+    echo "==[ asset-pack license files ]================================="
+    mkdir -p "$APP_DIR/data/sequence" "$APP_DIR/data/object" "$APP_DIR/data/assetpack"
+    fetch_license() {
+        # fetch_license <upstream-url> <dest-path>
+        local url="$1" dest="$2"
+        echo "  fetching $(basename "$dest")"
+        curl --fail --location --silent --show-error -o "$dest" "$url"
+    }
+    fetch_license \
+        "https://raw.githubusercontent.com/OpenRCT2/title-sequences/master/LICENSE" \
+        "$APP_DIR/data/sequence/LICENSE.title-sequences.txt"
+    fetch_license \
+        "https://raw.githubusercontent.com/OpenRCT2/objects/master/LICENCE" \
+        "$APP_DIR/data/object/LICENSE.objects.txt"
+    fetch_license \
+        "https://raw.githubusercontent.com/OpenRCT2/OpenSoundEffects/master/LICENSE" \
+        "$APP_DIR/data/assetpack/LICENSE.opensfx.txt"
+    fetch_license \
+        "https://raw.githubusercontent.com/OpenRCT2/OpenMusic/master/COPYING" \
+        "$APP_DIR/data/assetpack/LICENSE.openmusic.txt"
+    cat > "$APP_DIR/data/ASSETPACKS.md" <<'ATTR_EOF'
+Bundled OpenRCT2 supplemental asset packs
+=========================================
+
+This OpenRCT2mini tarball ships four supplemental asset packs published
+by the OpenRCT2 project. Each is included as-is, unmodified, under its
+own license. The license text travels with the pack inside the tarball;
+high-level attribution is also in this project's THIRD_PARTY_NOTICES.md.
+
+  data/sequence/   — title-sequence demo parks
+                     (c) OpenRCT2 contributors, CC-BY-4.0
+                     https://github.com/OpenRCT2/title-sequences
+                     full text: data/sequence/LICENSE.title-sequences.txt
+
+  data/object/     — additional scenery / ride objects
+                     (c) OpenRCT2 contributors, CC-BY-4.0
+                     https://github.com/OpenRCT2/objects
+                     full text: data/object/LICENSE.objects.txt
+
+  data/assetpack/openrct2.sound.parkap
+                   — OpenSFX replacement sound effects
+                     (c) 2019 OpenRCT2, MIT
+                     https://github.com/OpenRCT2/OpenSoundEffects
+                     full text: data/assetpack/LICENSE.opensfx.txt
+
+  data/assetpack/openrct2.music.parkap
+                   — OpenMusic replacement music tracks
+                     (c) OpenRCT2 contributors, CC-BY-SA-4.0
+                     https://github.com/OpenRCT2/OpenMusic
+                     full text: data/assetpack/LICENSE.openmusic.txt
+
+These packs were not authored by OpenRCT2mini; we only redistribute
+unmodified copies of the corresponding upstream releases. None of the
+packs are derivatives of the OpenRCT2mini binary, and the OpenRCT2mini
+binary is not a derivative of any of them — they are separate works
+shipped alongside one another in the same archive.
+ATTR_EOF
+    echo "  wrote data/ASSETPACKS.md (attribution summary)"
 fi
 
 ##############################################################################
@@ -606,18 +675,24 @@ Pull that file off the card and report it. The save dir is:
 Saves you make on the device land there. They are interchangeable with
 desktop OpenRCT2 saves.
 
-SUPPLEMENTAL ASSETS
+BUNDLED ASSET PACKS
 -------------------
 
-OpenRCT2's supplemental asset packs (title sequences, object pack, OpenSFX,
-OpenMusic) are NOT bundled with this tarball by default — see step 3 of
-INSTALLING above for the manual download instructions. The device build has
-networking disabled, so OpenRCT2's first-run download path won't fire and
-we don't ship those files in the same package as the binary.
+This tarball includes the four supplemental asset packs the OpenRCT2
+project publishes alongside its own binaries:
 
-If you built this tarball yourself with --with-assets, the supplemental
-packs ARE included under data/sequence/, data/object/, and
-data/assetpack/, and step 3 can be skipped.
+  data/sequence/       Title-sequence demo parks  (CC-BY-4.0)
+  data/object/         Stock object pack          (CC-BY-4.0)
+  data/assetpack/openrct2.sound.parkap   OpenSFX  (MIT)
+  data/assetpack/openrct2.music.parkap   OpenMusic (CC-BY-SA-4.0)
+
+Each pack ships with its own LICENSE file alongside the data; the
+high-level summary is in data/ASSETPACKS.md inside this tarball, and
+THIRD_PARTY_NOTICES.md in the OpenRCT2mini source tree.
+
+If your tarball was rebuilt with --no-assets these directories are
+absent and you can fetch the packs from
+<https://github.com/OpenRCT2/OpenRCT2/releases> manually.
 
 KNOWN LIMITS
 ------------
