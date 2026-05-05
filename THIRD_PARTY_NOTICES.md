@@ -98,6 +98,6 @@ These libraries are SigmaStar proprietary code, present on every Miyoo Mini, and
 OpenRCT2mini does NOT package any game-content files in its release tarball. The user supplies:
 
 - A legally-owned RollerCoaster Tycoon 2 install (`Data/`, `ObjData/`, `g1.dat`, `css1.dat`, etc.), placed at `/SDCARD/App/OpenRCT2mini/rct2/`. Optionally a RollerCoaster Tycoon 1 install at `/SDCARD/App/OpenRCT2mini/rct1/`. Both games' content is © Chris Sawyer / Atari / Infogrames; OpenRCT2mini does not redistribute it.
-- The OpenRCT2 project's downloadable supplemental asset packs — the title-sequence collection, the open object pack, OpenSFX (Creative-Commons-licensed sound effects), and OpenMusic (Creative-Commons-licensed music). These are downloaded directly from <https://github.com/OpenRCT2/OpenRCT2/releases> and dropped into `App/OpenRCT2mini/data/` per `INSTALL.txt`.
+- The OpenRCT2 project's downloadable supplemental asset packs — the title-sequence collection, the open object pack, OpenSFX (Creative-Commons-licensed sound effects), and OpenMusic (Creative-Commons-licensed music). These are downloaded directly from <https://github.com/OpenRCT2/OpenRCT2/releases> and dropped into `App/OpenRCT2mini/data/`.
 
-The packaging script can fetch these on the build machine for convenience during the developer's own builds, but the produced tarball does not embed them — see `Packaging/miyoo_mini/INSTALL.txt` for the user-facing install steps.
+The packaging script can fetch these on the build machine for convenience during the developer's own builds (`./Packaging/miyoo_mini/package.sh --with-assets`), but the produced tarball does not embed them by default — see `readme.md` for the user-facing install steps.
