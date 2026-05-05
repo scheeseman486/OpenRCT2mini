@@ -489,7 +489,7 @@ bool GfxLoadG1(const IPlatformEnvironment& env)
         if (!_g1.data)
         {
             // Fall back to legacy read-into-heap on mmap failure.
-            fprintf(stderr, "[OPENRCT2MINI] g1.dat mmap failed; falling back to heap read\n");
+            LOG_WARNING("g1.dat mmap failed; falling back to heap read");
             _g1.data = OpenRCT2::Drawing::MakeHeapSpriteData(fs.ReadArray<uint8_t>(_g1.header.totalSize));
         }
 

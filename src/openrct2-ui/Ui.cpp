@@ -23,6 +23,7 @@
 #endif
 #include <openrct2/Context.h>
 #include <openrct2/Diagnostic.h>
+#include <openrct2/MiniDebug.h>  // OPENRCT2MINI revision 64 — gated debug logging
 #include <openrct2/OpenRCT2.h>
 #include <openrct2/PlatformEnvironment.h>
 #include <openrct2/audio/AudioContext.h>
@@ -81,18 +82,14 @@ int NormalisedMain(int argc, const char** argv)
 int main(int argc, const char** argv)
 #endif
 {
-    // OPENRCT2MINI: cut 39g. Stderr checkpoints — the first openrct2 logger
-    // call doesn't fire until well after Context::Initialise, so without
-    // these we can't tell whether a SIGSEGV during early init was in
-    // command-line parsing, mallopt, BitmapReader registration, the
-    // PlatformEnvironment construction, the Context constructor, or in
-    // Context::Initialise itself. Each checkpoint flushes immediately so
-    // the very last one before a crash makes it to disk.
-    auto kpt = [](const char* tag) {
-        std::fputs("[OPENRCT2MINI] checkpoint: ", stderr);
-        std::fputs(tag, stderr);
-        std::fputc('\n', stderr);
-        std::fflush(stderr);
+    // OPENRCT2MINI: revision 39g / 64. Per-step early-init checkpoints —
+    // covered command-line parsing, mallopt, BitmapReader registration,
+    // PlatformEnvironment construction, Context constructor, and
+    // Context::Initialise. Gated behind OPENRCT2MINI_DEBUG via MiniDebug.h
+    // — release builds compile the lambda body to a no-op and the
+    // compiler elides the call sites entirely under -O2/-O3.
+    auto kpt = []([[maybe_unused]] const char* tag) {
+        MINI_DBG_LOG("checkpoint: %s\n", tag);
     };
     kpt("main entered");
 

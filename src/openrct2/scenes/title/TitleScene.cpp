@@ -13,6 +13,7 @@
 
 #include "../../Context.h"
 #include "../../Diagnostic.h"
+#include "../../MiniDebug.h"  // OPENRCT2MINI revision 64 — gated debug logging
 #include "../../Game.h"
 #include "../../GameState.h"
 #include "../../Input.h"
@@ -96,7 +97,7 @@ bool TitleScene::IsPreviewingSequence()
 void TitleScene::Load()
 {
     LOG_VERBOSE("TitleScene::Load()");
-    std::fputs("[OPENRCT2MINI]   title: Load() entered\n", stderr); std::fflush(stderr);
+    MINI_DBG_PUTS("  title: Load() entered");
 
     if (GameIsPaused())
     {
@@ -111,31 +112,31 @@ void TitleScene::Load()
     GetContext().GetNetwork().Close();
 #endif
     gameStateInitAll(getGameState(), kDefaultMapSize);
-    std::fputs("[OPENRCT2MINI]   title: gameStateInitAll done\n", stderr); std::fflush(stderr);
+    MINI_DBG_PUTS("  title: gameStateInitAll done");
     ContextResetSubsystems();
-    std::fputs("[OPENRCT2MINI]   title: ContextResetSubsystems done\n", stderr); std::fflush(stderr);
+    MINI_DBG_PUTS("  title: ContextResetSubsystems done");
     ContextOpenWindow(WindowClass::mainWindow);
-    std::fputs("[OPENRCT2MINI]   title: mainWindow open\n", stderr); std::fflush(stderr);
+    MINI_DBG_PUTS("  title: mainWindow open");
 
     TitleInitialise();
-    std::fputs("[OPENRCT2MINI]   title: TitleInitialise done\n", stderr); std::fflush(stderr);
+    MINI_DBG_PUTS("  title: TitleInitialise done");
 
     if (_sequencePlayer != nullptr)
     {
-        std::fputs("[OPENRCT2MINI]   title: TryLoadSequence start\n", stderr); std::fflush(stderr);
+        MINI_DBG_PUTS("  title: TryLoadSequence start");
         // Force the title sequence to load / update so we
         // don't see a blank screen for a split second.
         _loadedTitleSequenceId = SIZE_MAX;
         TryLoadSequence();
-        std::fputs("[OPENRCT2MINI]   title: TryLoadSequence done, calling Update\n", stderr); std::fflush(stderr);
+        MINI_DBG_PUTS("  title: TryLoadSequence done, calling Update");
         _sequencePlayer->Update();
-        std::fputs("[OPENRCT2MINI]   title: sequencePlayer->Update done\n", stderr); std::fflush(stderr);
+        MINI_DBG_PUTS("  title: sequencePlayer->Update done");
     }
 
     Audio::PlayTitleMusic();
 
     CreateWindows();
-    std::fputs("[OPENRCT2MINI]   title: CreateWindows done\n", stderr); std::fflush(stderr);
+    MINI_DBG_PUTS("  title: CreateWindows done");
 
     if (gOpenRCT2ShowChangelog)
     {
@@ -144,20 +145,16 @@ void TitleScene::Load()
     }
 
     LOG_VERBOSE("TitleScene::Load() finished");
-    std::fputs("[OPENRCT2MINI]   title: Load() finished\n", stderr); std::fflush(stderr);
+    MINI_DBG_PUTS("  title: Load() finished");
 }
 
 void TitleScene::Tick()
 {
-    // OPENRCT2MINI cut 41: tag the per-tick subsystem we're in, so a SIGSEGV
-    // backtrace pinpoints which call sat at the bottom of the stack at
-    // crash time. Cheap counter, prints once a second.
+    // OPENRCT2MINI revision 41 / 64. Per-tick subsystem tag for SIGSEGV
+    // post-mortem — gated behind OPENRCT2MINI_DEBUG.
     static uint32_t s_titleTick = 0;
-    auto ttick = [](const char* tag) {
-        std::fputs("[OPENRCT2MINI]   title.tick: ", stderr);
-        std::fputs(tag, stderr);
-        std::fputc('\n', stderr);
-        std::fflush(stderr);
+    auto ttick = []([[maybe_unused]] const char* tag) {
+        MINI_DBG_LOG("  title.tick: %s\n", tag);
     };
     bool logThisTick = (s_titleTick % 60) == 0;
     s_titleTick++;

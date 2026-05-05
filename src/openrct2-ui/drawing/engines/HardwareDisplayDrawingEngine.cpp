@@ -15,6 +15,7 @@
 #include <cstring> // OPENRCT2MINI: cut 44d, memset for cursor backup edges
 #include <memory>
 #include <openrct2/Diagnostic.h>
+#include <openrct2/MiniDebug.h>  // OPENRCT2MINI revision 64 — gated debug logging
 #include <openrct2/Game.h>
 #include <openrct2/config/Config.h>
 #include <openrct2/core/Guard.hpp>
@@ -132,25 +133,14 @@ public:
         _sdlRenderer = SDL_CreateRenderer(_window, -1, SDL_RENDERER_ACCELERATED | vsyncFlag);
         if (_sdlRenderer == nullptr)
         {
-            std::fputs(
-                "[OPENRCT2MINI] HW renderer unavailable (",
-                stderr);
-            std::fputs(SDL_GetError(), stderr);
-            std::fputs("); falling back to SDL_RENDERER_SOFTWARE.\n", stderr);
-            std::fflush(stderr);
+            LOG_WARNING("HW renderer unavailable (%s); falling back to SDL_RENDERER_SOFTWARE.", SDL_GetError());
             _sdlRenderer = SDL_CreateRenderer(_window, -1, SDL_RENDERER_SOFTWARE);
         }
         if (_sdlRenderer == nullptr)
         {
-            std::fputs(
-                "[OPENRCT2MINI] FATAL: no SDL renderer available (", stderr);
-            std::fputs(SDL_GetError(), stderr);
-            std::fputs(
-                "). The SDL2 build can't drive this platform's panel. "
-                "On the Miyoo Mini this is the cue to integrate the "
-                "XK9274/sdl2_miyoo vendor SDL2 port.\n",
-                stderr);
-            std::fflush(stderr);
+            LOG_ERROR("FATAL: no SDL renderer available (%s). The SDL2 build can't drive this platform's panel. "
+                      "On the Miyoo Mini this is the cue to integrate the XK9274/sdl2_miyoo vendor SDL2 port.",
+                      SDL_GetError());
         }
 #ifdef ENABLE_SOFTWARE_CURSOR
         // Cut 43c: SoftwareCursor no longer needs the SDL_Renderer — it
@@ -546,11 +536,8 @@ private:
             const auto* rawBits = reinterpret_cast<const uint8_t*>(_bits);
             for (size_t i = 0; i < sampleSize; ++i)
                 if (rawBits[i] != 0) ++nonZero;
-            std::fprintf(
-                stderr,
-                "[OPENRCT2MINI] HWDDE present #%u — _bits %zu/%zu non-zero, windows=%zu\n",
-                s_presentCount, nonZero, sampleSize, gWindowList.size());
-            std::fflush(stderr);
+            MINI_DBG_LOG("HWDDE present #%u — _bits %zu/%zu non-zero, windows=%zu\n",
+                         s_presentCount, nonZero, sampleSize, gWindowList.size());
         }
         s_presentCount++;
 

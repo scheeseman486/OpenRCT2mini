@@ -45,12 +45,18 @@ STRIP=1
 # Each pack's license (CC-BY-4.0 for title-sequences and objects; MIT for
 # OpenSFX; CC-BY-SA-4.0 for OpenMusic) permits redistribution as long as
 # attribution is preserved — see THIRD_PARTY_NOTICES.md. Pass --no-assets
-# to skip the embed (smaller tarball; the user then has to fetch the packs
+# to skip the embed (smaller archive; the user then has to fetch the packs
 # from <https://github.com/OpenRCT2/OpenRCT2/releases>).
 BUNDLE_ASSETS=1
+# OPENRCT2MINI revision 64: --debug makes package.sh drop a `.debug`
+# sentinel in the staged install. launch.sh checks for that sentinel on
+# the device and only redirects stderr to log/run.log when present.
+# Release packages get no sentinel → no log file.
+PACKAGE_DEBUG=0
 for arg in "$@"; do
     if [ "$arg" = "--no-strip" ]; then STRIP=0; fi
     if [ "$arg" = "--no-assets" ]; then BUNDLE_ASSETS=0; fi
+    if [ "$arg" = "--debug" ]; then PACKAGE_DEBUG=1; fi
 done
 
 ##############################################################################
@@ -405,15 +411,22 @@ fi
 # the binary, and the user only has to back up one folder.
 export XDG_CONFIG_HOME="$APPDIR/save"
 
-# OPENRCT2MINI: cut 39d. Log is appended across runs (so we don't lose the
-# last crash if the user runs the app a second time). Each run gets a
-# header block with timestamp, kernel, memory, env and a footer with the
-# exit code so the LATEST RUN is easy to spot in the file.
-mkdir -p "$APPDIR/log"
-LOGFILE="$APPDIR/log/run.log"
-# Cap the log at ~512 KB so it doesn't grow forever.
-if [ -f "$LOGFILE" ] && [ "$(wc -c < "$LOGFILE" 2>/dev/null || echo 0)" -gt 524288 ]; then
-    tail -c 262144 "$LOGFILE" > "$LOGFILE.tmp" && mv "$LOGFILE.tmp" "$LOGFILE"
+# OPENRCT2MINI revision 39d / 64. Log is appended across runs only for
+# *debug* builds — package.sh drops a `.debug` sentinel in the install
+# folder when it's a debug build. In a release build the sentinel is
+# absent: LOGFILE points at /dev/null, the log-rotate / header / footer
+# blocks below all become silent no-ops, and the binary's stderr (which
+# is itself silent in release because the OPENRCT2MINI_DEBUG checkpoints
+# compile to nothing) goes to /dev/null.
+if [ -f "$APPDIR/.debug" ]; then
+    mkdir -p "$APPDIR/log"
+    LOGFILE="$APPDIR/log/run.log"
+    # Cap the log at ~512 KB so it doesn't grow forever.
+    if [ -f "$LOGFILE" ] && [ "$(wc -c < "$LOGFILE" 2>/dev/null || echo 0)" -gt 524288 ]; then
+        tail -c 262144 "$LOGFILE" > "$LOGFILE.tmp" && mv "$LOGFILE.tmp" "$LOGFILE"
+    fi
+else
+    LOGFILE="/dev/null"
 fi
 {
     echo
@@ -737,6 +750,17 @@ KNOWN LIMITS
   * Map size is capped at 256x256 to fit the device's 128 MB RAM. Larger
     maps will be rejected at load time. (Cut 1.)
 EOF
+
+##############################################################################
+# 7c. Debug-build sentinel. launch.sh checks for this and only writes
+#     log/run.log if it's present. Release archives get no sentinel.
+##############################################################################
+if [ "$PACKAGE_DEBUG" = "1" ]; then
+    : > "$APP_DIR/.debug"
+    echo "  packaged as DEBUG build (.debug sentinel + log/run.log enabled)"
+else
+    echo "  packaged as RELEASE build (no diagnostic logfile on the device)"
+fi
 
 ##############################################################################
 # 8. 7z archive — Onion's port-collection convention is to extract the

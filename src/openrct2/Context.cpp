@@ -24,6 +24,7 @@
 #include "GameState.h"
 #include "GameStateSnapshots.h"
 #include "Input.h"
+#include "MiniDebug.h"  // OPENRCT2MINI revision 64 — gated debug logging
 #include "OpenRCT2.h"
 #include "ParkImporter.h"
 #include "PlatformEnvironment.h"
@@ -317,20 +318,16 @@ namespace OpenRCT2
 
         int32_t RunOpenRCT2(int argc, const char** argv) override
         {
-            // OPENRCT2MINI: cut 39h. Stderr checkpoints — see Ui.cpp main().
-            std::fputs("[OPENRCT2MINI] checkpoint: Initialise() entering\n", stderr);
-            std::fflush(stderr);
+            // OPENRCT2MINI revision 39h / 64. Stderr checkpoints gated on
+            // OPENRCT2MINI_DEBUG — release builds compile these to no-ops.
+            MINI_DBG_PUTS("checkpoint: Initialise() entering");
             bool ok = Initialise();
-            std::fputs("[OPENRCT2MINI] checkpoint: Initialise() returned ", stderr);
-            std::fputs(ok ? "true\n" : "false\n", stderr);
-            std::fflush(stderr);
+            MINI_DBG_LOG("checkpoint: Initialise() returned %s\n", ok ? "true" : "false");
             if (ok)
             {
-                std::fputs("[OPENRCT2MINI] checkpoint: Launch() entering\n", stderr);
-                std::fflush(stderr);
+                MINI_DBG_PUTS("checkpoint: Launch() entering");
                 Launch();
-                std::fputs("[OPENRCT2MINI] checkpoint: Launch() returned\n", stderr);
-                std::fflush(stderr);
+                MINI_DBG_PUTS("checkpoint: Launch() returned");
                 return EXIT_SUCCESS;
             }
             return EXIT_FAILURE;
@@ -422,11 +419,8 @@ namespace OpenRCT2
             // they cover the entire Initialise body, not just from
             // CreateWindow onward (the previous device run died BEFORE the
             // first checkpoint here).
-            auto kpt = [](const char* tag) {
-                std::fputs("[OPENRCT2MINI]   init: ", stderr);
-                std::fputs(tag, stderr);
-                std::fputc('\n', stderr);
-                std::fflush(stderr);
+            auto kpt = []([[maybe_unused]] const char* tag) {
+                MINI_DBG_LOG("  init: %s\n", tag);
             };
             kpt("Initialise body entered");
             if (_initialised)
@@ -1122,15 +1116,13 @@ namespace OpenRCT2
             auto result = std::string();
             if (gCustomRCT2DataPath.empty())
             {
-                // OPENRCT2MINI: cut 39j. Print the configured rct2 path and
-                // whether OriginalGameDataExists agrees, so the device log
-                // shows exactly which path failed without us having to
-                // attach a debugger.
+                // OPENRCT2MINI revision 39j / 64. Diagnostic log of the
+                // configured rct2 path and probe result — gated behind
+                // OPENRCT2MINI_DEBUG. The fatal "RCT2 install not found"
+                // message below is unconditional because the user needs
+                // to see it in any build.
                 auto cfgPath = Config::Get().general.rct2Path;
-                std::fputs("[OPENRCT2MINI]   rct2Path = ", stderr);
-                std::fputs(cfgPath.empty() ? "(empty)" : cfgPath.c_str(), stderr);
-                std::fputc('\n', stderr);
-                std::fflush(stderr);
+                MINI_DBG_LOG("  rct2Path = %s\n", cfgPath.empty() ? "(empty)" : cfgPath.c_str());
 
                 bool exists = !cfgPath.empty() && Platform::OriginalGameDataExists(cfgPath);
 
@@ -1148,38 +1140,31 @@ namespace OpenRCT2
                         auto candidate = Path::Combine(exeDir, u8"rct2");
                         if (Platform::OriginalGameDataExists(candidate))
                         {
-                            std::fputs(
-                                "[OPENRCT2MINI]   exe-dir fallback found rct2 install at ",
-                                stderr);
-                            std::fputs(candidate.c_str(), stderr);
-                            std::fputc('\n', stderr);
-                            std::fflush(stderr);
+                            MINI_DBG_LOG("  exe-dir fallback found rct2 install at %s\n", candidate.c_str());
                             cfgPath = candidate;
                             exists = true;
                         }
                     }
                 }
 
-                std::fputs("[OPENRCT2MINI]   OriginalGameDataExists = ", stderr);
-                std::fputs(exists ? "true\n" : "false\n", stderr);
-                std::fflush(stderr);
+                MINI_DBG_LOG("  OriginalGameDataExists = %s\n", exists ? "true" : "false");
 
                 if (!exists)
                 {
-                    // OPENRCT2MINI: cut 39j. Don't fall into the SDL-message-box
-                    // / menu-dialog path on platforms whose SDL backend can't
-                    // bring those up (Miyoo Mini's libmi_gfx framebuffer has no
-                    // native message-box facility — SDL_ShowSimpleMessageBox
-                    // crashes there). Instead emit a clear stderr message and
-                    // exit. The Onion launcher leaves stderr captured to the
-                    // log file, so the user sees this in run.log.
+                    // Unconditional FATAL message — the user needs this whether
+                    // it's a debug or release build. Don't fall into the
+                    // SDL-message-box / menu-dialog path on platforms whose
+                    // SDL backend can't bring those up (Miyoo Mini's libmi_gfx
+                    // framebuffer has no native message-box facility —
+                    // SDL_ShowSimpleMessageBox crashes there). Instead emit
+                    // a clear stderr message and exit.
                     std::fputs(
                         "\n[OPENRCT2MINI] FATAL: RCT2 install not found.\n"
                         "[OPENRCT2MINI]\n"
                         "[OPENRCT2MINI] OpenRCT2 expects your legitimate RollerCoaster Tycoon 2\n"
                         "[OPENRCT2MINI] install at:\n"
-                        "[OPENRCT2MINI]   /mnt/SDCARD/App/OpenRCT2mini/rct2/Data/g1.dat\n"
-                        "[OPENRCT2MINI]   /mnt/SDCARD/App/OpenRCT2mini/rct2/ObjData/...\n"
+                        "[OPENRCT2MINI]   /mnt/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct2/Data/g1.dat\n"
+                        "[OPENRCT2MINI]   /mnt/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct2/ObjData/...\n"
                         "[OPENRCT2MINI]\n"
                         "[OPENRCT2MINI] Copy your RCT2 install to that folder and relaunch.\n"
                         "[OPENRCT2MINI] We can't ship g1.dat — it's not free.\n\n",
@@ -1372,13 +1357,9 @@ namespace OpenRCT2
          */
         void Launch()
         {
-            // OPENRCT2MINI: cut 39l. Launch() checkpoints — narrows where the
-            // device segfaults inside the launch path.
-            auto kpt = [](const char* tag) {
-                std::fputs("[OPENRCT2MINI]   launch: ", stderr);
-                std::fputs(tag, stderr);
-                std::fputc('\n', stderr);
-                std::fflush(stderr);
+            // OPENRCT2MINI revision 39l / 64. Launch() checkpoints, gated.
+            auto kpt = []([[maybe_unused]] const char* tag) {
+                MINI_DBG_LOG("  launch: %s\n", tag);
             };
             kpt("entered");
             if (!_versionCheckFuture.valid())
@@ -1467,16 +1448,14 @@ namespace OpenRCT2
             PROFILED_FUNCTION();
 
             // OPENRCT2MINI: cut 39l. Print which sub-step inside the very
-            // first frame fires before the segfault. Print only the first
-            // few frames so steady-state isn't drowned in checkpoint spam.
+            // OPENRCT2MINI revision 39l / 64. Per-frame checkpoints — only
+            // the first three frames so steady-state isn't drowned in
+            // spam. Gated behind OPENRCT2MINI_DEBUG.
             static int s_kptFrameNo = 0;
             const bool kptThis = s_kptFrameNo < 3;
             if (kptThis)
             {
-                std::fputs("[OPENRCT2MINI]   frame ", stderr);
-                std::fputc('0' + s_kptFrameNo, stderr);
-                std::fputs(": entered\n", stderr);
-                std::fflush(stderr);
+                MINI_DBG_LOG("  frame %d: entered\n", s_kptFrameNo);
             }
             ++s_kptFrameNo;
 
@@ -1494,28 +1473,28 @@ namespace OpenRCT2
                 tweener.Restore();
                 tweener.Reset();
             }
-            if (kptThis) { std::fputs("[OPENRCT2MINI]   frame: variable check ok\n", stderr); std::fflush(stderr); }
+            if (kptThis) { MINI_DBG_PUTS("  frame: variable check ok"); }
 
             UpdateTimeAccumulators(deltaTime);
-            if (kptThis) { std::fputs("[OPENRCT2MINI]   frame: UpdateTimeAccumulators ok\n", stderr); std::fflush(stderr); }
+            if (kptThis) { MINI_DBG_PUTS("  frame: UpdateTimeAccumulators ok"); }
 
             Network::Update();
-            if (kptThis) { std::fputs("[OPENRCT2MINI]   frame: Network::Update ok\n", stderr); std::fflush(stderr); }
+            if (kptThis) { MINI_DBG_PUTS("  frame: Network::Update ok"); }
 
             if (useVariableFrame)
             {
-                if (kptThis) { std::fputs("[OPENRCT2MINI]   frame: RunVariableFrame start\n", stderr); std::fflush(stderr); }
+                if (kptThis) { MINI_DBG_PUTS("  frame: RunVariableFrame start"); }
                 RunVariableFrame(deltaTime);
             }
             else
             {
-                if (kptThis) { std::fputs("[OPENRCT2MINI]   frame: RunFixedFrame start\n", stderr); std::fflush(stderr); }
+                if (kptThis) { MINI_DBG_PUTS("  frame: RunFixedFrame start"); }
                 RunFixedFrame(deltaTime);
             }
-            if (kptThis) { std::fputs("[OPENRCT2MINI]   frame: RunXFrame done\n", stderr); std::fflush(stderr); }
+            if (kptThis) { MINI_DBG_PUTS("  frame: RunXFrame done"); }
 
             Network::Flush();
-            if (kptThis) { std::fputs("[OPENRCT2MINI]   frame: complete\n", stderr); std::fflush(stderr); }
+            if (kptThis) { MINI_DBG_PUTS("  frame: complete"); }
         }
 
         void UpdateTimeAccumulators(float deltaTime)

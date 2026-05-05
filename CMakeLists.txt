@@ -149,6 +149,25 @@ option(ENABLE_UBSAN "Enable the UndefinedBehaviourSanitizer.")
 option(ENABLE_HEADERS_CHECK "Check if include directives in header files are correct. Only works with clang" OFF)
 option(DISABLE_GUI "Don't build GUI. (Headless only.)")
 
+# OPENRCT2MINI revision 64: gate the [OPENRCT2MINI] checkpoint / diagnostic
+# logging behind a compile-time flag. ON by default for Debug builds, OFF
+# for Release. The macros in src/openrct2/MiniDebug.h compile to no-ops
+# when this is OFF, so a release binary has zero overhead from the logging
+# scaffold (no compiled-in strings, no fd writes).
+if (NOT DEFINED OPENRCT2MINI_DEBUG)
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(OPENRCT2MINI_DEBUG ON)
+    else ()
+        set(OPENRCT2MINI_DEBUG OFF)
+    endif ()
+endif ()
+if (OPENRCT2MINI_DEBUG)
+    add_definitions(-DOPENRCT2MINI_DEBUG)
+    message(STATUS "OpenRCT2mini diagnostic logging: ON (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
+else ()
+    message(STATUS "OpenRCT2mini diagnostic logging: OFF (release build)")
+endif ()
+
 
 if (FORCE32)
     set(TARGET_M "-m32")

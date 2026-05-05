@@ -11,6 +11,7 @@
 
 #include "../../Context.h"
 #include "../../Diagnostic.h"
+#include "../../MiniDebug.h"  // OPENRCT2MINI revision 64 — gated debug logging
 #include "../../Game.h"
 #include "../../GameState.h"
 #include "../../OpenRCT2.h"
@@ -59,9 +60,8 @@ void PreloaderScene::Tick()
     static uint32_t s_tickCount = 0;
     if ((s_tickCount % 60) == 0)
     {
-        std::fprintf(stderr, "[OPENRCT2MINI] preloader tick #%u jobsBusy=%d\n",
+        MINI_DBG_LOG("preloader tick #%u jobsBusy=%d\n",
                      s_tickCount, jobsRunning ? 1 : 0);
-        std::fflush(stderr);
     }
     s_tickCount++;
 
@@ -79,8 +79,7 @@ void PreloaderScene::Tick()
         // Make sure the job is fully completed.
         _jobs.Join();
 
-        std::fprintf(stderr, "[OPENRCT2MINI] preloader: jobs done — calling FinishScene\n");
-        std::fflush(stderr);
+        MINI_DBG_PUTS("preloader: jobs done — calling FinishScene");
         FinishScene();
     }
 }

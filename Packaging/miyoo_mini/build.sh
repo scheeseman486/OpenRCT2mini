@@ -19,6 +19,15 @@ DOCKERFILE_DIR="$PROJECT_ROOT/Packaging/miyoo_mini"
 
 mkdir -p "$BUILD_DIR"
 
+# OPENRCT2MINI revision 64: --debug toggles a CMAKE_BUILD_TYPE=Debug build
+# (-DOPENRCT2MINI_DEBUG=ON, all the [OPENRCT2MINI] checkpoint logging
+# compiled in) AND tells package.sh to drop a `.debug` sentinel so the
+# launch script enables stderr → log/run.log redirection on the device.
+DEBUG_BUILD=0
+for arg in "$@"; do
+    if [ "$arg" = "--debug" ]; then DEBUG_BUILD=1; fi
+done
+
 # Stage 1: build the derived toolchain image if it doesn't exist or its
 # inputs (Dockerfile, build-deps.sh) changed. `docker build` itself layers
 # on top of any cached intermediate so re-runs are cheap.
@@ -38,9 +47,14 @@ fi
 
 # Stage 2: cmake + make using the derived image.
 # Phase A §4.1 cmake-flag cuts plus Phase B/C's source-level cuts.
+if [ "$DEBUG_BUILD" = "1" ]; then
+    BUILD_TYPE=Debug
+else
+    BUILD_TYPE=MinSizeRel
+fi
 CMAKE_FLAGS=(
     -DCMAKE_TOOLCHAIN_FILE=/src/Packaging/miyoo_mini/toolchainfile.cmake
-    -DCMAKE_BUILD_TYPE=MinSizeRel
+    -DCMAKE_BUILD_TYPE=$BUILD_TYPE
     -DDISABLE_NETWORK=ON
     -DDISABLE_HTTP=ON
     -DDISABLE_OPENGL=ON
@@ -122,6 +136,12 @@ if [ -x "$BUILD_DIR/openrct2" ]; then
     else
         echo
         echo "==[ package Onion port .7z ]=================================="
-        bash "$PROJECT_ROOT/Packaging/miyoo_mini/package.sh"
+        # Propagate --debug so package.sh drops the .debug sentinel that
+        # turns on log/run.log redirection in launch.sh on the device.
+        if [ "$DEBUG_BUILD" = "1" ]; then
+            bash "$PROJECT_ROOT/Packaging/miyoo_mini/package.sh" --debug
+        else
+            bash "$PROJECT_ROOT/Packaging/miyoo_mini/package.sh"
+        fi
     fi
 fi
