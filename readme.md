@@ -6,7 +6,7 @@ This is a **hard fork**. The game has been aggressively trimmed and backported t
 
 ## Status
 
-OpenRCT2mini is currently playable. We match upstream v0.5.0 minus things that don't make sense on a handheld: multiplayer, plugins/scripting, OpenGL, FLAC, Discord-RPC, Japanese/Chinese/Arabic language options are all in the bin.
+OpenRCT2mini is currently playable. We match upstream v0.5.0 minus things that don't make sense on a handheld: multiplayer, plugins/scripting, OpenGL, FLAC, Discord-RPC, Japanese/Chinese/Arabic language options (IPC eats too much memory) are all in the bin.
 
 ## Installing on the device
 
