@@ -151,19 +151,14 @@ void TitleScene::Load()
         ContextOpenWindow(WindowClass::changelog);
     }
 
-    // OPENRCT2MINI revision 70c: drain a pending park-load error here, after
-    // CreateWindows() has run and ContextResetSubsystems' CloseAllExceptFlags
-    // is no longer about to fire. Showing the error window any earlier in the
-    // load chain — including from the LoadParkFromStream catch arm or the
-    // ParkFile.cpp throw sites — gets clobbered by the immediate
-    // SetActiveScene(title) the startup-time CLI-load path fires
-    // (Context.cpp:1324). Mirrors the gOpenRCT2ShowChangelog pattern above.
-    if (gOpenRCT2PendingParkLoadError != kStringIdNone)
-    {
-        auto pendingTitle = gOpenRCT2PendingParkLoadError;
-        gOpenRCT2PendingParkLoadError = kStringIdNone;
-        ContextShowError(pendingTitle, kStringIdNone, {});
-    }
+    // OPENRCT2MINI revision 70d: deferred park-load error drain moved to
+    // TitleScene::Tick. The cmdline-load failure path causes TWO TitleScene
+    // ::Load runs in close succession — once from the LoadParkFromStream
+    // catch arm's SetActiveScene (rev 70d, needed to reset corrupted state),
+    // then again from SwitchToStartUpScene's natural fallback at
+    // Context.cpp:1324. The second Load's CloseAllExceptFlags clobbers any
+    // dialog opened by the first. Tick runs on a stable frame after both
+    // transitions have settled, so the dialog stays put.
 
     LOG_VERBOSE("TitleScene::Load() finished");
     MINI_DBG_PUTS("  title: Load() finished");
@@ -179,6 +174,21 @@ void TitleScene::Tick()
     };
     bool logThisTick = (s_titleTick % 60) == 0;
     s_titleTick++;
+
+    // OPENRCT2MINI revision 70d: drain any pending park-load error here,
+    // before any other Tick work. By the time we reach the first stable
+    // Tick after a failed load, all scene transitions have run and any
+    // CloseAllExceptFlags cleanup has finished. Opening the error dialog
+    // here means it survives. Mirrors the gOpenRCT2ShowChangelog pattern
+    // (which is checked in Load — but the error has the extra constraint
+    // of needing to outlast a possible double Load when SwitchToStartUpScene
+    // and the catch arm both fire SetActiveScene).
+    if (gOpenRCT2PendingParkLoadError != kStringIdNone)
+    {
+        auto pendingTitle = gOpenRCT2PendingParkLoadError;
+        gOpenRCT2PendingParkLoadError = kStringIdNone;
+        ContextShowError(pendingTitle, kStringIdNone, {});
+    }
 
     gInUpdateCode = true;
 

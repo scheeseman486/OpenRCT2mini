@@ -1045,21 +1045,24 @@ namespace OpenRCT2
                 // size 255×255, 255 rides, or 10000 entities). The loader
                 // threw cleanly mid-stream. Console carries full detail.
                 //
-                // Revision 70c: defer the UI error to the title scene
-                // instead of opening it here. When this catch fires from
-                // SwitchToStartUpScene's command-line load path, the
-                // outer code (Context.cpp:1324) immediately calls
-                // SetActiveScene(GetTitleScene()), which runs
-                // ContextResetSubsystems → WindowInitAll →
-                // CloseAllExceptFlags({}) and clobbers any error window
-                // we opened here. The title scene drains
-                // gOpenRCT2PendingParkLoadError after its own
-                // CreateWindows() runs, so the dialog survives the
-                // transition. Don't call SetActiveScene from here either
-                // — let the caller pick the next scene; we'd just waste
-                // a transition.
+                // Revision 70d: by the time this catch fires the partial
+                // load has already mutated game state — _objectManager
+                // UnloadAll'd our title-screen kMinimumRequiredObjects and
+                // loaded the oversized park's set; gameState.mapSize was
+                // assigned the saved (oversized) value before the throw;
+                // MapAnimations::ClearAll ran. Leaving that state in place
+                // breaks the title scene (renders nothing, pan stops).
+                // SetActiveScene(GetTitleScene()) reinitialises everything
+                // via TitleScene::Load. The error dialog survives this
+                // transition because it's drained from TitleScene::Tick
+                // (rev 70d) rather than from Load — Tick runs on a stable
+                // frame after all scene transitions have settled.
                 Console::Error::WriteLine("Unable to open park: %s", e.what());
                 gOpenRCT2PendingParkLoadError = STR_PARK_EXCEEDS_OPENRCT2MINI_LIMITS;
+                if (loadTitleScreenFirstOnFail)
+                {
+                    SetActiveScene(GetTitleScene());
+                }
             }
             catch (const UnsupportedVersionException& e)
             {
