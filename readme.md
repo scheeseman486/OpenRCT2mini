@@ -10,7 +10,7 @@ OpenRCT2mini is currently playable. We match upstream v0.5.0 minus things that d
 
 ## Installing on the device
 
-OpenRCT2mini ships as an OnionUI **port**. It appears in your Game Library under the **Simulation** category, alongside ROMs and other ports (Doom, Duke3D, etc.), not in the App tab.
+OpenRCT2mini ships as an OnionUI **port**. It appears in your Game Library under the **Simulation** category.
 
 It does **not** contain RCT2 game data.
 
