@@ -25,6 +25,8 @@
 #include <openrct2/Context.h>
 #include <openrct2/Game.h>
 #include <openrct2/Input.h>
+#include <openrct2/audio/Audio.h>
+#include <openrct2/audio/AudioMixer.h>
 #include <openrct2/core/String.hpp>
 #include <openrct2/core/UTF8.h>
 #include <openrct2/drawing/ColourMap.h>
@@ -174,6 +176,7 @@ namespace OpenRCT2::Ui::Windows
         constexpr uint32_t kRepeatIntervalMs = 60;
 
         constexpr uint8_t kPressFlashFrames = 4;
+        constexpr uint8_t kRejectFlashFrames = 8;
 
         // Which kind of caller spawned the OSK. The two paths differ
         // only in how Commit dispatches the typed text back.
@@ -207,6 +210,11 @@ namespace OpenRCT2::Ui::Windows
             int32_t _heldScancode = 0;
             uint32_t _heldSinceMs = 0;
             uint32_t _lastFireMs = 0;
+            // OPENRCT2MINI Rev 7: rejection flash. When InsertChar
+            // refuses past maxLength, set this to a small frame count;
+            // DrawEditStrip tints the strip red while non-zero;
+            // onUpdate decrements it.
+            int _rejectFlashFrames = 0;
 
         public:
             void setMode(OskMode mode)
@@ -319,6 +327,8 @@ namespace OpenRCT2::Ui::Windows
                         _pressFlashIdx = kWidgetIndexNull;
                     }
                 }
+                if (_rejectFlashFrames > 0)
+                    --_rejectFlashFrames;
                 ProcessRepeats();
                 invalidate();
             }
@@ -586,8 +596,15 @@ namespace OpenRCT2::Ui::Windows
                     { windowPos.x + 4, windowPos.y + 3 },
                     { windowPos.x + kOskWidth - 5, windowPos.y + kEditStripH - 4 },
                 };
+                // OPENRCT2MINI Rev 7: red wash on the strip when an
+                // insert was just refused (maxLength reached). Two-
+                // frame stride for visible flicker.
+                const bool rejectFlashOn = (_rejectFlashFrames > 0) && ((_rejectFlashFrames & 2) != 0);
+                const auto stripColour = rejectFlashOn
+                    ? ColourWithFlags{ Colour::brightRed }
+                    : colours[1];
                 Rectangle::fillInset(
-                    rt, stripRect, colours[1], Rectangle::BorderStyle::inset, Rectangle::FillBrightness::light,
+                    rt, stripRect, stripColour, Rectangle::BorderStyle::inset, Rectangle::FillBrightness::light,
                     Rectangle::FillMode::dontLightenWhenInset);
 
                 // Render the buffer text. Single line — if the buffer is
@@ -632,7 +649,13 @@ namespace OpenRCT2::Ui::Windows
                     // Trim rule: codepoint count < max.
                     const size_t codepoints = String::lengthOf(_editBuffer.c_str());
                     if (codepoints >= _maxLength)
+                    {
+                        // Visible feedback that the keypress was
+                        // refused — see DrawEditStrip below.
+                        _rejectFlashFrames = kRejectFlashFrames;
+                        invalidate();
                         return;
+                    }
                 }
                 _editBuffer.insert(_caret, 1, ch);
                 _caret++;
@@ -708,6 +731,12 @@ namespace OpenRCT2::Ui::Windows
             {
                 const auto& key = GetSelectedKey();
                 StartFlash(key.widgetIdx);
+                // OPENRCT2MINI Rev 7: audible click on every key
+                // activation. Skipping Spacer (which doesn't reach
+                // here) and Return/Cancel paths only because Commit/
+                // Cancel close the OSK before the sound queues — we
+                // play before that happens.
+                Audio::Play(Audio::SoundId::click1, 0, windowPos.x + (width / 2));
                 switch (key.action)
                 {
                     case OskAction::Insert:
