@@ -71,6 +71,15 @@ namespace OpenRCT2::Ui
         void Update();
         void Draw(Drawing::RenderTarget& rt) const;
 
+        // OPENRCT2MINI: OSK bridge. Called by the on-screen keyboard
+        // each frame so the console's prompt line mirrors what's
+        // currently in the OSK edit strip.
+        void OskMirrorBuffer(std::string_view text, size_t caret);
+        // OPENRCT2MINI: OSK bridge. Submit one line: replace
+        // _consoleCurrentLine with `text`, run LineExecute. Console
+        // stays open. Caller is expected to clear OSK afterwards.
+        void OskSubmitLine(std::string_view text);
+
     private:
         void ClearInput();
         void ClearLine();

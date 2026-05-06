@@ -10,6 +10,7 @@
 #include "InGameConsole.h"
 
 #include "../UiStringIds.h"
+#include "../windows/Windows.h"
 #include "Theme.h"
 
 #include <algorithm>
@@ -146,6 +147,34 @@ void InGameConsole::ClearInput()
     }
 }
 
+// OPENRCT2MINI: live mirror from OSK. Called every frame while the OSK
+// is up over a console session. Updates _consoleCurrentLine and the
+// caret position so the prompt line in the console region renders
+// what the user is typing on the OSK.
+void InGameConsole::OskMirrorBuffer(std::string_view text, size_t caret)
+{
+    _consoleCurrentLine.assign(text);
+    if (caret > _consoleCurrentLine.size())
+        caret = _consoleCurrentLine.size();
+    RefreshCaret(caret);
+    if (_consoleTextInputSession != nullptr)
+    {
+        _consoleTextInputSession->SelectionStart = caret;
+        _consoleTextInputSession->Length = UTF8Length(_consoleCurrentLine.c_str());
+    }
+}
+
+// OPENRCT2MINI: OSK Start submitted a line. Behave as if the user hit
+// Enter on a real keyboard: install the typed text and run
+// LineExecute, which appends to history, runs the command, scrolls
+// the output, and clears the input via ClearInput().
+void InGameConsole::OskSubmitLine(std::string_view text)
+{
+    _consoleCurrentLine.assign(text);
+    RefreshCaret(_consoleCurrentLine.size());
+    Input(ConsoleInput::LineExecute);
+}
+
 void InGameConsole::HistoryAdd(const u8string& src)
 {
     if (_consoleHistory.size() >= kConsoleHistorySize)
@@ -209,6 +238,10 @@ void InGameConsole::Open()
     ScrollToEnd();
     RefreshCaret();
     _consoleTextInputSession = ContextStartTextInput(_consoleCurrentLine, kConsoleInputSize);
+    // OPENRCT2MINI: spawn the on-screen keyboard so the user can type
+    // commands without a physical keyboard. The OSK calls back into
+    // OskMirrorBuffer / OskSubmitLine for the live mirror and commit.
+    OpenRCT2::Ui::Windows::OskOpenForConsole();
 }
 
 void InGameConsole::Close()
@@ -217,6 +250,9 @@ void InGameConsole::Close()
     _isOpen = false;
     Invalidate();
     ContextStopTextInput();
+    // OPENRCT2MINI: tear down the OSK along with the console.
+    // CloseByClass is idempotent if the OSK is already closing.
+    OpenRCT2::Ui::Windows::OskClose();
 }
 
 void InGameConsole::Hide()
@@ -264,7 +300,11 @@ void InGameConsole::Invalidate() const
 void InGameConsole::Update()
 {
     _consoleTopLeft = { 0, 0 };
-    _consoleBottomRight = { ContextGetWidth(), 322 };
+    // OPENRCT2MINI: clamp console region to fit above the OSK when
+    // it's up. Default 322 covers most of a 480 px panel; the OSK
+    // occupies the bottom 240 so we'd overlap.
+    const int32_t bottomY = OpenRCT2::Ui::Windows::OskIsActive() ? 240 : 322;
+    _consoleBottomRight = { ContextGetWidth(), bottomY };
 
     if (_isOpen)
     {

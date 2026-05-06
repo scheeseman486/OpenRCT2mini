@@ -19,6 +19,8 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <openrct2-ui/UiContext.h>
+#include <openrct2-ui/interface/InGameConsole.h>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2-ui/interface/Window.h>
 #include <openrct2-ui/windows/Windows.h>
@@ -178,12 +180,13 @@ namespace OpenRCT2::Ui::Windows
         constexpr uint8_t kPressFlashFrames = 4;
         constexpr uint8_t kRejectFlashFrames = 8;
 
-        // Which kind of caller spawned the OSK. The two paths differ
-        // only in how Commit dispatches the typed text back.
+        // Which kind of caller spawned the OSK. The three paths differ
+        // only in how Commit/Cancel dispatch.
         enum class OskTarget : uint8_t
         {
             TextInputWindow, // Modal TextInputWindow
             Textbox,         // Inline WindowStartTextbox widget
+            Console,         // InGameConsole — Commit submits a line and stays open
         };
 
         class OskWindow final : public Window
@@ -329,6 +332,13 @@ namespace OpenRCT2::Ui::Windows
                 }
                 if (_rejectFlashFrames > 0)
                     --_rejectFlashFrames;
+                if (_target == OskTarget::Console)
+                {
+                    // Live-mirror our buffer into the console so the
+                    // prompt line in the console region above shows
+                    // the same text in real time.
+                    OpenRCT2::Ui::GetInGameConsole().OskMirrorBuffer(_editBuffer, _caret);
+                }
                 ProcessRepeats();
                 invalidate();
             }
@@ -801,12 +811,22 @@ namespace OpenRCT2::Ui::Windows
 
             void Commit()
             {
+                std::string buffer = _editBuffer;
+                const auto target = _target;
+                if (target == OskTarget::Console)
+                {
+                    // Submit the line and stay open for the next one.
+                    auto& console = OpenRCT2::Ui::GetInGameConsole();
+                    console.OskSubmitLine(buffer);
+                    _editBuffer.clear();
+                    _caret = 0;
+                    invalidate();
+                    return;
+                }
                 auto* windowMgr = GetWindowManager();
                 auto* parent = (_parentId.classification == WindowClass::null)
                     ? nullptr
                     : windowMgr->FindByNumber(_parentId.classification, _parentId.number);
-                std::string buffer = _editBuffer;
-                const auto target = _target;
                 const auto widgetIdx = _parentWidgetIdx;
                 // Close OSK first; then dispatch to parent. The parent's
                 // own onClose path calls OskClose() too, which is a
@@ -826,16 +846,25 @@ namespace OpenRCT2::Ui::Windows
                         parent->onTextInput(widgetIdx, buffer);
                         WindowCancelTextbox();
                         break;
+                    case OskTarget::Console:
+                        break; // handled above
                 }
             }
 
             void Cancel()
             {
+                const auto target = _target;
+                if (target == OskTarget::Console)
+                {
+                    // Close the console — Console::Close calls OskClose
+                    // back, which closes us.
+                    OpenRCT2::Ui::GetInGameConsole().Close();
+                    return;
+                }
                 auto* windowMgr = GetWindowManager();
                 auto* parent = (_parentId.classification == WindowClass::null)
                     ? nullptr
                     : windowMgr->FindByNumber(_parentId.classification, _parentId.number);
-                const auto target = _target;
                 close();
                 if (parent == nullptr)
                 {
@@ -851,6 +880,8 @@ namespace OpenRCT2::Ui::Windows
                     case OskTarget::Textbox:
                         WindowCancelTextbox();
                         break;
+                    case OskTarget::Console:
+                        break; // handled above
                 }
             }
 
@@ -1018,6 +1049,18 @@ namespace OpenRCT2::Ui::Windows
             return;
         wnd->setTarget(OskTarget::Textbox, widgetIdx);
         wnd->setEditText(initialText, maxLength);
+    }
+
+    void OskOpenForConsole()
+    {
+        // Console always uses the full keyboard. No parent window —
+        // the console isn't a Window, it's drawn directly by
+        // UiContext::Draw, so colour inheritance doesn't apply.
+        auto* wnd = OpenSkeleton(nullptr, OskMode::full);
+        if (wnd == nullptr)
+            return;
+        wnd->setTarget(OskTarget::Console, 0);
+        wnd->setEditText("", 0);
     }
 
     void OskClose()

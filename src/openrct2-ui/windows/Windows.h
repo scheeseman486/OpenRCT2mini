@@ -331,6 +331,11 @@ namespace OpenRCT2::Ui::Windows
     void OskOpenForTextbox(
         WindowBase* parent, WidgetIndex widgetIdx, std::string_view initialText, size_t maxLength,
         OskMode mode = OskMode::full);
+    // OPENRCT2MINI: spawn the OSK to drive the in-game console. Always
+    // opens in full-keyboard mode. Commit (Start) submits the current
+    // line and clears the OSK buffer (console stays open for the next
+    // line). Cancel (Select) closes the console entirely.
+    void OskOpenForConsole();
     void OskClose();
     bool OskIsActive();
     // OPENRCT2MINI: called by the OSK at commit time. Replaces the
