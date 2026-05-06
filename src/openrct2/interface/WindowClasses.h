@@ -90,6 +90,10 @@ enum class WindowClass : uint8_t
     progressWindow = 137,
     titleVersion = 138,
     editorParkEntrance = 139,
+    // OPENRCT2MINI: on-screen keyboard (Miyoo Mini D-pad text input).
+    // Slotted at 140 — first free slot after the dialog block. Must
+    // sit above stickToFront windows so the OSK is always topmost.
+    osk = 140,
 
     // Only used for colour schemes
     staff = 220,

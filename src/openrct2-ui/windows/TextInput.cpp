@@ -70,6 +70,10 @@ namespace OpenRCT2::Ui::Windows
             setWidgets(_textInputWidgets);
             WindowInitScrollWidgets(*this);
             setParentWindow(nullptr, 0);
+            // OPENRCT2MINI: spawn the on-screen keyboard so the user can
+            // type without a physical keyboard. OskOpen is a no-op if
+            // the OSK is already up. See osk-plan.md.
+            OskOpen(this, OskMode::full);
         }
 
         void setParentWindow(WindowBase* parentWindow, WidgetIndex widgetIndex)
@@ -131,6 +135,8 @@ namespace OpenRCT2::Ui::Windows
             // Make sure that we take it out of the text input
             // mode otherwise problems may occur.
             ContextStopTextInput();
+            // OPENRCT2MINI: tear down the OSK along with the input window.
+            OskClose();
         }
 
         void onUpdate() override
@@ -359,6 +365,33 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
+    public:
+        // OPENRCT2MINI OSK: install the text the user typed on the OSK
+        // into this window's buffer, then fire the OK callback and
+        // close. Mirrors what WIDX_OKAY's onMouseUp does.
+        void commitFromOsk(std::string_view text)
+        {
+            _buffer = u8string{ String::utf8TruncateCodePoints(text, _maxInputLength) };
+            ContextStopTextInput();
+            ExecuteCallback(true);
+            close();
+        }
+
+        // OPENRCT2MINI OSK: discard whatever's in the buffer, fire the
+        // cancel callback, close. Mirrors WIDX_CANCEL.
+        void cancelFromOsk()
+        {
+            ContextStopTextInput();
+            ExecuteCallback(false);
+            close();
+        }
+
+        const u8string& getBuffer() const
+        {
+            return _buffer;
+        }
+
+    private:
         bool HasParentWindow() const
         {
             return _parentWidget.window.classification != WindowClass::null;
@@ -371,6 +404,30 @@ namespace OpenRCT2::Ui::Windows
                                      : nullptr;
         }
     };
+
+    // OPENRCT2MINI OSK helpers. The OSK doesn't link the
+    // TextInputWindow class directly (it's defined in this TU), so
+    // these free functions take a WindowBase* and downcast.
+    void TextInputCommitFromOsk(WindowBase* w, std::string_view text)
+    {
+        if (w == nullptr || w->classification != WindowClass::textinput)
+            return;
+        static_cast<TextInputWindow*>(w)->commitFromOsk(text);
+    }
+
+    void TextInputCancelFromOsk(WindowBase* w)
+    {
+        if (w == nullptr || w->classification != WindowClass::textinput)
+            return;
+        static_cast<TextInputWindow*>(w)->cancelFromOsk();
+    }
+
+    std::string TextInputReadBuffer(WindowBase* w)
+    {
+        if (w == nullptr || w->classification != WindowClass::textinput)
+            return {};
+        return std::string{ static_cast<TextInputWindow*>(w)->getBuffer() };
+    }
 
     void WindowTextInputRawOpen(
         WindowBase* call_w, WidgetIndex call_widget, StringId title, StringId description, const Formatter& descriptionArgs,

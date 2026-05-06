@@ -31,6 +31,7 @@
 #include <openrct2-ui/input/InputManager.h>
 #include <openrct2-ui/input/MouseInput.h>
 #include <openrct2-ui/interface/Window.h>
+#include <openrct2-ui/windows/Windows.h>
 #include <openrct2/Context.h>
 #include <openrct2/Diagnostic.h>
 #include <openrct2/Game.h>
@@ -154,6 +155,14 @@ private:
     // arrow nav for these targets.
     bool InterceptVirtualCursorKey(SDL_Scancode sc, bool down)
     {
+        // OPENRCT2MINI OSK: when the on-screen keyboard is up, route every
+        // device button to it instead of running the cursor / shortcut
+        // pipeline. The OSK consumes arrows for selection, A/B/X/Y for
+        // edit actions, L1/R1 for caret motion, Start/Select for
+        // commit/cancel. We forward the scancode + down state and trust
+        // its return value.
+        if (Windows::OskIsActive() && Windows::OskHandleKey(static_cast<int32_t>(sc), down))
+            return true;
         switch (sc)
         {
             case SDL_SCANCODE_UP:    _vKbUp = down;    return true;
@@ -1065,6 +1074,17 @@ private:
     // benefit to going through the SDL queue when we own all the targets.
     void ProcessVirtualGamepadCursor()
     {
+        // OPENRCT2MINI OSK: cursor is suspended while the on-screen
+        // keyboard is up — the D-pad drives OSK selection instead.
+        // Clearing the latches here belt-and-braces against arrow events
+        // arriving on the same frame the OSK opens (with stale `down`
+        // state) and the cursor drifting after the OSK closes.
+        if (Windows::OskIsActive())
+        {
+            _vKbUp = _vKbDown = _vKbLeft = _vKbRight = false;
+            _vKbZ = _vKbX = false;
+            return;
+        }
         const auto& controllers = _inputManager.getGameControllers();
 
         // Read controller state.

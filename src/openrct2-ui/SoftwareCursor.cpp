@@ -15,6 +15,7 @@
 
     #include "CursorData.h"
 
+    #include <openrct2-ui/windows/Windows.h>
     #include <openrct2/core/EnumUtils.hpp>
 
 namespace OpenRCT2::Ui
@@ -276,6 +277,11 @@ namespace OpenRCT2::Ui
         OpenRCT2::Drawing::PaletteIndex* bits, int32_t bitsW, int32_t bitsH, int32_t x, int32_t y)
     {
         if (!_visible || bits == nullptr || bitsW <= 0 || bitsH <= 0)
+            return;
+        // OPENRCT2MINI OSK: skip cursor compositing while the on-screen
+        // keyboard is up. The OSK draws its own selection highlight, so
+        // a free-floating cursor would just be confusing.
+        if (OpenRCT2::Ui::Windows::OskIsActive())
             return;
 
         const Sprite* spr = GetOrCreateSprite(_activeCursor);

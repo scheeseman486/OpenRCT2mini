@@ -307,6 +307,41 @@ namespace OpenRCT2::Ui::Windows
     WindowBase* StaffListOpen();
     void WindowStaffListRefresh();
 
+    // OPENRCT2MINI: on-screen keyboard. See osk-plan.md for design.
+    // Two layouts: full QWERTY and numpad. Spawned automatically when
+    // a TextInputWindow opens (or the InGameConsole, see Rev 8).
+    enum class OskMode : uint8_t
+    {
+        full,
+        numpad,
+    };
+    void OskOpen(WindowBase* parent, OskMode mode = OskMode::full);
+    void OskClose();
+    bool OskIsActive();
+    // OPENRCT2MINI: called by the OSK at commit time. Replaces the
+    // TextInputWindow's buffer with `text`, fires its OK callback and
+    // closes it. No-op if `w` isn't a TextInputWindow.
+    void TextInputCommitFromOsk(WindowBase* w, std::string_view text);
+    // OPENRCT2MINI: called by the OSK on cancel. Closes the
+    // TextInputWindow without firing its OK callback (cancel
+    // callback will fire from the close path).
+    void TextInputCancelFromOsk(WindowBase* w);
+    // OPENRCT2MINI: read the current text buffer from a
+    // TextInputWindow so the OSK can initialise its editor with what
+    // the user is editing. Returns empty string if `w` isn't one.
+    std::string TextInputReadBuffer(WindowBase* w);
+    // Forward an SDL scancode to the OSK while it's active. Returns true
+    // if the OSK consumed the event (caller should NOT propagate).
+    // Used by UiContext::InterceptVirtualCursorKey.
+    bool OskHandleKey(int32_t sdlScancode, bool down);
+    // Suppress shortcut chord handlers (X = game speed, Y = rotate
+    // construction, L2/R2 = view/zoom) while the OSK is up. Wraps
+    // OskIsActive() for callers that want a more readable check.
+    inline bool OskShouldSuppressShortcuts()
+    {
+        return OskIsActive();
+    }
+
     // TextInput
     void WindowTextInputKey(WindowBase* w, uint32_t keycode);
     void WindowTextInputOpen(
