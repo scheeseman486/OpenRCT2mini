@@ -404,17 +404,24 @@ namespace OpenRCT2::Config
             model->toolbarShowRotateAnticlockwise = reader->GetBoolean("toolbar_show_rotate_anti_clockwise", false);
             model->consoleSmallFont = reader->GetBoolean("console_small_font", false);
             model->currentThemePreset = reader->GetString("current_theme", "*RCT2");
-            // OPENRCT2MINI cut 42: default title sequence is *RCT2 (basic
-            // Forest Frontiers intro), not the upstream *OPENRCT2 which
-            // bundles Six Flags Magic Mountain, Diamond Heights, etc. —
-            // big parks that exceed our 255-ride cap (Limits.h) and
-            // render corrupted because the loader (cut 41b) drops the
-            // overflow rides. *RCT2 is small and fits cleanly. The user
-            // can still pick others manually if they want to risk it.
+            // OPENRCT2MINI cut 42 / revision 69: when the user does pick a
+            // file-backed title sequence, default to *RCT2 (Forest Frontiers
+            // intro) rather than upstream's *OPENRCT2 which bundles big
+            // parks that exceed our 255-ride cap (Limits.h) and render
+            // corrupted (cut 41b drops overflow rides). The fresh-install
+            // landing page is (none) — see noTitleSequence below — but the
+            // RCT2 entry stays the per-sequence default so flipping the
+            // dropdown out of (none) lands on something safe.
             model->currentTitleSequencePreset = reader->GetString("current_title_sequence", "*RCT2");
             model->randomTitleSequence = reader->GetBoolean("random_title_sequence", false);
-            // OPENRCT2MINI revision 67: explicit "no title sequence" mode.
-            model->noTitleSequence = reader->GetBoolean("no_title_sequence", false);
+            // OPENRCT2MINI revision 67 / revision 69: default to the (none)
+            // empty-park backdrop on fresh installs. Loading the RCT2 demo
+            // park costs ~25 MB of object-table heap during the title scene
+            // — substantial overhead for content the user will see for at
+            // most a few seconds before clicking through to the menu — and
+            // the empty-park pan is what we tuned the title scene around.
+            // Existing config.ini files keep their stored value.
+            model->noTitleSequence = reader->GetBoolean("no_title_sequence", true);
             model->objectSelectionFilterFlags = reader->GetInt32("object_selection_filter_flags", 0x3FFF);
             model->scenarioSelectLastTab = reader->GetInt32("scenarioselect_last_tab", 0);
             model->scenarioPreviewScreenshots = reader->GetBoolean("scenario_preview_screenshots", true);
