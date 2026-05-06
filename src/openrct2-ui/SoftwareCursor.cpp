@@ -304,10 +304,10 @@ namespace OpenRCT2::Ui
         // outline. Default off; toggled in Options > Interface > Cursors.
         if (Config::Get().interface.cursorDropShadow)
         {
-            constexpr int32_t kShadowOffX = 2;
+            constexpr int32_t kShadowOffX = 1;
             constexpr int32_t kShadowOffY = 2;
             const auto paletteMap = ::GetPaletteMapForColour(
-                OpenRCT2::Drawing::FilterPaletteID::paletteDarken3);
+                OpenRCT2::Drawing::FilterPaletteID::paletteDarken2);
             if (paletteMap.has_value())
             {
                 const auto& map = *paletteMap;
