@@ -357,3 +357,6 @@ cmake-build-*/
 
 # OSK design plan — same pattern as other Claude-generated planning docs
 /osk-plan.md
+
+# Release notes drafts — local until published as a GitHub release
+/release-notes-v*.md

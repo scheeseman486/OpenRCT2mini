@@ -555,7 +555,8 @@ namespace OpenRCT2::Ui::Windows
         return window.classification;
     }
 
-    void WindowStartTextbox(const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength)
+    void WindowStartTextbox(
+        const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength, OskMode oskMode)
     {
         if (_usingWidgetTextBox)
             WindowCancelTextbox();
@@ -577,7 +578,7 @@ namespace OpenRCT2::Ui::Windows
         // own buffer; on Start it fires the parent's onTextInput and
         // ends this textbox session.
         OskOpenForTextbox(
-            const_cast<WindowBase*>(&callW), callWidget, existingText, static_cast<size_t>(maxLength));
+            const_cast<WindowBase*>(&callW), callWidget, existingText, static_cast<size_t>(maxLength), oskMode);
     }
 
     void WindowCancelTextbox()

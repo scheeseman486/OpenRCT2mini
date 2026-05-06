@@ -63,6 +63,9 @@ namespace OpenRCT2::Ui::Windows
         int32_t _cursorBlink{};
         size_t _maxInputLength{};
         u8string _buffer;
+        // OPENRCT2MINI: OSK layout to spawn. Default is full QWERTY;
+        // numeric callers tag themselves as numpad before opening.
+        OskMode _oskMode = OskMode::full;
 
     public:
         void onOpen() override
@@ -70,10 +73,9 @@ namespace OpenRCT2::Ui::Windows
             setWidgets(_textInputWidgets);
             WindowInitScrollWidgets(*this);
             setParentWindow(nullptr, 0);
-            // OPENRCT2MINI: spawn the on-screen keyboard so the user can
-            // type without a physical keyboard. OskOpen is a no-op if
-            // the OSK is already up. See osk-plan.md.
-            OskOpen(this, OskMode::full);
+            // OPENRCT2MINI: OSK is spawned by the caller AFTER Create
+            // returns (so it can override the layout via OskOpen's mode
+            // parameter). See WindowTextInputRawOpen et al below.
         }
 
         void setParentWindow(WindowBase* parentWindow, WidgetIndex widgetIndex)
@@ -128,6 +130,14 @@ namespace OpenRCT2::Ui::Windows
         {
             _callback = callback;
             _cancelCallback = cancelCallback;
+        }
+
+        // OPENRCT2MINI: set before opening so the spawned OSK uses the
+        // right layout. Calling this AFTER onOpen has no effect because
+        // the OSK has already been created.
+        void setOskMode(OskMode mode)
+        {
+            _oskMode = mode;
         }
 
         void onClose() override
@@ -431,7 +441,7 @@ namespace OpenRCT2::Ui::Windows
 
     void WindowTextInputRawOpen(
         WindowBase* call_w, WidgetIndex call_widget, StringId title, StringId description, const Formatter& descriptionArgs,
-        const_utf8string existing_text, int32_t maxLength)
+        const_utf8string existing_text, int32_t maxLength, OskMode oskMode)
     {
         auto* windowMgr = GetWindowManager();
         windowMgr->CloseByClass(WindowClass::textinput);
@@ -444,12 +454,16 @@ namespace OpenRCT2::Ui::Windows
             w->setParentWindow(call_w, call_widget);
             w->setTitle(title, description, descriptionArgs);
             w->setText(existing_text, maxLength);
+            w->setOskMode(oskMode);
+            // OPENRCT2MINI: spawn OSK now (after Create returns) so the
+            // caller's OskMode is in effect.
+            OskOpen(w, oskMode);
         }
     }
 
     void WindowTextInputOpen(
         std::string_view title, std::string_view description, std::string_view initialValue, size_t maxLength,
-        std::function<void(std::string_view)> callback, std::function<void()> cancelCallback)
+        std::function<void(std::string_view)> callback, std::function<void()> cancelCallback, OskMode oskMode)
     {
         auto* windowMgr = GetWindowManager();
         auto w = windowMgr->Create<TextInputWindow>(
@@ -460,15 +474,18 @@ namespace OpenRCT2::Ui::Windows
             w->setTitle(title, description);
             w->setText(initialValue, maxLength);
             w->setCallback(callback, cancelCallback);
+            w->setOskMode(oskMode);
+            OskOpen(w, oskMode);
         }
     }
 
     void WindowTextInputOpen(
         WindowBase* call_w, WidgetIndex call_widget, StringId title, StringId description, const Formatter& descriptionArgs,
-        StringId existing_text, uintptr_t existing_args, int32_t maxLength)
+        StringId existing_text, uintptr_t existing_args, int32_t maxLength, OskMode oskMode)
     {
         auto existingText = FormatStringIDLegacy(existing_text, &existing_args);
-        WindowTextInputRawOpen(call_w, call_widget, title, description, descriptionArgs, existingText.c_str(), maxLength);
+        WindowTextInputRawOpen(
+            call_w, call_widget, title, description, descriptionArgs, existingText.c_str(), maxLength, oskMode);
     }
 
     void WindowTextInputKey(WindowBase* w, uint32_t keycode)

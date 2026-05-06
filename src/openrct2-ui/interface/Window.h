@@ -57,12 +57,23 @@ namespace OpenRCT2::Ui
 
 namespace OpenRCT2::Ui::Windows
 {
+    // OPENRCT2MINI: on-screen keyboard layout. Defined here (not in
+    // windows/Windows.h) so default-arg signatures across the engine
+    // can reference it without dragging in the OSK header.
+    enum class OskMode : uint8_t
+    {
+        full,
+        numpad,
+    };
+
     extern const StringId ColourSchemeNames[4];
 
     WindowBase* WindowGetListening();
     WindowClass WindowGetClassification(const WindowBase& window);
 
-    void WindowStartTextbox(const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength);
+    void WindowStartTextbox(
+        const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength,
+        OskMode oskMode = OskMode::full);
     void WindowCancelTextbox();
     void WindowUpdateTextboxCaret();
     void WindowUpdateTextbox();

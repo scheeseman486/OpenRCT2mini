@@ -608,6 +608,24 @@ namespace OpenRCT2::Ui::Windows
                 _caret += step;
             }
 
+            // Numpad-only: flip the sign of the current value. Concretely
+            // toggle a leading '-' on the buffer. Caret tracks the
+            // shift so the user's logical position is preserved.
+            void ToggleSign()
+            {
+                if (!_editBuffer.empty() && _editBuffer.front() == '-')
+                {
+                    _editBuffer.erase(0, 1);
+                    if (_caret > 0)
+                        --_caret;
+                }
+                else
+                {
+                    _editBuffer.insert(0, 1, '-');
+                    ++_caret;
+                }
+            }
+
             void StartFlash(WidgetIndex idx)
             {
                 _pressFlashIdx = idx;
@@ -780,10 +798,15 @@ namespace OpenRCT2::Ui::Windows
                         Backspace();
                         break;
                     case SDL_SCANCODE_F16:
-                        InsertChar(' ');
+                        if (_mode == OskMode::numpad)
+                            ToggleSign();
+                        else
+                            InsertChar(' ');
                         break;
                     case SDL_SCANCODE_F17:
-                        _caps = !_caps;
+                        if (_mode == OskMode::full)
+                            _caps = !_caps;
+                        // Numpad: Y is unused — see §6.3.
                         break;
                     case SDL_SCANCODE_LSHIFT:
                     case SDL_SCANCODE_RSHIFT:

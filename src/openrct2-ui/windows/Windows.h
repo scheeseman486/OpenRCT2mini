@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <openrct2-ui/interface/Window.h>
 #include <openrct2/Identifiers.h>
 #include <openrct2/interface/Window.h>
 #include <openrct2/world/ScenerySelection.h>
@@ -310,11 +311,7 @@ namespace OpenRCT2::Ui::Windows
     // OPENRCT2MINI: on-screen keyboard. See osk-plan.md for design.
     // Two layouts: full QWERTY and numpad. Spawned automatically when
     // a TextInputWindow opens (or the InGameConsole, see Rev 8).
-    enum class OskMode : uint8_t
-    {
-        full,
-        numpad,
-    };
+    // OskMode enum is in interface/Window.h so default-args can use it.
     void OskOpen(WindowBase* parent, OskMode mode = OskMode::full);
     // OPENRCT2MINI: spawn the OSK for a `WindowStartTextbox`-style
     // inline textbox. Differs from the TextInputWindow path because
@@ -355,13 +352,14 @@ namespace OpenRCT2::Ui::Windows
     void WindowTextInputKey(WindowBase* w, uint32_t keycode);
     void WindowTextInputOpen(
         WindowBase* call_w, WidgetIndex call_widget, StringId title, StringId description, const Formatter& descriptionArgs,
-        StringId existing_text, uintptr_t existing_args, int32_t maxLength);
+        StringId existing_text, uintptr_t existing_args, int32_t maxLength, OskMode oskMode = OskMode::full);
     void WindowTextInputRawOpen(
         WindowBase* call_w, WidgetIndex call_widget, StringId title, StringId description, const Formatter& descriptionArgs,
-        const_utf8string existing_text, int32_t maxLength);
+        const_utf8string existing_text, int32_t maxLength, OskMode oskMode = OskMode::full);
     void WindowTextInputOpen(
         std::string_view title, std::string_view description, std::string_view initialValue, size_t maxLength,
-        std::function<void(std::string_view)> okCallback, std::function<void()> cancelCallback);
+        std::function<void(std::string_view)> okCallback, std::function<void()> cancelCallback,
+        OskMode oskMode = OskMode::full);
 
     // Themes
     WindowBase* ThemesOpen();
