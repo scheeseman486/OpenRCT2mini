@@ -3823,3 +3823,4 @@ STR_7032    :Escolha como o cursor é desenhado na tela
 STR_7033    :Padrão
 STR_7034    :Alto contraste
 STR_7035    :Clássico
+STR_7036    :(nenhuma)

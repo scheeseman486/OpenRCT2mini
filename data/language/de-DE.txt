@@ -3820,3 +3820,4 @@ STR_7032    :Wählt, wie der Bildschirmzeiger gezeichnet wird
 STR_7033    :Standard
 STR_7034    :Hoher Kontrast
 STR_7035    :Klassisch
+STR_7036    :(keine)

@@ -3825,3 +3825,4 @@ STR_7032    :Vælg hvordan skærmens markør tegnes
 STR_7033    :Standard
 STR_7034    :Høj kontrast
 STR_7035    :Klassisk
+STR_7036    :(ingen)

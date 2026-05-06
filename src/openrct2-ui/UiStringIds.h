@@ -1215,6 +1215,8 @@ namespace OpenRCT2
         STR_OPTIONS_CURSOR_STYLE_HIGH_CONTRAST = 7034,
         // OPENRCT2MINI revision 61: third style preserves the RCT2 look.
         STR_OPTIONS_CURSOR_STYLE_CLASSIC = 7035,
+        // OPENRCT2MINI revision 67: explicit "no title sequence" entry.
+        STR_TITLE_SEQUENCE_NONE = 7036,
         STR_OPTIONS_TWEAKS = 6170,
         STR_OPTION_DISABLED_DURING_NETWORK_PLAY = 6103,
         STR_PATH_TO_RCT1 = 6033,

@@ -3834,3 +3834,7 @@ STR_7033    :Default
 STR_7034    :High contrast
 # OPENRCT2MINI revision 61: third cursor style — RCT2-look paletted gradient.
 STR_7035    :Classic
+# OPENRCT2MINI revision 67: explicit "no title sequence" entry for the
+# Options > Misc > Title Sequence dropdown. Selecting it skips loading any
+# .parkseq and shows a static empty park as the title backdrop.
+STR_7036    :(none)

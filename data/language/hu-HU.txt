@@ -3823,3 +3823,4 @@ STR_7032    :Válassza ki, hogyan jelenjen meg a képernyőkurzor
 STR_7033    :Alapértelmezett
 STR_7034    :Magas kontraszt
 STR_7035    :Klasszikus
+STR_7036    :(nincs)

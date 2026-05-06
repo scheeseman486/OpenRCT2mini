@@ -3823,3 +3823,4 @@ STR_7032    :Kies hoe de cursor op het scherm wordt getekend
 STR_7033    :Standaard
 STR_7034    :Hoog contrast
 STR_7035    :Klassiek
+STR_7036    :(geen)

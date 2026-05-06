@@ -3830,3 +3830,4 @@ STR_7032    :Choisissez le rendu du curseur à l'écran
 STR_7033    :Par défaut
 STR_7034    :Contraste élevé
 STR_7035    :Classique
+STR_7036    :(aucune)

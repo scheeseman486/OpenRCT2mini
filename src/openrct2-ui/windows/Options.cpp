@@ -1086,9 +1086,17 @@ namespace OpenRCT2::Ui::Windows
         {
             auto ft = Formatter();
             ft.Add<int32_t>(static_cast<int32_t>(Config::Get().general.windowScale * 100));
+            // OPENRCT2MINI revision 66: when the spinner is disabled (always on
+            // OpenRCT2mini — the framebuffer is locked at 1.00× scale), match
+            // the disabled-style text colour the surrounding widget framework
+            // uses so the "1.00" reads as greyed-out rather than active.
+            // Pattern cribbed from EditorScenarioOptions.cpp:1675.
+            auto colour = !isWidgetDisabled(WIDX_SCALE)
+                ? colours[1]
+                : colours[1].withFlag(ColourFlag::inset, true);
             drawText(
                 rt, windowPos + ScreenCoordsXY{ widgets[WIDX_SCALE].left + 1, widgets[WIDX_SCALE].top + 1 },
-                STR_WINDOW_COLOUR_2_COMMA2DP32, ft, { colours[1] });
+                STR_WINDOW_COLOUR_2_COMMA2DP32, ft, { colour });
         }
 #pragma endregion
 
@@ -2039,18 +2047,24 @@ namespace OpenRCT2::Ui::Windows
                         gDropdown.items[i] = Dropdown::MenuLabel(TitleSequenceManager::GetName(i));
                     }
 
-                    gDropdown.items[numItems] = Dropdown::Separator();
-                    numItems++;
-                    gDropdown.items[numItems] = Dropdown::MenuLabel(STR_TITLE_SEQUENCE_RANDOM);
-                    numItems++;
+                    gDropdown.items[numItems++] = Dropdown::Separator();
+                    int32_t randomIndex = static_cast<int32_t>(numItems);
+                    gDropdown.items[numItems++] = Dropdown::MenuLabel(STR_TITLE_SEQUENCE_RANDOM);
+                    // OPENRCT2MINI revision 67: explicit "no title sequence" entry.
+                    int32_t noneIndex = static_cast<int32_t>(numItems);
+                    gDropdown.items[numItems++] = Dropdown::MenuLabel(STR_TITLE_SEQUENCE_NONE);
 
                     WindowDropdownShowText(
                         { windowPos.x + widget->left, windowPos.y + widget->top }, widget->height(), colours[1],
                         Dropdown::Flag::StayOpen, numItems);
 
-                    auto selectedIndex = Config::Get().interface.randomTitleSequence
-                        ? numItems - 1
-                        : static_cast<int32_t>(TitleGetCurrentSequence());
+                    int32_t selectedIndex;
+                    if (Config::Get().interface.noTitleSequence)
+                        selectedIndex = noneIndex;
+                    else if (Config::Get().interface.randomTitleSequence)
+                        selectedIndex = randomIndex;
+                    else
+                        selectedIndex = static_cast<int32_t>(TitleGetCurrentSequence());
                     gDropdown.items[selectedIndex].setChecked(true);
                     break;
                 }
@@ -2087,17 +2101,40 @@ namespace OpenRCT2::Ui::Windows
             {
                 case WIDX_TITLE_SEQUENCE_DROPDOWN:
                 {
+                    // OPENRCT2MINI revision 67: dropdown layout is now
+                    //   [0..N-1]      file-backed sequences (RCT1/RCT2)
+                    //   [N]           separator
+                    //   [N+1]         Random
+                    //   [N+2]         (none) — explicit empty-park backdrop
                     auto numItems = static_cast<int32_t>(TitleSequenceManager::GetCount());
-                    if (dropdownIndex < numItems && dropdownIndex != static_cast<int32_t>(TitleGetCurrentSequence()))
+                    int32_t randomIndex = numItems + 1;
+                    int32_t noneIndex = numItems + 2;
+                    // If the user is currently in random or no-sequence mode,
+                    // any pick of a file-backed sequence should switch out of
+                    // that mode — even if the picked sequence happens to be
+                    // the configured currentTitleSequencePreset.
+                    const bool wasSpecial = Config::Get().interface.randomTitleSequence
+                        || Config::Get().interface.noTitleSequence;
+                    if (dropdownIndex < numItems
+                        && (wasSpecial || dropdownIndex != static_cast<int32_t>(TitleGetCurrentSequence())))
                     {
                         Config::Get().interface.randomTitleSequence = false;
+                        Config::Get().interface.noTitleSequence = false;
                         TitleSequenceChangePreset(static_cast<size_t>(dropdownIndex));
                         Config::Save();
                         invalidate();
                     }
-                    else if (dropdownIndex == numItems + 1)
+                    else if (dropdownIndex == randomIndex)
                     {
                         Config::Get().interface.randomTitleSequence = true;
+                        Config::Get().interface.noTitleSequence = false;
+                        Config::Save();
+                        invalidate();
+                    }
+                    else if (dropdownIndex == noneIndex)
+                    {
+                        Config::Get().interface.randomTitleSequence = false;
+                        Config::Get().interface.noTitleSequence = true;
                         Config::Save();
                         invalidate();
                     }
@@ -2126,7 +2163,12 @@ namespace OpenRCT2::Ui::Windows
 
         void MiscPrepareDraw()
         {
-            if (Config::Get().interface.randomTitleSequence)
+            if (Config::Get().interface.noTitleSequence)
+            {
+                // OPENRCT2MINI revision 67: explicit "no title sequence" caption.
+                _dropdownCaption = LanguageGetString(STR_TITLE_SEQUENCE_NONE);
+            }
+            else if (Config::Get().interface.randomTitleSequence)
             {
                 _dropdownCaption = LanguageGetString(STR_TITLE_SEQUENCE_RANDOM);
             }

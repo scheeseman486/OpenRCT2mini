@@ -3823,3 +3823,4 @@ STR_7032    :Elektu kiel la ekrana kursoro estas desegnita
 STR_7033    :Defaŭlta
 STR_7034    :Alta kontrasto
 STR_7035    :Klasika
+STR_7036    :(neniu)

@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "../../world/Location.hpp"  // OPENRCT2MINI revision 68: ScreenCoordsXY
 #include "../Scene.h"
 
 #include <cstdint>
@@ -39,6 +40,17 @@ namespace OpenRCT2
         size_t _loadedTitleSequenceId = SIZE_MAX;
         size_t _currentSequence = SIZE_MAX;
         bool _previewingSequence = false;
+        // OPENRCT2MINI revision 68: state for the (none)-mode camera pan.
+        // Tick counter drives the screen-X offset; anchor captures the
+        // viewport savedViewPos at map-centre once on transition so we
+        // never re-derive (re-derivation against a dirty viewport state
+        // would jitter, and any drift accumulating outside the loop
+        // bounds would trigger ViewportUpdatePosition's edge-clamp,
+        // making the camera "follow the boundary"). Reset whenever we
+        // transition into noTitleSequence mode.
+        int32_t _noSequencePanTick = 0;
+        ScreenCoordsXY _noSequencePanAnchor = {};
+        bool _noSequencePanAnchored = false;
 
         void TitleInitialise();
         bool TryLoadSequence(bool loadPreview = false);

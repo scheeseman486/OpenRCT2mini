@@ -3817,3 +3817,4 @@ STR_7032    :Wybierz, jak rysowany jest kursor na ekranie
 STR_7033    :Domyślny
 STR_7034    :Wysoki kontrast
 STR_7035    :Klasyczny
+STR_7036    :(brak)

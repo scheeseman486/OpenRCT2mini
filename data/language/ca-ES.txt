@@ -3822,3 +3822,4 @@ STR_7032    :Tria com es dibuixa el cursor a la pantalla
 STR_7033    :Per defecte
 STR_7034    :Alt contrast
 STR_7035    :Clàssic
+STR_7036    :(cap)

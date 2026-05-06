@@ -413,6 +413,8 @@ namespace OpenRCT2::Config
             // can still pick others manually if they want to risk it.
             model->currentTitleSequencePreset = reader->GetString("current_title_sequence", "*RCT2");
             model->randomTitleSequence = reader->GetBoolean("random_title_sequence", false);
+            // OPENRCT2MINI revision 67: explicit "no title sequence" mode.
+            model->noTitleSequence = reader->GetBoolean("no_title_sequence", false);
             model->objectSelectionFilterFlags = reader->GetInt32("object_selection_filter_flags", 0x3FFF);
             model->scenarioSelectLastTab = reader->GetInt32("scenarioselect_last_tab", 0);
             model->scenarioPreviewScreenshots = reader->GetBoolean("scenario_preview_screenshots", true);
@@ -450,6 +452,7 @@ namespace OpenRCT2::Config
         writer->WriteString("current_theme", model->currentThemePreset);
         writer->WriteString("current_title_sequence", model->currentTitleSequencePreset);
         writer->WriteBoolean("random_title_sequence", model->randomTitleSequence);
+        writer->WriteBoolean("no_title_sequence", model->noTitleSequence);
         writer->WriteInt32("object_selection_filter_flags", model->objectSelectionFilterFlags);
         writer->WriteInt32("scenarioselect_last_tab", model->scenarioSelectLastTab);
         writer->WriteBoolean("scenario_preview_screenshots", model->scenarioPreviewScreenshots);

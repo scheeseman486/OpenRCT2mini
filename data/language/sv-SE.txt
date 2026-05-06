@@ -3800,3 +3800,4 @@ STR_7032    :Välj hur skärmens markör ritas
 STR_7033    :Standard
 STR_7034    :Hög kontrast
 STR_7035    :Klassisk
+STR_7036    :(ingen)

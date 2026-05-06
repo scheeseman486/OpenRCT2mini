@@ -68,6 +68,7 @@
 #include "platform/Crash.h"
 #include "platform/Platform.h"
 #include "profiling/Profiling.h"
+#include "rct1/Csg.h"  // OPENRCT2MINI revision 65 — Csg1datPresentAtLocation gate
 #include "rct2/RCT2.h"
 #include "ride/TrackDesignRepository.h"
 #include "scenario/Scenario.h"
@@ -988,25 +989,20 @@ namespace OpenRCT2
                     ft.Add<uint32_t>(kParkFileCurrentVersion);
                     windowManager->ShowError(STR_WARNING_PARK_VERSION_TITLE, STR_WARNING_PARK_VERSION_MESSAGE, ft);
                 }
-                // OPENRCT2MINI: cut 2 commented out the eager GfxLoadCsg()
-                // in LoadBaseGraphics(), and the deferred-load path was
-                // never wired up — _csgLoaded is permanently false. Any
-                // object whose JSON ships a "noCsgImages" set therefore
-                // takes that branch in ImageTable::ReadJson and gets
-                // _usesFallbackImages permanently stamped, regardless of
-                // whether the user has rct1Path set. The art is fine —
-                // the supplemental object packs ship complete fallback
-                // sprites for this case — but the warning fires on
-                // every RCT1 park load and there's nothing the user
-                // can do about it. Suppress: the underlying check has
-                // no signal value in our build.
-                //
-                // else if (HasObjectsThatUseFallbackImages())
-                // {
-                //     Console::Error::WriteLine("Park has objects which require RCT1 linked. Fallback images will be used.");
-                //     auto windowManager = _uiContext->GetWindowManager();
-                //     windowManager->ShowError(STR_PARK_USES_FALLBACK_IMAGES_WARNING, kStringIdEmpty, Formatter());
-                // }
+                // OPENRCT2MINI revision 65: warning restored. Polish #176
+                // suppressed this because cut 2 left CSG permanently
+                // unloaded, making the warning misfire on every RCT1
+                // park whether or not RCT1 was linked. Revision 65 wires
+                // CSG loading back up via mmap (see GfxLoadCsg() call
+                // site below + Drawing.Sprite.cpp), so the stamp set by
+                // ImageTable::ReadJson now genuinely means "RCT1 is
+                // missing or unloadable" — surface it.
+                else if (HasObjectsThatUseFallbackImages())
+                {
+                    Console::Error::WriteLine("Park has objects which require RCT1 linked. Fallback images will be used.");
+                    auto windowManager = _uiContext->GetWindowManager();
+                    windowManager->ShowError(STR_PARK_USES_FALLBACK_IMAGES_WARNING, kStringIdEmpty, Formatter());
+                }
 
                 CloseProgress();
                 return true;
@@ -1090,10 +1086,7 @@ namespace OpenRCT2
         }
 
     private:
-        // OPENRCT2MINI: kept defined but no longer called — see the cut-2
-        // explanation at the suppressed warning site above. Marked
-        // [[maybe_unused]] so -Wunused-private-method stays clean.
-        [[maybe_unused]] bool HasObjectsThatUseFallbackImages()
+        bool HasObjectsThatUseFallbackImages()
         {
             for (auto objectType : getAllObjectTypes())
             {
@@ -1189,9 +1182,19 @@ namespace OpenRCT2
                 return false;
             }
             GfxLoadG2PalettesFontsTracks();
-            // OPENRCT2MINI: CSG (40 MB blob) was loaded eagerly here. Defer to first RCT1 use
-            // — IsCsgLoaded() check sites in the codebase already gracefully degrade.
-            // GfxLoadCsg();
+            // OPENRCT2MINI revision 65: restore CSG load. Cut 2 originally
+            // dropped the eager call to save 40 MB of heap-pinned pixel data;
+            // GfxLoadCsg now routes through SpritePager (mmap), so the on-disk
+            // 39.5 MB lives in file-backed RSS that the kernel pages out under
+            // pressure. Heap cost is ~2.7 MB (header table + element vector).
+            // Gate on Csg1datPresentAtLocation so we don't try to open missing
+            // files for users without an RCT1 install. Failure is non-fatal:
+            // _csgLoaded stays false and the existing fallback path runs.
+            const auto& rct1PathForCsg = Config::Get().general.rct1Path;
+            if (!rct1PathForCsg.empty() && Csg1datPresentAtLocation(rct1PathForCsg))
+            {
+                GfxLoadCsg();
+            }
             FontSpriteInitialiseCharacters();
             return true;
         }

@@ -160,6 +160,10 @@ namespace OpenRCT2::Config
         bool toolbarShowRotateAnticlockwise;
         bool consoleSmallFont;
         bool randomTitleSequence;
+        // OPENRCT2MINI revision 67: when true, the title scene shows a static
+        // empty park instead of loading any .parkseq. Mutually exclusive with
+        // randomTitleSequence (the dropdown enforces it).
+        bool noTitleSequence;
         u8string currentThemePreset;
         u8string currentTitleSequencePreset;
         int32_t objectSelectionFilterFlags;

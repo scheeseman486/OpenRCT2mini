@@ -3812,3 +3812,4 @@ STR_7032    :Vyberte, jak se vykresluje kurzor na obrazovce
 STR_7033    :Výchozí
 STR_7034    :Vysoký kontrast
 STR_7035    :Klasický
+STR_7036    :(žádná)

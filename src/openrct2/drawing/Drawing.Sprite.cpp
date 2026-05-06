@@ -671,13 +671,22 @@ bool GfxLoadCsg()
         ReadAndConvertGxDat(&fileHeader, _csg.header.numEntries, false, _csg.elements.data());
 
         // Read element data
-        // OPENRCT2MINI: Sprite Paging — also covers CSG when it does eventually load.
+        // OPENRCT2MINI revision 65: route CSG through SpritePager mmap. csg1.dat
+        // (the data file) has no header in front of the pixel data — csg1i.dat
+        // is separate — so the offset is GetPosition() of an unread stream, i.e.
+        // 0 in practice. Symmetry with GfxLoadG1 / GfxLoadOpenRCT2Gx kept for
+        // clarity and future-proofing. mmap drops the 39.5 MB heap pin to ~0
+        // anon RSS; the kernel pages in only what gets rendered.
         size_t mmapCsgSize = 0;
-        size_t csgOffset = static_cast<size_t>(fileData.GetPosition()) - _csg.header.totalSize; // already consumed during ReadArray prep
-        // Re-mmap from the data path; lighter to just read since CSG is rarely loaded now.
-        // For the heap fallback path, we restore from a simple read.
-        (void)mmapCsgSize; (void)csgOffset;
-        _csg.data = OpenRCT2::Drawing::MakeHeapSpriteData(fileData.ReadArray<uint8_t>(_csg.header.totalSize));
+        size_t csgOffset = static_cast<size_t>(fileData.GetPosition());
+        _csg.data = OpenRCT2::Drawing::MmapSpriteData(
+            pathDataPath, csgOffset, _csg.header.totalSize, &mmapCsgSize);
+        if (!_csg.data)
+        {
+            LOG_WARNING("CSG1.DAT mmap failed; falling back to heap read");
+            _csg.data = OpenRCT2::Drawing::MakeHeapSpriteData(
+                fileData.ReadArray<uint8_t>(_csg.header.totalSize));
+        }
 
         // Fix entry data offsets
         for (uint32_t i = 0; i < _csg.header.numEntries; i++)
