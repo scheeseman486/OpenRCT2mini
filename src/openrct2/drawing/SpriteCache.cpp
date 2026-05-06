@@ -270,10 +270,21 @@ namespace OpenRCT2::Drawing
                 s.index[rec.hash] = rec;
             }
 
-            // Mmap the cache file for reads. Size grows as we append; for now
-            // map exactly the current size. Subsequent SpriteCacheStore calls
-            // remap with the new size before using the cache during the same
-            // run.
+            // Mmap the cache file for reads. We map exactly the current size
+            // ONCE at startup and never remap during the run. SpriteCacheStore
+            // appends to the file but does not update the mapping or in-memory
+            // index — entries written this run only become visible on the
+            // NEXT run (when OpenOrCreate replays the idx file from disk and
+            // mmaps the new cache size).
+            //
+            // Why: on 32-bit ARM (Miyoo Mini, 3 GB user VA), repeatedly
+            // mmap-ing a growing file across hundreds of stores per park-load
+            // accumulates the mappings as a leaked arithmetic series — easily
+            // multiple GB of VA reserved on a cold-cache run, which exhausts
+            // the 32-bit address space and crashes mid-load. Skipping the
+            // remap costs us at most one extra decode per object that gets
+            // looked up twice in the same run (which does not happen for
+            // ImageTable::ReadJson — it's called once per identifier).
             if (cst.st_size > static_cast<off_t>(sizeof(CacheFileHeader)))
             {
                 s.cacheMmapSize = static_cast<size_t>(cst.st_size);
@@ -306,33 +317,11 @@ namespace OpenRCT2::Drawing
             }
         }
 
-        // Re-mmap after appending to the cache file. The previous mapping
-        // stays alive (and active G1Element offsets continue to point at it
-        // for entries already loaded this run); the NEW mapping covers the
-        // same prefix plus the new entry. We don't unmap the old one, since
-        // ImageTable entries from this run still reference it. Cost: each
-        // append leaks the old mapping until process exit. Acceptable —
-        // bounded by N objects loaded this run.
-        bool RemapCache(CacheState& s)
-        {
-            struct stat st {};
-            if (::fstat(s.cacheFd, &st) != 0)
-            {
-                LOG_ERROR("SpriteCache: fstat for remap failed: %s", std::strerror(errno));
-                return false;
-            }
-            const size_t newSize = static_cast<size_t>(st.st_size);
-            if (newSize == 0) return true;
-            void* base = ::mmap(nullptr, newSize, PROT_READ, MAP_SHARED, s.cacheFd, 0);
-            if (base == MAP_FAILED)
-            {
-                LOG_ERROR("SpriteCache: remap failed: %s", std::strerror(errno));
-                return false;
-            }
-            s.cacheMmap = static_cast<uint8_t*>(base);
-            s.cacheMmapSize = newSize;
-            return true;
-        }
+        // (RemapCache removed in revision 71b: leaking per-store mmaps blew
+        // out 32-bit ARM virtual address space on cold-cache park loads. The
+        // initial OpenOrCreate mapping is now the only mmap of the cache file
+        // for the lifetime of the process; entries appended this run only
+        // become visible on the next run.)
     } // anon namespace
 
     void SpriteCacheInit()
@@ -514,12 +503,16 @@ namespace OpenRCT2::Drawing
         }
         ::fsync(s.idxFd);
 
-        s.index[key] = rec;
-
-        // Re-mmap so subsequent SpriteCacheLookup calls in the same run can
-        // see the just-stored entry. Older mappings stay alive; we leak
-        // them deliberately (active G1Element offsets reference them).
-        RemapCache(s);
+        // Deliberately do NOT update s.index here. The store is durable on
+        // disk (next run will see it during OpenOrCreate), but the cache
+        // mmap covers only the prefix that existed at startup, so the bytes
+        // for this entry aren't accessible via s.cacheMmap. If we inserted
+        // into s.index, the next SpriteCacheLookup for the same key would
+        // hit the bounds check inside Lookup and log a spurious "references
+        // beyond cache file (corrupt)" warning. Keeping the in-memory index
+        // unchanged for same-run stores means the lookup just returns miss
+        // cleanly — same observable behaviour, no warning spam, no leaked
+        // virtual address space.
     }
 
     SpriteCacheStats GetSpriteCacheStats()
