@@ -189,8 +189,17 @@ namespace OpenRCT2::Ui::Windows
 
         void onPrepareDraw() override
         {
-            // Change window size if required.
-            int32_t newHeight = CalculateWindowHeight(_buffer.data());
+            // Use the OSK's live buffer for height calculation so the
+            // dialog grows/shrinks as the user types — feels less jumpy
+            // than waiting for commit.
+            const auto* heightBuffer = OskIsActive() ? nullptr : _buffer.data();
+            std::string oskBuffer;
+            if (OskIsActive())
+            {
+                oskBuffer = OskGetCurrentText();
+                heightBuffer = oskBuffer.data();
+            }
+            int32_t newHeight = CalculateWindowHeight(heightBuffer);
             if (newHeight != height)
             {
                 WindowSetResize(*this, { kWindowSize.width, newHeight }, { kWindowSize.width, newHeight });
@@ -210,6 +219,20 @@ namespace OpenRCT2::Ui::Windows
             else
             {
                 widgets[WIDX_TITLE].setString(_titleStringId);
+            }
+
+            // OPENRCT2MINI: when the OSK is up, anchor the dialog's
+            // bottom edge just above the OSK strip. The default
+            // centreScreen flag would put it half behind the OSK.
+            if (OskIsActive())
+            {
+                constexpr int32_t kOskHeightForAnchor = 240;
+                constexpr int32_t kGap = 6;
+                const int32_t screenH = ContextGetHeight();
+                const int32_t screenW = ContextGetWidth();
+                const int32_t targetTop = screenH - kOskHeightForAnchor - kGap - newHeight;
+                windowPos.y = static_cast<int16_t>(std::max(8, targetTop));
+                windowPos.x = static_cast<int16_t>(std::max(0, (screenW - width) / 2));
             }
         }
 
@@ -234,11 +257,24 @@ namespace OpenRCT2::Ui::Windows
 
             screenCoords.y += 25;
 
+            // OPENRCT2MINI: when the OSK is up, render its buffer + caret
+            // so this window mirrors what the user is typing on the OSK.
+            const bool oskActive = OskIsActive();
+            std::string oskText;
+            size_t oskCaret = 0;
+            if (oskActive)
+            {
+                oskText = OskGetCurrentText();
+                oskCaret = OskGetCaretByteOffset();
+            }
+            const utf8* drawBuffer = oskActive ? oskText.c_str() : _buffer.data();
+            const size_t drawBufferLen = oskActive ? oskText.size() : _buffer.size();
+
             // String length needs to add 12 either side of box
             // +13 for cursor when max length.
             u8string wrappedString;
             wrapString(
-                u8string_view{ _buffer.data(), _buffer.size() }, kWindowSize.width - (24 + 13), FontStyle::medium,
+                u8string_view{ drawBuffer, drawBufferLen }, kWindowSize.width - (24 + 13), FontStyle::medium,
                 &wrappedString, &no_lines);
 
             Rectangle::fillInset(
@@ -255,6 +291,8 @@ namespace OpenRCT2::Ui::Windows
             uint8_t cur_drawn = 0;
 
             auto* textInput = GetTextboxSession();
+            const size_t selectionStart = oskActive ? oskCaret : (textInput != nullptr ? textInput->SelectionStart : 0);
+            const bool blinkOn = oskActive ? OskCaretIsFlashed() : (_cursorBlink > 15);
             int32_t cursorX = 0;
             int32_t cursorY = 0;
             for (int32_t line = 0; line <= no_lines; line++)
@@ -265,27 +303,26 @@ namespace OpenRCT2::Ui::Windows
                     { colours[1], FontStyle::medium, { TextPaintFlag::noFormatting }, TextAlignment::left });
 
                 size_t string_length = GetStringSize(wrapPointer) - 1;
-                if (!cur_drawn && (textInput->SelectionStart <= char_count + string_length))
+                if (!cur_drawn && (selectionStart <= char_count + string_length))
                 {
                     // Make a view of the string for measuring the width.
                     cursorX = windowPos.x + 13
                         + getStringWidth(
-                                  u8string_view{ wrapPointer, textInput->SelectionStart - char_count }, FontStyle::medium,
-                                  true);
+                                  u8string_view{ wrapPointer, selectionStart - char_count }, FontStyle::medium, true);
                     cursorY = screenCoords.y;
 
                     int32_t textWidth = 6;
-                    if (textInput->SelectionStart < strlen(_buffer.data()))
+                    if (selectionStart < drawBufferLen)
                     {
                         // Make a 1 utf8-character wide string for measuring the width
                         // of the currently selected character.
                         utf8 tmp[5] = {}; // This is easier than setting temp_string[0..5]
-                        uint32_t codepoint = UTF8GetNext(_buffer.data() + textInput->SelectionStart, nullptr);
+                        uint32_t codepoint = UTF8GetNext(drawBuffer + selectionStart, nullptr);
                         UTF8WriteCodepoint(tmp, codepoint);
                         textWidth = std::max(getStringWidth(tmp, FontStyle::medium, true) - 2, 4);
                     }
 
-                    if (_cursorBlink > 15)
+                    if (blinkOn)
                     {
                         auto colour = getColourMap(colours[1].colour).midLight;
                         // TODO: palette index addition
@@ -299,7 +336,7 @@ namespace OpenRCT2::Ui::Windows
 
                 wrapPointer += string_length + 1;
 
-                if (_buffer[char_count + string_length] == ' ')
+                if (char_count + string_length < drawBufferLen && drawBuffer[char_count + string_length] == ' ')
                     char_count++;
                 char_count += string_length;
 

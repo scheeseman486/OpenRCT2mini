@@ -24,6 +24,7 @@
 #include <openrct2-ui/windows/Windows.h>
 #include <openrct2/Context.h>
 #include <openrct2/Game.h>
+#include <openrct2/Input.h>
 #include <openrct2/core/String.hpp>
 #include <openrct2/core/UTF8.h>
 #include <openrct2/drawing/ColourMap.h>
@@ -277,6 +278,12 @@ namespace OpenRCT2::Ui::Windows
             {
                 BuildLayout();
                 gGamePaused |= GAME_PAUSED_MODAL;
+                // OPENRCT2MINI: stop the engine's SDL text-input
+                // session so device button presses (which map to
+                // keyboard scancodes that SDL would emit as
+                // SDL_TEXTINPUT events) don't leak into the parent's
+                // textbox buffer behind us.
+                ContextStopTextInput();
                 // Sensible initial selection per §3.8b: home row leftmost
                 // for the full keyboard, top-left '1' for the numpad.
                 if (_mode == OskMode::full)
@@ -349,6 +356,22 @@ namespace OpenRCT2::Ui::Windows
                         rt, rect, ColourWithFlags{ Colour::brightYellow },
                         Rectangle::BorderStyle::outset, Rectangle::FillBrightness::light, Rectangle::FillMode::none);
                 }
+            }
+
+            // OPENRCT2MINI: snapshot accessors so the parent
+            // TextInputWindow / inline textbox widgets can render the
+            // OSK's edit buffer in real time.
+            const u8string& getEditBuffer() const
+            {
+                return _editBuffer;
+            }
+            size_t getCaret() const
+            {
+                return _caret;
+            }
+            bool caretIsFlashed() const
+            {
+                return _cursorBlink < 15;
             }
 
             // Returns true if event consumed.
@@ -986,5 +1009,29 @@ namespace OpenRCT2::Ui::Windows
         if (osk == nullptr)
             return false;
         return osk->handleKey(sdlScancode, down);
+    }
+
+    std::string OskGetCurrentText()
+    {
+        auto* osk = FindOsk();
+        if (osk == nullptr)
+            return {};
+        return std::string{ osk->getEditBuffer() };
+    }
+
+    size_t OskGetCaretByteOffset()
+    {
+        auto* osk = FindOsk();
+        if (osk == nullptr)
+            return 0;
+        return osk->getCaret();
+    }
+
+    bool OskCaretIsFlashed()
+    {
+        auto* osk = FindOsk();
+        if (osk == nullptr)
+            return false;
+        return osk->caretIsFlashed();
     }
 } // namespace OpenRCT2::Ui::Windows

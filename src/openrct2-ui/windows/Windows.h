@@ -313,6 +313,15 @@ namespace OpenRCT2::Ui::Windows
     // a TextInputWindow opens (or the InGameConsole, see Rev 8).
     // OskMode enum is in interface/Window.h so default-args can use it.
     void OskOpen(WindowBase* parent, OskMode mode = OskMode::full);
+    // OPENRCT2MINI: snapshot of the OSK's edit-strip buffer for parent
+    // windows / textbox widgets to render in real time. Empty if no
+    // OSK is up.
+    std::string OskGetCurrentText();
+    // Caret position within the OSK buffer, byte offset.
+    size_t OskGetCaretByteOffset();
+    // Caret blink state matching the OSK's edit-strip caret, so parent
+    // textbox widgets can flash in sync.
+    bool OskCaretIsFlashed();
     // OPENRCT2MINI: spawn the OSK for a `WindowStartTextbox`-style
     // inline textbox. Differs from the TextInputWindow path because
     // the parent isn't a modal dialog — it's a regular window with

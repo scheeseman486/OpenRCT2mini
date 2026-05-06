@@ -1160,7 +1160,13 @@ namespace OpenRCT2::Ui
         topLeft.y = w.windowPos.y + widget.textTop();
 
         auto* textInput = Windows::GetTextboxSession();
-        if (!active || textInput == nullptr)
+        // OPENRCT2MINI: when the OSK is active, render its buffer +
+        // caret here so the parent textbox visibly mirrors what the
+        // user is typing. The engine's textInput session is stopped
+        // on OSK open (so SDL text events don't pollute the bound
+        // buffer), but `active` is still true via _usingWidgetTextBox.
+        const bool oskActive = Windows::OskIsActive();
+        if (!active || (textInput == nullptr && !oskActive))
         {
             if (widget.text != 0)
             {
@@ -1171,30 +1177,48 @@ namespace OpenRCT2::Ui
             return;
         }
 
+        std::string oskBuffer;
+        size_t oskCaret = 0;
+        const std::string* effectiveBuffer = nullptr;
+        size_t effectiveCaret = 0;
+        if (oskActive)
+        {
+            oskBuffer = Windows::OskGetCurrentText();
+            oskCaret = Windows::OskGetCaretByteOffset();
+            effectiveBuffer = &oskBuffer;
+            effectiveCaret = oskCaret;
+        }
+        else
+        {
+            effectiveBuffer = textInput->Buffer;
+            effectiveCaret = textInput->SelectionStart;
+        }
+
         // String length needs to add 12 either side of box
         // +13 for cursor when max length.
         u8string wrappedString;
-        wrapString(*textInput->Buffer, bottomRight.x - topLeft.x - 5 - 6, FontStyle::medium, &wrappedString, nullptr);
+        wrapString(*effectiveBuffer, bottomRight.x - topLeft.x - 5 - 6, FontStyle::medium, &wrappedString, nullptr);
 
         drawText(rt, { topLeft.x + 2, topLeft.y }, wrappedString, { w.colours[1], { TextPaintFlag::noFormatting } });
 
         // Make a trimmed view of the string for measuring the width.
         int32_t curX = topLeft.x
             + getStringWidth(
-                           u8string_view{ wrappedString.c_str(), std::min(wrappedString.length(), textInput->SelectionStart) },
+                           u8string_view{ wrappedString.c_str(), std::min(wrappedString.length(), effectiveCaret) },
                            FontStyle::medium, true)
             + 3;
 
         int32_t width = 6;
-        if (static_cast<uint32_t>(textInput->SelectionStart) < textInput->Buffer->size())
+        if (effectiveCaret < effectiveBuffer->size())
         {
             // Make a new 1 character wide string for measuring the width
             // of the character that the cursor is under. (NOTE: this is broken for multi byte utf8 codepoints)
             width = std::max(
-                getStringWidth(u8string{ (*textInput->Buffer)[textInput->SelectionStart] }, FontStyle::medium, true) - 2, 4);
+                getStringWidth(u8string{ (*effectiveBuffer)[effectiveCaret] }, FontStyle::medium, true) - 2, 4);
         }
 
-        if (Windows::TextBoxCaretIsFlashed())
+        const bool caretFlashed = oskActive ? Windows::OskCaretIsFlashed() : Windows::TextBoxCaretIsFlashed();
+        if (caretFlashed)
         {
             auto colour = getColourMap(w.colours[1].colour).midLight;
             auto y = topLeft.y + 1 + widget.height() - 5;
