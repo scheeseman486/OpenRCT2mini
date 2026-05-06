@@ -3823,3 +3823,4 @@ STR_7033    :Per defecte
 STR_7034    :Alt contrast
 STR_7035    :Clàssic
 STR_7036    :(cap)
+STR_7037    :Aquest parc supera els límits admesos per OpenRCT2mini (mida del mapa, atraccions o entitats) i no es pot carregar en aquest dispositiu.

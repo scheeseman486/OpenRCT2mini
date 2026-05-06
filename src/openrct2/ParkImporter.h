@@ -13,6 +13,7 @@
 #include "object/ObjectList.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace OpenRCT2
@@ -119,5 +120,39 @@ public:
     const char* what() const noexcept override
     {
         return "Unexpected version";
+    }
+};
+
+// OPENRCT2MINI revision 70: thrown by ParkFile / S6Importer / S4Importer when
+// a save's contents exceed OpenRCT2mini's reduced engine limits (map size,
+// ride count, entity count). Replaces revision-67-era silent truncation with
+// a clean user-visible refusal — the device's heap is too tight to honestly
+// load these saves and trying to corrupts the map / segfaults.
+class ParkExceedsDeviceLimitsException : public std::exception
+{
+public:
+    enum class Limit
+    {
+        mapSize,
+        rideCount,
+        entityCount,
+    };
+
+    Limit const ExceededLimit;
+    uint32_t const Cap;
+    uint32_t const SaveValue;
+    std::string Detail;
+
+    ParkExceedsDeviceLimitsException(Limit limit, uint32_t cap, uint32_t saveValue, std::string detail)
+        : ExceededLimit(limit)
+        , Cap(cap)
+        , SaveValue(saveValue)
+        , Detail(std::move(detail))
+    {
+    }
+
+    const char* what() const noexcept override
+    {
+        return Detail.c_str();
     }
 };

@@ -1204,6 +1204,31 @@ namespace OpenRCT2
                         return;
                     }
 
+                    // OPENRCT2MINI revision 70: refuse oversized maps. Cut 1
+                    // shrunk kMaximumMapSizeTechnical from 1001 to 257 (255
+                    // practical) — saving ~38 MB of tile-pointer / spatial-
+                    // index overhead. Without this check, ParkFile would
+                    // happily set gameState.mapSize to whatever the file
+                    // claims (e.g. 999×999), allocate a tile-element buffer
+                    // sized for the saved map, then build a 257²-row tile
+                    // pointer index over it — every subsequent
+                    // MapGetFirstElementAt for y > 256 walks past the end of
+                    // the pointer vector. Either bad_alloc on the device or
+                    // segfault later. Throw cleanly instead.
+                    if (gameState.mapSize.x > kMaximumMapSizePractical
+                        || gameState.mapSize.y > kMaximumMapSizePractical)
+                    {
+                        throw ParkExceedsDeviceLimitsException(
+                            ParkExceedsDeviceLimitsException::Limit::mapSize,
+                            kMaximumMapSizePractical,
+                            std::max<uint32_t>(gameState.mapSize.x, gameState.mapSize.y),
+                            "Park map size " + std::to_string(gameState.mapSize.x) + "x"
+                                + std::to_string(gameState.mapSize.y)
+                                + " exceeds OpenRCT2mini's supported maximum of "
+                                + std::to_string(kMaximumMapSizePractical) + "x"
+                                + std::to_string(kMaximumMapSizePractical));
+                    }
+
                     gameStateInitAll(gameState, gameState.mapSize);
 
                     auto numElements = cs.read<uint32_t>();
@@ -1414,22 +1439,30 @@ namespace OpenRCT2
                     // Ride ID
                     cs.readWrite(rideId);
 
-                    // OPENRCT2MINI cut 41b. The on-disk park file can encode
-                    // rides at IDs up to OpenRCT2's upstream cap (1000). We
-                    // shrunk the in-RAM rides array to RCT2's vanilla 255
-                    // (Limits.h), so any rideId ≥ 255 must NOT be allocated
-                    // — RideAllocateAtIndex would write past gameState.rides
-                    // and segfault. We still have to consume the same bytes
-                    // from the stream though, otherwise the next chunk
-                    // mis-aligns. Read into a throwaway scratch Ride; it
-                    // gets dropped when the lambda returns.
-                    Ride scratch{};
+                    // OPENRCT2MINI revision 70 (replaces cut 41b's silent
+                    // drop). The on-disk park file can encode rides at IDs
+                    // up to OpenRCT2's upstream cap (1000). Our in-RAM
+                    // rides array is RCT2's vanilla 255 (Limits.h); any
+                    // rideId ≥ 255 must not be allocated — RideAllocateAtIndex
+                    // would write past gameState.rides and segfault. Cut 41b
+                    // worked around this by reading into a scratch Ride,
+                    // silently dropping the data; the user-visible result
+                    // was a corrupt park missing rides. Throw instead so
+                    // the user gets a clear refusal.
                     auto& ride = [&]() -> Ride& {
                         if (cs.getMode() == OrcaStream::Mode::writing)
                             return *GetRide(rideId);
                         const auto idx = rideId.ToUnderlying();
                         if (idx >= OpenRCT2::Limits::kMaxRidesInPark)
-                            return scratch;
+                        {
+                            throw ParkExceedsDeviceLimitsException(
+                                ParkExceedsDeviceLimitsException::Limit::rideCount,
+                                OpenRCT2::Limits::kMaxRidesInPark,
+                                idx + 1u,
+                                "Park contains a ride at index " + std::to_string(idx)
+                                    + " which exceeds OpenRCT2mini's maximum of "
+                                    + std::to_string(OpenRCT2::Limits::kMaxRidesInPark) + " rides");
+                        }
                         return *RideAllocateAtIndex(rideId);
                     }();
 
@@ -2684,14 +2717,22 @@ namespace OpenRCT2
         auto count = cs.read<uint16_t>();
         for (auto i = 0; i < count; ++i)
         {
-            T placeholder{};
-
             auto index = cs.read<EntityId>();
             auto* ent = getGameState().entities.CreateEntityAt<T>(index);
             if (ent == nullptr)
             {
-                // Unable to allocate entity
-                ent = &placeholder;
+                // OPENRCT2MINI revision 70: refuse over-cap entities cleanly.
+                // Upstream silently routed unallocatable entities into a
+                // throwaway placeholder, dropping them; the visible result
+                // was a park with missing peeps / vehicles / litter. Throw
+                // so the user sees the refusal instead.
+                throw ParkExceedsDeviceLimitsException(
+                    ParkExceedsDeviceLimitsException::Limit::entityCount,
+                    kMaxEntities,
+                    index.ToUnderlying() + 1u,
+                    "Park contains an entity at index " + std::to_string(index.ToUnderlying())
+                        + " which exceeds OpenRCT2mini's maximum of "
+                        + std::to_string(kMaxEntities) + " entities");
             }
             ReadWriteEntity(os, cs, *ent);
         }

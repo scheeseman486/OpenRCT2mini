@@ -3824,3 +3824,4 @@ STR_7033    :Alapértelmezett
 STR_7034    :Magas kontraszt
 STR_7035    :Klasszikus
 STR_7036    :(nincs)
+STR_7037    :Ez a park meghaladja az OpenRCT2mini által támogatott korlátokat (térképméret, attrakciók vagy entitások), és nem tölthető be ezen az eszközön.

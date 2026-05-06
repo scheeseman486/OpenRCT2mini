@@ -3824,3 +3824,4 @@ STR_7033    :Defaŭlta
 STR_7034    :Alta kontrasto
 STR_7035    :Klasika
 STR_7036    :(neniu)
+STR_7037    :Tiu ĉi parko superas la subtenitajn limojn de OpenRCT2mini (mapgrando, atrakcioj aŭ entoj) kaj ne povas esti ŝarĝita sur tiu ĉi aparato.

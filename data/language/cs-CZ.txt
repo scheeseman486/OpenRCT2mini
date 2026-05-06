@@ -3813,3 +3813,4 @@ STR_7033    :Výchozí
 STR_7034    :Vysoký kontrast
 STR_7035    :Klasický
 STR_7036    :(žádná)
+STR_7037    :Tento park překračuje limity OpenRCT2mini (velikost mapy, atrakce nebo entity) a nelze jej načíst na tomto zařízení.

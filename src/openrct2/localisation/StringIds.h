@@ -1583,6 +1583,9 @@ enum : StringId
     STR_COULD_NOT_FIND_AT_PATH = 6392,
 
     STR_FILE_CONTAINS_UNSUPPORTED_RIDE_TYPES = 6398,
+    // OPENRCT2MINI revision 70: shown when a V2 .park file's contents (map
+    // size, ride count, or entity count) exceed our reduced engine caps.
+    STR_PARK_EXCEEDS_OPENRCT2MINI_LIMITS = 7037,
 
     STR_NEEDS_RCT2_FILES_MANUAL = 6399,
 

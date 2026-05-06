@@ -1038,6 +1038,23 @@ namespace OpenRCT2
                 auto windowManager = _uiContext->GetWindowManager();
                 windowManager->ShowError(STR_FILE_CONTAINS_UNSUPPORTED_RIDE_TYPES, kStringIdNone, {});
             }
+            catch (const ParkExceedsDeviceLimitsException& e)
+            {
+                // OPENRCT2MINI revision 70: a V2 .park file's contents
+                // exceeded one of OpenRCT2mini's reduced engine caps (map
+                // size 255×255, 255 rides, or 10000 entities). The loader
+                // threw cleanly mid-stream — we surface that as a refusal
+                // dialog rather than the silent truncation / corruption
+                // upstream did. Console line carries the full detail; the
+                // UI message uses the shared "park exceeds limits" string.
+                Console::Error::WriteLine("Unable to open park: %s", e.what());
+                if (loadTitleScreenFirstOnFail)
+                {
+                    SetActiveScene(GetTitleScene());
+                }
+                auto windowManager = _uiContext->GetWindowManager();
+                windowManager->ShowError(STR_PARK_EXCEEDS_OPENRCT2MINI_LIMITS, kStringIdNone, {});
+            }
             catch (const UnsupportedVersionException& e)
             {
                 Console::Error::WriteLine("Unable to open park: unsupported park version");

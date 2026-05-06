@@ -3831,3 +3831,4 @@ STR_7033    :Par défaut
 STR_7034    :Contraste élevé
 STR_7035    :Classique
 STR_7036    :(aucune)
+STR_7037    :Ce parc dépasse les limites prises en charge par OpenRCT2mini (taille de la carte, attractions ou entités) et ne peut pas être chargé sur cet appareil.
