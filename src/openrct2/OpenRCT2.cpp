@@ -24,6 +24,7 @@ bool gOpenRCT2Headless = false;
 bool gOpenRCT2NoGraphics = false;
 
 bool gOpenRCT2ShowChangelog;
+StringId gOpenRCT2PendingParkLoadError = kStringIdNone;  // OPENRCT2MINI revision 70c
 bool gOpenRCT2SilentBreakpad;
 
 uint32_t gCurrentDrawCount = 0;

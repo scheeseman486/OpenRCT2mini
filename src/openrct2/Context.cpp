@@ -1043,17 +1043,23 @@ namespace OpenRCT2
                 // OPENRCT2MINI revision 70: a V2 .park file's contents
                 // exceeded one of OpenRCT2mini's reduced engine caps (map
                 // size 255×255, 255 rides, or 10000 entities). The loader
-                // threw cleanly mid-stream — we surface that as a refusal
-                // dialog rather than the silent truncation / corruption
-                // upstream did. Console line carries the full detail; the
-                // UI message uses the shared "park exceeds limits" string.
+                // threw cleanly mid-stream. Console carries full detail.
+                //
+                // Revision 70c: defer the UI error to the title scene
+                // instead of opening it here. When this catch fires from
+                // SwitchToStartUpScene's command-line load path, the
+                // outer code (Context.cpp:1324) immediately calls
+                // SetActiveScene(GetTitleScene()), which runs
+                // ContextResetSubsystems → WindowInitAll →
+                // CloseAllExceptFlags({}) and clobbers any error window
+                // we opened here. The title scene drains
+                // gOpenRCT2PendingParkLoadError after its own
+                // CreateWindows() runs, so the dialog survives the
+                // transition. Don't call SetActiveScene from here either
+                // — let the caller pick the next scene; we'd just waste
+                // a transition.
                 Console::Error::WriteLine("Unable to open park: %s", e.what());
-                if (loadTitleScreenFirstOnFail)
-                {
-                    SetActiveScene(GetTitleScene());
-                }
-                auto windowManager = _uiContext->GetWindowManager();
-                windowManager->ShowError(STR_PARK_EXCEEDS_OPENRCT2MINI_LIMITS, kStringIdNone, {});
+                gOpenRCT2PendingParkLoadError = STR_PARK_EXCEEDS_OPENRCT2MINI_LIMITS;
             }
             catch (const UnsupportedVersionException& e)
             {

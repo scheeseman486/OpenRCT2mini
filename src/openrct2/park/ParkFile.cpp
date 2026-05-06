@@ -1218,18 +1218,13 @@ namespace OpenRCT2
                     if (gameState.mapSize.x > kMaximumMapSizePractical
                         || gameState.mapSize.y > kMaximumMapSizePractical)
                     {
-                        // OPENRCT2MINI revision 70b: surface the refusal as
-                        // an in-game dialog at the throw site rather than
-                        // relying on every downstream catch arm to do it.
-                        // FileBrowser, LoadSave-preview and TitleSequence-
-                        // Player all swallow std::exception with console-
-                        // only handling, so a catch-site-only ShowError
-                        // missed several user-facing paths. ErrorOpen
-                        // CloseByClass(error)es itself before re-opening, so
-                        // the call is idempotent — duplicate triggers from
-                        // the catch arm in Context.cpp just refresh the
-                        // same window.
-                        ContextShowError(STR_PARK_EXCEEDS_OPENRCT2MINI_LIMITS, kStringIdNone, {});
+                        // OPENRCT2MINI revision 70c: rev-70b's throw-site
+                        // ContextShowError got clobbered by the title-scene
+                        // transition that happens on CLI-load failure
+                        // (Context.cpp:1324). The Context.cpp catch arm now
+                        // sets gOpenRCT2PendingParkLoadError; TitleScene::Load
+                        // drains it after its own CreateWindows() runs, so the
+                        // dialog actually survives.
                         throw ParkExceedsDeviceLimitsException(
                             ParkExceedsDeviceLimitsException::Limit::mapSize,
                             kMaximumMapSizePractical,
@@ -1467,8 +1462,7 @@ namespace OpenRCT2
                         const auto idx = rideId.ToUnderlying();
                         if (idx >= OpenRCT2::Limits::kMaxRidesInPark)
                         {
-                            // OPENRCT2MINI revision 70b: see mapSize site.
-                            ContextShowError(STR_PARK_EXCEEDS_OPENRCT2MINI_LIMITS, kStringIdNone, {});
+                            // OPENRCT2MINI revision 70c: see mapSize site.
                             throw ParkExceedsDeviceLimitsException(
                                 ParkExceedsDeviceLimitsException::Limit::rideCount,
                                 OpenRCT2::Limits::kMaxRidesInPark,
@@ -2740,9 +2734,7 @@ namespace OpenRCT2
                 // throwaway placeholder, dropping them; the visible result
                 // was a park with missing peeps / vehicles / litter. Throw
                 // so the user sees the refusal instead.
-                // Revision 70b: also raise the in-game dialog at the throw
-                // site (see mapSize block for the rationale).
-                ContextShowError(STR_PARK_EXCEEDS_OPENRCT2MINI_LIMITS, kStringIdNone, {});
+                // Revision 70c: deferred to title scene; see mapSize site.
                 throw ParkExceedsDeviceLimitsException(
                     ParkExceedsDeviceLimitsException::Limit::entityCount,
                     kMaxEntities,

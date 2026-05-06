@@ -151,6 +151,20 @@ void TitleScene::Load()
         ContextOpenWindow(WindowClass::changelog);
     }
 
+    // OPENRCT2MINI revision 70c: drain a pending park-load error here, after
+    // CreateWindows() has run and ContextResetSubsystems' CloseAllExceptFlags
+    // is no longer about to fire. Showing the error window any earlier in the
+    // load chain — including from the LoadParkFromStream catch arm or the
+    // ParkFile.cpp throw sites — gets clobbered by the immediate
+    // SetActiveScene(title) the startup-time CLI-load path fires
+    // (Context.cpp:1324). Mirrors the gOpenRCT2ShowChangelog pattern above.
+    if (gOpenRCT2PendingParkLoadError != kStringIdNone)
+    {
+        auto pendingTitle = gOpenRCT2PendingParkLoadError;
+        gOpenRCT2PendingParkLoadError = kStringIdNone;
+        ContextShowError(pendingTitle, kStringIdNone, {});
+    }
+
     LOG_VERBOSE("TitleScene::Load() finished");
     MINI_DBG_PUTS("  title: Load() finished");
 }

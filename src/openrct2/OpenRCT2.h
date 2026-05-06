@@ -10,6 +10,7 @@
 #pragma once
 
 #include "core/StringTypes.h"
+#include "localisation/StringIdType.h"  // OPENRCT2MINI revision 70c: StringId for gOpenRCT2PendingParkLoadError
 
 enum class PromptMode : uint8_t;
 
@@ -46,6 +47,12 @@ extern u8string gCustomPassword;
 extern bool gOpenRCT2Headless;
 extern bool gOpenRCT2NoGraphics;
 extern bool gOpenRCT2ShowChangelog;
+// OPENRCT2MINI revision 70c: deferred park-load error. Park-load failures
+// that happen during startup or via SetActiveScene transitions get their
+// error windows clobbered by the title scene's CloseAllExceptFlags reset.
+// Catch arms set this to a string id; TitleScene::Load shows it after
+// the scene's own windows are up. kStringIdNone means no pending error.
+extern StringId gOpenRCT2PendingParkLoadError;
 extern bool gOpenRCT2SilentBreakpad;
 extern u8string gSilentRecordingName;
 extern bool gSilentReplays;
