@@ -596,27 +596,21 @@ else
 fi
 
 ##############################################################################
-# 5. Default config.ini — points the binary at the user's RCT2 install at a
-#    known SD-card location so they don't have to navigate the file picker
-#    on first run.
+# 5. (no shipped config.ini) — revision 79.
+#
+# Earlier revisions shipped a pre-populated save/OpenRCT2/config.ini that set
+# game_path = rct2, window_width = 640, etc. None of that is needed any more:
+#
+#   - Cut 46 makes the binary auto-detect rct2/ (and rct1/) next to the
+#     executable when no game_path is configured. INSTALL.txt tells the user
+#     to place RCT2 at exactly that location.
+#   - Cuts 40c / 40d default window_width/height to 640×480 and hard-clamp
+#     them — the saved values don't matter.
+#   - fullscreen_mode = 0 and window_scale = 1.0 are the in-engine defaults.
+#
+# Keeping the directory itself so the binary's first save doesn't have to
+# create it.
 ##############################################################################
-cat > "$APP_DIR/save/OpenRCT2/config.ini" <<'EOF'
-; OPENRCT2MINI default config (revisions 39 / 39j / 63).
-[general]
-; Path to the user's RCT2 install. OpenRCT2 reads this verbatim and resolves
-; relative paths against process CWD, NOT the config.ini directory. Our
-; launch.sh does `cd $APPDIR` (= /mnt/SDCARD/Roms/PORTS/Games/OpenRCT2mini),
-; so a bare "rct2" resolves there — which is exactly where INSTALL.txt
-; tells the user to place their game files.
-game_path = rct2
-
-; Lock window to the device's native panel — saves overhead and makes the
-; software cursor coordinate space deterministic (revision 29).
-window_width = 640
-window_height = 480
-fullscreen_mode = 0
-window_scale = 1
-EOF
 
 ##############################################################################
 # 7. INSTALL.txt — user-facing instructions, pinned in the tarball root.
