@@ -92,7 +92,8 @@ namespace OpenRCT2::Ui::Windows
                     break;
             }
             WindowTextInputOpen(
-                this, widgetIndex, STR_SELECTION_SIZE, STR_ENTER_SELECTION_SIZE, ft, kStringIdNone, kStringIdNone, maxLength);
+                this, widgetIndex, STR_SELECTION_SIZE, STR_ENTER_SELECTION_SIZE, ft, kStringIdNone, kStringIdNone, maxLength,
+                OskMode::numpad);
         }
 
         void onMouseUp(WidgetIndex widgetIndex) override

@@ -327,7 +327,7 @@ namespace OpenRCT2::Ui::Windows
             // Practical map size is 2 lower than the technical map size
             currentValue -= 2;
             WindowTextInputOpen(
-                this, callingWidget, STR_MAP_SIZE_2, STR_ENTER_MAP_SIZE, ft, STR_FORMAT_INTEGER, currentValue, 4);
+                this, callingWidget, STR_MAP_SIZE_2, STR_ENTER_MAP_SIZE, ft, STR_FORMAT_INTEGER, currentValue, 4, OskMode::numpad);
         }
 
         void SharedMouseUp(WidgetIndex widgetIndex)
@@ -617,7 +617,7 @@ namespace OpenRCT2::Ui::Windows
                     ft.Add<int16_t>(50);
                     WindowTextInputOpen(
                         this, widgetIndex, STR_TREE_TO_LAND_RATIO, STR_ENTER_TREE_TO_LAND_RATIO, ft, STR_FORMAT_INTEGER,
-                        _settings.treeToLandRatio, 2);
+                        _settings.treeToLandRatio, 2, OskMode::numpad);
                     break;
                 }
 
@@ -628,7 +628,7 @@ namespace OpenRCT2::Ui::Windows
                     ft.Add<int16_t>(BaseZToMetres(kMaximumLandHeight));
                     WindowTextInputOpen(
                         this, widgetIndex, STR_MIN_TREE_ALTITUDE, STR_ENTER_MIN_TREE_ALTITUDE, ft, STR_FORMAT_INTEGER,
-                        BaseZToMetres(_settings.minTreeAltitude), 6);
+                        BaseZToMetres(_settings.minTreeAltitude), 6, OskMode::numpad);
                     break;
                 }
 
@@ -639,7 +639,7 @@ namespace OpenRCT2::Ui::Windows
                     ft.Add<int16_t>(BaseZToMetres(kMaximumLandHeight));
                     WindowTextInputOpen(
                         this, widgetIndex, STR_MAX_TREE_ALTITUDE, STR_ENTER_MAX_TREE_ALTITUDE, ft, STR_FORMAT_INTEGER,
-                        BaseZToMetres(_settings.maxTreeAltitude), 6);
+                        BaseZToMetres(_settings.maxTreeAltitude), 6, OskMode::numpad);
                     break;
                 }
             }
@@ -789,7 +789,7 @@ namespace OpenRCT2::Ui::Windows
                     ft.Add<int32_t>(1000);
                     WindowTextInputOpen(
                         this, widgetIndex, STR_SIMPLEX_BASE_FREQUENCY, STR_ENTER_BASE_FREQUENCY, ft, STR_FORMAT_COMMA2DP32,
-                        _settings.simplex_base_freq, 4);
+                        _settings.simplex_base_freq, 4, OskMode::numpad);
                     break;
                 }
 
@@ -800,7 +800,7 @@ namespace OpenRCT2::Ui::Windows
                     ft.Add<int16_t>(10);
                     WindowTextInputOpen(
                         this, widgetIndex, STR_SIMPLEX_OCTAVES, STR_ENTER_OCTAVES, ft, STR_FORMAT_INTEGER,
-                        _settings.simplex_octaves, 10);
+                        _settings.simplex_octaves, 10, OskMode::numpad);
                     break;
                 }
             }
@@ -927,7 +927,7 @@ namespace OpenRCT2::Ui::Windows
                     ft.Add<int16_t>(20);
                     WindowTextInputOpen(
                         this, widgetIndex, STR_SMOOTH_STRENGTH, STR_ENTER_SMOOTH_STRENGTH, ft, STR_FORMAT_INTEGER,
-                        _settings.smooth_strength, 2);
+                        _settings.smooth_strength, 2, OskMode::numpad);
                     break;
                 }
             }
@@ -998,7 +998,7 @@ namespace OpenRCT2::Ui::Windows
                     ft.Add<int16_t>(BaseZToMetres(kMaximumLandHeight));
                     WindowTextInputOpen(
                         this, widgetIndex, STR_MIN_LAND_HEIGHT, STR_ENTER_MIN_LAND, ft, STR_FORMAT_INTEGER,
-                        BaseZToMetres(_settings.heightmapLow), 6);
+                        BaseZToMetres(_settings.heightmapLow), 6, OskMode::numpad);
                     break;
                 }
 
@@ -1009,7 +1009,7 @@ namespace OpenRCT2::Ui::Windows
                     ft.Add<int16_t>(BaseZToMetres(kMaximumLandHeight));
                     WindowTextInputOpen(
                         this, widgetIndex, STR_MAX_LAND_HEIGHT, STR_ENTER_MAX_LAND, ft, STR_FORMAT_INTEGER,
-                        BaseZToMetres(_settings.heightmapHigh), 6);
+                        BaseZToMetres(_settings.heightmapHigh), 6, OskMode::numpad);
                     break;
                 }
 
@@ -1244,7 +1244,7 @@ namespace OpenRCT2::Ui::Windows
                     ft.Add<int16_t>(kMaximumWaterHeight);
                     WindowTextInputOpen(
                         this, WIDX_WATER_LEVEL, STR_WATER_LEVEL, STR_ENTER_WATER_LEVEL, ft, STR_FORMAT_INTEGER,
-                        _settings.waterLevel, 6);
+                        _settings.waterLevel, 6, OskMode::numpad);
                     break;
                 }
 

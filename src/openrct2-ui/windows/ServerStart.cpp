@@ -96,7 +96,7 @@ namespace OpenRCT2::Ui::Windows
                     close();
                     break;
                 case WIDX_PORT_INPUT:
-                    WindowStartTextbox(*this, widgetIndex, _port, 6);
+                    WindowStartTextbox(*this, widgetIndex, _port, 6, OskMode::numpad);
                     break;
                 case WIDX_NAME_INPUT:
                     WindowStartTextbox(*this, widgetIndex, _name, 64);

@@ -933,7 +933,7 @@ static StringId window_cheats_page_titles[] = {
                     MoneyToString(_moneySpinnerValue, _moneySpinnerText, kMoneyStringMaxlength, false);
                     WindowTextInputRawOpen(
                         this, WIDX_MONEY_SPINNER, STR_ENTER_NEW_VALUE, STR_ENTER_NEW_VALUE, {}, _moneySpinnerText,
-                        kMoneyStringMaxlength);
+                        kMoneyStringMaxlength, OskMode::numpad);
                     break;
                 case WIDX_SET_MONEY:
                     CheatsSet(CheatType::setMoney, _moneySpinnerValue);

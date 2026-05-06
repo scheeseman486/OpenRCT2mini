@@ -823,7 +823,8 @@ namespace OpenRCT2::Ui::Windows
                     utf8 _moneyInputText[kMoneyStringMaxlength] = {};
                     MoneyToString(Park::GetEntranceFee(park), _moneyInputText, kMoneyStringMaxlength, false);
                     WindowTextInputRawOpen(
-                        this, WIDX_PRICE, STR_ENTER_NEW_VALUE, STR_ENTER_NEW_VALUE, {}, _moneyInputText, kMoneyStringMaxlength);
+                        this, WIDX_PRICE, STR_ENTER_NEW_VALUE, STR_ENTER_NEW_VALUE, {}, _moneyInputText, kMoneyStringMaxlength,
+                        OskMode::numpad);
                 }
             }
         }

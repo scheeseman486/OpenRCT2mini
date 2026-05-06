@@ -3385,7 +3385,7 @@ namespace OpenRCT2::Ui::Windows
             auto currentValue = (widgetIndex == WIDX_MINIMUM_LENGTH) ? ride->minWaitingTime : ride->maxWaitingTime;
             char buffer[5]{};
             snprintf(buffer, std::size(buffer), "%u", currentValue);
-            WindowTextInputRawOpen(this, widgetIndex, title, STR_ENTER_VALUE, ft, buffer, 4);
+            WindowTextInputRawOpen(this, widgetIndex, title, STR_ENTER_VALUE, ft, buffer, 4, OskMode::numpad);
         }
 
         void OperatingTweakTextInput(const Ride& ride)
@@ -3418,7 +3418,7 @@ namespace OpenRCT2::Ui::Windows
             char buffer[6]{};
             snprintf(buffer, std::size(buffer), "%u", currentValue);
 
-            WindowTextInputRawOpen(this, WIDX_MODE_TWEAK, title, STR_ENTER_VALUE, ft, buffer, 4);
+            WindowTextInputRawOpen(this, WIDX_MODE_TWEAK, title, STR_ENTER_VALUE, ft, buffer, 4, OskMode::numpad);
         }
 
         void OperatingOnDropdown(WidgetIndex widgetIndex, int32_t dropdownIndex)
@@ -6586,7 +6586,7 @@ namespace OpenRCT2::Ui::Windows
                         MoneyToString(ride->price[0], _moneyInputText, kMoneyStringMaxlength, true);
                         WindowTextInputRawOpen(
                             this, WIDX_PRIMARY_PRICE, STR_ENTER_NEW_VALUE, STR_ENTER_NEW_VALUE, {}, _moneyInputText,
-                            kMoneyStringMaxlength);
+                            kMoneyStringMaxlength, OskMode::numpad);
                     }
                     break;
                 }
@@ -6600,7 +6600,7 @@ namespace OpenRCT2::Ui::Windows
                     MoneyToString(price64, _moneyInputText, kMoneyStringMaxlength, true);
                     WindowTextInputRawOpen(
                         this, WIDX_SECONDARY_PRICE, STR_ENTER_NEW_VALUE, STR_ENTER_NEW_VALUE, {}, _moneyInputText,
-                        kMoneyStringMaxlength);
+                        kMoneyStringMaxlength, OskMode::numpad);
                 }
                 break;
                 case WIDX_SECONDARY_PRICE_SAME_THROUGHOUT_PARK:

@@ -422,7 +422,8 @@ namespace OpenRCT2::Ui::Windows
             ft.Add<uint16_t>(kLandToolMinimumSize);
             ft.Add<uint16_t>(kLandToolMaximumSize);
             WindowTextInputOpen(
-                this, WIDX_PREVIEW, STR_SELECTION_SIZE, STR_ENTER_SELECTION_SIZE, ft, kStringIdNone, kStringIdNone, 3);
+                this, WIDX_PREVIEW, STR_SELECTION_SIZE, STR_ENTER_SELECTION_SIZE, ft, kStringIdNone, kStringIdNone, 3,
+                OskMode::numpad);
         }
     };
 

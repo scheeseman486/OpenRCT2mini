@@ -122,7 +122,7 @@ namespace OpenRCT2::Ui::Windows
                     WindowTextInputOpen(
                         this, WIDX_RATE, STR_RATE_INPUT_TITLE, STR_RATE_INPUT_DESC, {}, STR_FORMAT_INTEGER,
                         static_cast<uint32_t>(CurrencyDescriptors[EnumValue(CurrencyType::custom)].rate),
-                        kCurrencyRateMaxNumDigits);
+                        kCurrencyRateMaxNumDigits, OskMode::numpad);
                     break;
             }
         }
