@@ -47,7 +47,12 @@ namespace OpenRCT2::Ui::Windows
     namespace
     {
         constexpr int32_t kOskWidth = 640;
+        // Default height — edit strip + 5 key rows.
         constexpr int32_t kOskHeight = 240;
+        // Console mode: skip the edit strip (console renders its own
+        // prompt above us, so the strip is redundant). 5 rows × 42 +
+        // small top/bottom padding fits in 214.
+        constexpr int32_t kOskHeightConsole = 214;
         constexpr int32_t kEditStripH = 26;
         constexpr int16_t kCellW = 49;
         constexpr int16_t kRowH = 42;
@@ -354,7 +359,11 @@ namespace OpenRCT2::Ui::Windows
             {
                 // Background + standard widget pass.
                 drawWidgets(rt);
-                DrawEditStrip(rt);
+                // Console mode shares the prompt line with the
+                // console region above — drawing our own strip would
+                // be a confusing duplicate.
+                if (_target != OskTarget::Console)
+                    DrawEditStrip(rt);
             }
 
             void onDrawWidget(WidgetIndex widgetIndex, RenderTarget& rt) override
@@ -429,8 +438,9 @@ namespace OpenRCT2::Ui::Windows
                 _labels.clear();
 
                 // First widget = background frame.
+                const int32_t windowH = (_target == OskTarget::Console) ? kOskHeightConsole : kOskHeight;
                 widgets.push_back(makeWidget(
-                    { 0, 0 }, { kOskWidth, kOskHeight }, WidgetType::frame, WindowColour::primary));
+                    { 0, 0 }, { kOskWidth, windowH }, WidgetType::frame, WindowColour::primary));
 
                 const OskRowSpan* layout = (_mode == OskMode::full) ? kFullLayout : kNumpadLayout;
                 const size_t rowCount = (_mode == OskMode::full) ? std::size(kFullLayout)
@@ -443,7 +453,10 @@ namespace OpenRCT2::Ui::Windows
                     total += layout[r].count;
                 _labels.resize(total);
 
-                const int16_t gridY0 = static_cast<int16_t>(kEditStripH);
+                // Skip edit strip in console mode — console renders
+                // its own prompt above us, so a duplicate strip is
+                // redundant and wastes pixels.
+                const int16_t gridY0 = (_target == OskTarget::Console) ? int16_t{ 2 } : static_cast<int16_t>(kEditStripH);
                 const int16_t cellH = kRowH;
 
                 size_t labelIdx = 0;
@@ -1023,7 +1036,7 @@ namespace OpenRCT2::Ui::Windows
 
     namespace
     {
-        OskWindow* OpenSkeleton(WindowBase* parent, OskMode mode)
+        OskWindow* OpenSkeleton(WindowBase* parent, OskMode mode, int32_t height)
         {
             auto* windowMgr = GetWindowManager();
             if (windowMgr->FindByClass(WindowClass::osk) != nullptr)
@@ -1032,10 +1045,10 @@ namespace OpenRCT2::Ui::Windows
             const int32_t screenW = ContextGetWidth();
             const int32_t screenH = ContextGetHeight();
             const int32_t w = std::min<int32_t>(screenW, kOskWidth);
-            const auto pos = ScreenCoordsXY{ (screenW - w) / 2, screenH - kOskHeight };
+            const auto pos = ScreenCoordsXY{ (screenW - w) / 2, screenH - height };
 
             auto* wnd = windowMgr->Create<OskWindow>(
-                WindowClass::osk, pos, ScreenSize{ w, kOskHeight }, WindowFlag::stickToFront);
+                WindowClass::osk, pos, ScreenSize{ w, height }, WindowFlag::stickToFront);
             if (wnd == nullptr)
                 return nullptr;
             wnd->setMode(mode);
@@ -1046,7 +1059,7 @@ namespace OpenRCT2::Ui::Windows
 
     void OskOpen(WindowBase* parent, OskMode mode)
     {
-        auto* wnd = OpenSkeleton(parent, mode);
+        auto* wnd = OpenSkeleton(parent, mode, kOskHeight);
         if (wnd == nullptr)
             return;
         wnd->setTarget(OskTarget::TextInputWindow, 0);
@@ -1056,7 +1069,7 @@ namespace OpenRCT2::Ui::Windows
     void OskOpenForTextbox(
         WindowBase* parent, WidgetIndex widgetIdx, std::string_view initialText, size_t maxLength, OskMode mode)
     {
-        auto* wnd = OpenSkeleton(parent, mode);
+        auto* wnd = OpenSkeleton(parent, mode, kOskHeight);
         if (wnd == nullptr)
             return;
         wnd->setTarget(OskTarget::Textbox, widgetIdx);
@@ -1068,11 +1081,19 @@ namespace OpenRCT2::Ui::Windows
         // Console always uses the full keyboard. No parent window —
         // the console isn't a Window, it's drawn directly by
         // UiContext::Draw, so colour inheritance doesn't apply.
-        auto* wnd = OpenSkeleton(nullptr, OskMode::full);
+        auto* wnd = OpenSkeleton(nullptr, OskMode::full, kOskHeightConsole);
         if (wnd == nullptr)
             return;
         wnd->setTarget(OskTarget::Console, 0);
         wnd->setEditText("", 0);
+    }
+
+    int32_t OskGetActiveHeight()
+    {
+        auto* osk = FindOsk();
+        if (osk == nullptr)
+            return 0;
+        return osk->height;
     }
 
     void OskClose()

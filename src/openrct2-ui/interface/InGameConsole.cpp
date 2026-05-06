@@ -309,9 +309,15 @@ void InGameConsole::Update()
 {
     _consoleTopLeft = { 0, 0 };
     // OPENRCT2MINI: clamp console region to fit above the OSK when
-    // it's up. Default 322 covers most of a 480 px panel; the OSK
-    // occupies the bottom 240 so we'd overlap.
-    const int32_t bottomY = OpenRCT2::Ui::Windows::OskIsActive() ? 240 : 322;
+    // it's up. The OSK uses a compact 214 px layout in console mode
+    // (no edit strip — the console renders its own prompt) so we
+    // get the saved 26 px back as console real estate.
+    int32_t bottomY = 322;
+    if (OpenRCT2::Ui::Windows::OskIsActive())
+    {
+        const int32_t oskH = OpenRCT2::Ui::Windows::OskGetActiveHeight();
+        bottomY = ContextGetHeight() - oskH;
+    }
     _consoleBottomRight = { ContextGetWidth(), bottomY };
 
     if (_isOpen)

@@ -226,7 +226,11 @@ namespace OpenRCT2::Ui::Windows
             // centreScreen flag would put it half behind the OSK.
             if (OskIsActive())
             {
-                constexpr int32_t kOskHeightForAnchor = 240;
+                // OPENRCT2MINI: query the OSK's current height (240 in
+                // full mode, 214 in console mode). TextInputWindow only
+                // pairs with full-mode OSK in practice, but the
+                // accessor is the truthful source.
+                const int32_t kOskHeightForAnchor = OskGetActiveHeight();
                 constexpr int32_t kGap = 6;
                 const int32_t screenH = ContextGetHeight();
                 const int32_t screenW = ContextGetWidth();

@@ -338,6 +338,10 @@ namespace OpenRCT2::Ui::Windows
     void OskOpenForConsole();
     void OskClose();
     bool OskIsActive();
+    // OPENRCT2MINI: pixel height of the currently-open OSK window
+    // (full mode = 240, console mode = 214). Returns 0 if no OSK.
+    // Used by InGameConsole to clamp its draw region above the OSK.
+    int32_t OskGetActiveHeight();
     // OPENRCT2MINI: called by the OSK at commit time. Replaces the
     // TextInputWindow's buffer with `text`, fires its OK callback and
     // closes it. No-op if `w` isn't a TextInputWindow.
