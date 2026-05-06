@@ -1178,7 +1178,12 @@ namespace OpenRCT2::Ui::Windows
                 Config::Save();
             }
 
-            ScreenSize windowSize = { config.fileBrowserWidth, config.fileBrowserHeight };
+            // OPENRCT2MINI: spawn at the minimum size so the window
+            // fits the 640×480 panel without any part falling off
+            // screen. Resizing is still available via the resize
+            // grip — the saved fileBrowserWidth/Height aren't honoured
+            // on the device because they easily exceed the panel.
+            ScreenSize windowSize = kWindowSizeMin;
 
             RegisterCallback(callback, isJsCallback);
 
