@@ -285,6 +285,16 @@ namespace OpenRCT2::Ui
         _visible = visible;
     }
 
+    // OPENRCT2MINI revision 78: hotspot accessor for the host engine's
+    // save+restore region. Decodes the sprite if it's not cached yet.
+    std::pair<int, int> SoftwareCursor::GetActiveHotspot()
+    {
+        const Sprite* spr = GetOrCreateSprite(_activeCursor);
+        if (spr == nullptr)
+            return { 0, 0 };
+        return { spr->hotspotX, spr->hotspotY };
+    }
+
     void SoftwareCursor::Composite(
         OpenRCT2::Drawing::PaletteIndex* bits, int32_t bitsW, int32_t bitsH, int32_t x, int32_t y)
     {

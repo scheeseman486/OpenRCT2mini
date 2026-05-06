@@ -472,7 +472,22 @@ public:
 
     void SetCursorVisible(bool value) override
     {
+#ifdef ENABLE_SOFTWARE_CURSOR
+        // OPENRCT2MINI revision 78: when the software cursor is in charge
+        // (always on the device, and on host dev/test builds with
+        // ENABLE_SOFTWARE_CURSOR baked in via cut 45), keep the SDL/system
+        // cursor permanently hidden. Otherwise game callers like
+        // ContextShowCursor / SCENE_INTRO_END / etc. would re-enable the
+        // OS cursor on top of the composited software one and the user
+        // sees two cursors slightly offset — exactly what looked like a
+        // trail under fast movement before. Software-cursor visibility
+        // is a separate concern handled inside the engine (loading-window
+        // suppression, cut 38b's intro skip, etc.).
+        (void)value;
+        SDL_ShowCursor(SDL_DISABLE);
+#else
         SDL_ShowCursor(value ? SDL_ENABLE : SDL_DISABLE);
+#endif
     }
 
     ScreenCoordsXY GetCursorPosition() override

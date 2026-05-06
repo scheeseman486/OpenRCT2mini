@@ -33,6 +33,7 @@
     #include <openrct2/interface/Cursors.h>
     #include <array>
     #include <unordered_map>
+    #include <utility>
 
 namespace OpenRCT2::Ui
 {
@@ -87,6 +88,13 @@ namespace OpenRCT2::Ui
         // pointer + dimensions and calls this BEFORE the texture upload.
         void Composite(
             OpenRCT2::Drawing::PaletteIndex* bits, int32_t bitsW, int32_t bitsH, int32_t x, int32_t y);
+
+        // OPENRCT2MINI revision 78: expose the active cursor's hotspot so
+        // HardwareDisplayDrawingEngine can anchor its save+restore region
+        // exactly on the sprite footprint. Returns (0, 0) if the active
+        // cursor hasn't been decoded yet (cache miss); the next Composite
+        // will populate it.
+        std::pair<int, int> GetActiveHotspot();
     };
 } // namespace OpenRCT2::Ui
 

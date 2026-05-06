@@ -84,16 +84,14 @@ private:
     // footprint. Save the under-cursor pixels right before we composite
     // each frame, restore them at the START of next frame's BeginDraw
     // (before PaintWindows runs). Buffer is sized for the cursor sprite.
-    // OPENRCT2MINI revision 75: enlarged from 64 to 96 to reliably erase
-    // tool cursors with bottom-aligned hotspots. The cursor sprite is
-    // 32×32 and a 64×64 save mathematically covers any 32×32 sprite with
-    // hotspot in [0,32]; a fast-moving cursor (R1-modifier ~6 px/frame)
-    // combined with the 1-frame-delayed dirty-block Invalidate could
-    // still leave 1-2 px of cursor outline at the trailing edge for a
-    // frame or two. 96×96 gives 32 px of margin in every direction —
-    // enough to absorb several frames of fast movement plus the sprite's
-    // own footprint. Buffer cost is 9 KB (vs 4 KB).
-    static constexpr int kCursorBackupCap = 96;
+    // OPENRCT2MINI revision 78: tightened back to 32×32 — the exact
+    // sprite size — now that the save origin is anchored at the sprite's
+    // top-left (state.position - hotspot) instead of being centred on
+    // state.position. Earlier 64-px / 96-px caps existed to give the
+    // centred-on-state save enough margin to cover any 32×32 sprite for
+    // any hotspot; with sprite-relative anchoring the cap matches the
+    // sprite footprint exactly. Buffer cost: 1 KB (vs 9 KB at 96×96).
+    static constexpr int kCursorBackupCap = 32;
     OpenRCT2::Drawing::PaletteIndex _cursorBackup[kCursorBackupCap * kCursorBackupCap]{};
     int32_t _cursorBackupX = 0;
     int32_t _cursorBackupY = 0;
@@ -432,12 +430,13 @@ private:
                 // eventually repainted them.
                 const int32_t bitsW = static_cast<int32_t>(_width);
                 const int32_t bitsH = static_cast<int32_t>(_height);
-                // OPENRCT2MINI revision 75: origin = -kCursorBackupCap/2 so
-                // the save region stays centred on the cursor. Sized so any
-                // 32×32 sprite sits comfortably in the middle with margin
-                // for fast moves between save+restore cycles.
-                const int32_t bx = state->position.x - (kCursorBackupCap / 2);
-                const int32_t by = state->position.y - (kCursorBackupCap / 2);
+                // OPENRCT2MINI revision 78: anchor save at the sprite
+                // top-left (state.position - hotspot). The save region is
+                // exactly the sprite footprint, so kCursorBackupCap can
+                // match the 32×32 sprite size with no margin needed.
+                const auto [hsX, hsY] = _swCursor->GetActiveHotspot();
+                const int32_t bx = state->position.x - hsX;
+                const int32_t by = state->position.y - hsY;
                 _cursorBackupX = bx;
                 _cursorBackupY = by;
                 _cursorBackupW = kCursorBackupCap;
