@@ -437,10 +437,17 @@ namespace OpenRCT2::Config
                 model->cursorStyle = CursorStyle::Classic;
             else if (styleName == "high_contrast")
                 model->cursorStyle = CursorStyle::HighContrast;
+            else if (styleName == "windows")
+                model->cursorStyle = CursorStyle::Windows;
             else
                 model->cursorStyle = CursorStyle::Default;
             // OPENRCT2MINI: optional drop shadow under the software cursor.
-            model->cursorDropShadow = reader->GetBoolean("cursor_drop_shadow", false);
+            // Revision 76: enabled by default. The shadow makes the cursor
+            // significantly easier to track over busy backgrounds (terrain,
+            // ride pieces) and the cost is one extra palette LUT lookup
+            // per non-transparent sprite pixel — negligible for a 32×32
+            // cursor at any framerate.
+            model->cursorDropShadow = reader->GetBoolean("cursor_drop_shadow", true);
         }
     }
 
@@ -469,12 +476,14 @@ namespace OpenRCT2::Config
         writer->WriteBoolean("window_buttons_on_the_left", model->windowButtonsOnTheLeft);
         writer->WriteBoolean("enlarged_ui", model->enlargedUi);
         writer->WriteBoolean("touch_enhancements", model->touchEnhancements);
-        // OPENRCT2MINI revision 59 / 61: cursor-style theme as a name string.
+        // OPENRCT2MINI revision 59 / 61 / 77: cursor-style theme as a name string.
         u8string styleName{ "default" };
         if (model->cursorStyle == CursorStyle::Classic)
             styleName = "classic";
         else if (model->cursorStyle == CursorStyle::HighContrast)
             styleName = "high_contrast";
+        else if (model->cursorStyle == CursorStyle::Windows)
+            styleName = "windows";
         writer->WriteString("cursor_style", styleName);
         // OPENRCT2MINI: optional drop shadow under the software cursor.
         writer->WriteBoolean("cursor_drop_shadow", model->cursorDropShadow);
