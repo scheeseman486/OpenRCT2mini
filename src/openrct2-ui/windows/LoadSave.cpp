@@ -1178,12 +1178,28 @@ namespace OpenRCT2::Ui::Windows
                 Config::Save();
             }
 
-            // OPENRCT2MINI: spawn at the minimum size so the window
-            // fits the 640×480 panel without any part falling off
-            // screen. Resizing is still available via the resize
-            // grip — the saved fileBrowserWidth/Height aren't honoured
-            // on the device because they easily exceed the panel.
-            ScreenSize windowSize = kWindowSizeMin;
+            // OPENRCT2MINI: spawn at the actual minimum that LoadSave's
+            // onOpen will enforce via WindowSetResize. That includes a
+            // preview pane (250×200 for screenshot, 180×180 for
+            // mini-map) added to kWindowSizeMin. If we passed only
+            // kWindowSizeMin, Create would centre the window for
+            // 300×175 then onOpen would grow it to ~550×375 from the
+            // same top-left, pushing the bottom-right off-screen.
+            // Saved fileBrowserWidth/Height are deliberately ignored —
+            // they easily exceed the 640×480 panel.
+            ScreenSize previewSize{ 0, 0 };
+            switch (config.fileBrowserPreviewType)
+            {
+                case ParkPreviewPref::screenshot:
+                    previewSize = { kPreviewWidthScreenshot, kPreviewWidthScreenshot / 5 * 4 };
+                    break;
+                case ParkPreviewPref::miniMap:
+                    previewSize = { kPreviewWidthMiniMap, kPreviewWidthMiniMap };
+                    break;
+                case ParkPreviewPref::disabled:
+                    break;
+            }
+            ScreenSize windowSize = kWindowSizeMin + previewSize;
 
             RegisterCallback(callback, isJsCallback);
 
