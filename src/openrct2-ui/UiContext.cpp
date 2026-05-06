@@ -142,6 +142,15 @@ private:
     // cursor defeats the precision it provides.
     bool _vKbCtrl = false;
 
+    // OPENRCT2MINI OSK: when a KEYDOWN handed to OskHandleKey closes the
+    // OSK (e.g. ESCAPE → Cancel, RETURN → Commit), we still need to
+    // swallow the matching KEYUP. Otherwise the now-active topmost
+    // window (LoadSave, etc.) sees the KEYUP and reacts (LoadSave's
+    // ESCAPE handler closes the dialog). Set on KEYDOWN that just
+    // closed the OSK; cleared when its KEYUP arrives or after a
+    // single non-matching event passes.
+    SDL_Scancode _oskClosingSwallowKey = SDL_SCANCODE_UNKNOWN;
+
     // Returns true if the scancode is one of our virtual-cursor keys; in that
     // case state is updated and the caller should NOT propagate the event to
     // the rest of the keyboard pipeline.
@@ -162,7 +171,19 @@ private:
         // commit/cancel. We forward the scancode + down state and trust
         // its return value.
         if (Windows::OskIsActive() && Windows::OskHandleKey(static_cast<int32_t>(sc), down))
+        {
+            // If OSK closed during this event (Cancel/Commit), record
+            // the scancode so its matching KEYUP gets swallowed too.
+            if (down && !Windows::OskIsActive())
+                _oskClosingSwallowKey = sc;
             return true;
+        }
+        // Pending KEYUP swallow for the key that just closed the OSK.
+        if (!down && sc == _oskClosingSwallowKey)
+        {
+            _oskClosingSwallowKey = SDL_SCANCODE_UNKNOWN;
+            return true;
+        }
         switch (sc)
         {
             case SDL_SCANCODE_UP:    _vKbUp = down;    return true;
