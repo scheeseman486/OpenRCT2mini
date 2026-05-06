@@ -959,6 +959,15 @@ namespace OpenRCT2::Ui::Windows
                     case SDL_SCANCODE_ESCAPE:
                         Cancel();
                         break;
+                    case SDL_SCANCODE_F14: // L2
+                        if (_target == OskTarget::Console)
+                            OpenRCT2::Ui::GetInGameConsole().Input(ConsoleInput::ScrollPrevious);
+                        // Otherwise swallow as no-op (already in IsOskScancode).
+                        break;
+                    case SDL_SCANCODE_F15: // R2
+                        if (_target == OskTarget::Console)
+                            OpenRCT2::Ui::GetInGameConsole().Input(ConsoleInput::ScrollNext);
+                        break;
                     default:
                         break;
                 }
@@ -982,10 +991,13 @@ namespace OpenRCT2::Ui::Windows
                 FireScancode(_heldScancode);
             }
 
-            static bool ScancodeShouldRepeat(int32_t sc)
+            bool ScancodeShouldRepeat(int32_t sc) const
             {
                 switch (sc)
                 {
+                    case SDL_SCANCODE_F14: // L2 — repeat console scroll
+                    case SDL_SCANCODE_F15: // R2 — repeat console scroll
+                        return _target == OskTarget::Console;
                     case SDL_SCANCODE_UP:
                     case SDL_SCANCODE_DOWN:
                     case SDL_SCANCODE_LEFT:

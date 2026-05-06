@@ -41,6 +41,37 @@ Optionally, RCT1 can be placed at `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct1/` 
   Select       Cancel / back
 ```
 
+### On-screen keyboard
+
+When a text-input dialog or textbox would normally ask for keyboard input
+(park rename, scenario chart name, save filename, ride price, in-game
+console, etc.), an on-screen keyboard pops up filling the bottom 240 px
+of the screen. The game pauses, the cursor is suspended, and the D-pad
+drives key selection.
+
+Two layouts: a full QWERTY keyboard for text inputs, and a 3×4 numpad
+that opens automatically for digits-only fields (ticket prices, ride
+fees, selection sizes, map gen parameters, etc.).
+
+```
+  D-pad        Move selection between keys
+  A            Insert highlighted character
+  B            Backspace
+  X            Insert space (full layout) / Toggle sign on `-` (numpad)
+  Y            Toggle Caps Lock (full layout only; ignored on numpad)
+  L1           Move text cursor left
+  R1           Move text cursor right
+  L2           (Console only) Scroll output up by one page
+  R2           (Console only) Scroll output down by one page
+  Start        Commit and close (submits one line if used in console)
+  Select       Cancel and close (exits the console if used there)
+```
+
+While the OSK is up the cursor is hidden and the D-pad drives the
+keyboard, not the cursor. Selection wraps horizontally at the row
+edge and clamps vertically at the top/bottom rows. D-pad / B / L1 /
+R1 auto-repeat after a brief hold.
+
 ## Building
 
 The cross-build runs entirely inside Docker; no host installation of the toolchain or its dependencies is required other than Docker itself.
