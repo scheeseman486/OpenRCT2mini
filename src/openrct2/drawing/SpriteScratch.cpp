@@ -55,9 +55,18 @@ namespace OpenRCT2::Drawing
                 // and they count against our cgroup MemoryMax. With a disk-backed file,
                 // MADV_DONTNEED genuinely releases pages and they refault from disk on
                 // next access. Order: ORCT_SCRATCH_DIR override → /var/tmp → $XDG_CACHE_HOME
-                // → $HOME/.cache → $TMPDIR → /tmp. The Miyoo Mini's /tmp is already
-                // SD-backed so it'll fall through and work; this matters for x86 hosts
-                // where /tmp defaults to tmpfs.
+                // → $HOME/.cache → $TMPDIR → /tmp.
+                //
+                // Note for future readers: on the Miyoo Mini under OnionUI, BOTH /tmp
+                // AND /var/tmp are tmpfs (small RAM-backed mounts, typical embedded
+                // Linux default). Falling through to either on the device produces
+                // ENOSPC after a handful of appends and defeats the point of
+                // MADV_DONTNEED. launch.sh (Packaging/miyoo_mini/package.sh:361)
+                // exports ORCT_SCRATCH_DIR=$APPDIR/cache/sprite-scratch, which IS on
+                // the SD card, and we hit that branch first — never the /tmp fallback.
+                // The /tmp / /var/tmp candidates exist so the scratch still works on
+                // host x86 dev builds (where /var/tmp is genuinely disk-backed) and
+                // as a last resort if launch.sh's env var is missing.
                 const char* candidates[6] = { nullptr };
                 int n = 0;
                 const char* env = std::getenv("ORCT_SCRATCH_DIR");
