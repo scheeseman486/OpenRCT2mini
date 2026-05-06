@@ -84,8 +84,16 @@ private:
     // footprint. Save the under-cursor pixels right before we composite
     // each frame, restore them at the START of next frame's BeginDraw
     // (before PaintWindows runs). Buffer is sized for the cursor sprite.
-    static constexpr int kCursorBackupCap = 64; // a bit larger than 32 for
-                                                // hot-spot offsets / safety
+    // OPENRCT2MINI revision 75: enlarged from 64 to 96 to reliably erase
+    // tool cursors with bottom-aligned hotspots. The cursor sprite is
+    // 32×32 and a 64×64 save mathematically covers any 32×32 sprite with
+    // hotspot in [0,32]; a fast-moving cursor (R1-modifier ~6 px/frame)
+    // combined with the 1-frame-delayed dirty-block Invalidate could
+    // still leave 1-2 px of cursor outline at the trailing edge for a
+    // frame or two. 96×96 gives 32 px of margin in every direction —
+    // enough to absorb several frames of fast movement plus the sprite's
+    // own footprint. Buffer cost is 9 KB (vs 4 KB).
+    static constexpr int kCursorBackupCap = 96;
     OpenRCT2::Drawing::PaletteIndex _cursorBackup[kCursorBackupCap * kCursorBackupCap]{};
     int32_t _cursorBackupX = 0;
     int32_t _cursorBackupY = 0;
@@ -424,8 +432,12 @@ private:
                 // eventually repainted them.
                 const int32_t bitsW = static_cast<int32_t>(_width);
                 const int32_t bitsH = static_cast<int32_t>(_height);
-                const int32_t bx = state->position.x - 32;
-                const int32_t by = state->position.y - 32;
+                // OPENRCT2MINI revision 75: origin = -kCursorBackupCap/2 so
+                // the save region stays centred on the cursor. Sized so any
+                // 32×32 sprite sits comfortably in the middle with margin
+                // for fast moves between save+restore cycles.
+                const int32_t bx = state->position.x - (kCursorBackupCap / 2);
+                const int32_t by = state->position.y - (kCursorBackupCap / 2);
                 _cursorBackupX = bx;
                 _cursorBackupY = by;
                 _cursorBackupW = kCursorBackupCap;
