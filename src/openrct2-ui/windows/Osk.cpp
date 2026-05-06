@@ -199,7 +199,32 @@ namespace OpenRCT2::Ui::Windows
         public:
             void setMode(OskMode mode)
             {
+                if (_mode == mode && !_keys.empty())
+                    return;
                 _mode = mode;
+                // OnOpen already built the layout using the default
+                // mode; rebuild now that the caller has overridden it.
+                // Skipped if the layout hasn't been built yet (i.e.
+                // setMode called BEFORE onOpen — currently never, but
+                // the guard means it'll work either way).
+                if (!widgets.empty())
+                {
+                    BuildLayout();
+                    // Reset selection to the right starting cell for
+                    // the new layout. Per §3.8b: home row leftmost for
+                    // full QWERTY, top-left for numpad.
+                    if (_mode == OskMode::full)
+                    {
+                        _selRow = 2;
+                        _selKey = 0;
+                    }
+                    else
+                    {
+                        _selRow = 0;
+                        _selKey = 0;
+                    }
+                    invalidate();
+                }
             }
 
             void setTarget(OskTarget target, WidgetIndex widgetIdx)
