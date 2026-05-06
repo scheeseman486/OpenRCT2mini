@@ -54,6 +54,8 @@ namespace OpenRCT2::Ui::Windows
             Caps,
             Return,
             Space,
+            Backspace,
+            Spacer, // visual gap, no widget, no selection slot
         };
 
         struct OskKeyDef
@@ -134,9 +136,18 @@ namespace OpenRCT2::Ui::Windows
             { '.', 0, 1, OskAction::Insert, nullptr }, { '0', 0, 1, OskAction::Insert, nullptr },
             { '-', 0, 1, OskAction::Insert, nullptr },
         };
+        // Action row beneath the digit grid: Backspace on the left, an
+        // empty middle cell, Return on the right. Span widths line up
+        // with the 3-cell-wide digit grid above.
+        const OskKeyDef kNumRow4[] = {
+            { 0, 0, 1, OskAction::Backspace, "Bksp" },
+            { 0, 0, 1, OskAction::Spacer, nullptr },
+            { 0, 0, 1, OskAction::Return, "Enter" },
+        };
         const OskRowSpan kNumpadLayout[] = {
             { kNumRow0, std::size(kNumRow0) }, { kNumRow1, std::size(kNumRow1) },
             { kNumRow2, std::size(kNumRow2) }, { kNumRow3, std::size(kNumRow3) },
+            { kNumRow4, std::size(kNumRow4) },
         };
 
         struct OskRuntimeKey
@@ -417,6 +428,17 @@ namespace OpenRCT2::Ui::Windows
                     {
                         const OskKeyDef& def = row.keys[k];
                         const int16_t spanW = static_cast<int16_t>(cellWThisRow * def.span);
+
+                        // Spacer: advance the cursor without creating
+                        // a widget or a selection slot. Used to put a
+                        // visible gap between action keys.
+                        if (def.action == OskAction::Spacer)
+                        {
+                            cursorX = static_cast<int16_t>(cursorX + spanW);
+                            ++labelIdx;
+                            continue;
+                        }
+
                         const int16_t left = static_cast<int16_t>(cursorX + kKeyMargin);
                         const int16_t right = static_cast<int16_t>(cursorX + spanW - kKeyMargin - 1);
                         const int16_t top = static_cast<int16_t>(y0 + kKeyMargin);
@@ -678,6 +700,13 @@ namespace OpenRCT2::Ui::Windows
                     case OskAction::Return:
                         Commit();
                         return;
+                    case OskAction::Backspace:
+                        Backspace();
+                        break;
+                    case OskAction::Spacer:
+                        // Selection should never land on a spacer (we
+                        // skip them at BuildLayout time), but be safe.
+                        break;
                 }
             }
 
