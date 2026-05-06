@@ -163,10 +163,20 @@ namespace OpenRCT2::Ui::Windows
 
         constexpr uint8_t kPressFlashFrames = 4;
 
+        // Which kind of caller spawned the OSK. The two paths differ
+        // only in how Commit dispatches the typed text back.
+        enum class OskTarget : uint8_t
+        {
+            TextInputWindow, // Modal TextInputWindow
+            Textbox,         // Inline WindowStartTextbox widget
+        };
+
         class OskWindow final : public Window
         {
         private:
             OskMode _mode = OskMode::full;
+            OskTarget _target = OskTarget::TextInputWindow;
+            WidgetIndex _parentWidgetIdx = 0;
             WindowIdentifier _parentId{};
             std::vector<std::vector<OskRuntimeKey>> _keys;
             std::vector<GlyphBuffer> _labels;
@@ -190,6 +200,12 @@ namespace OpenRCT2::Ui::Windows
             void setMode(OskMode mode)
             {
                 _mode = mode;
+            }
+
+            void setTarget(OskTarget target, WidgetIndex widgetIdx)
+            {
+                _target = target;
+                _parentWidgetIdx = widgetIdx;
             }
 
             void setParent(WindowBase* parent)
@@ -666,12 +682,27 @@ namespace OpenRCT2::Ui::Windows
                     ? nullptr
                     : windowMgr->FindByNumber(_parentId.classification, _parentId.number);
                 std::string buffer = _editBuffer;
+                const auto target = _target;
+                const auto widgetIdx = _parentWidgetIdx;
                 // Close OSK first; then dispatch to parent. The parent's
                 // own onClose path calls OskClose() too, which is a
                 // no-op once we're already gone.
                 close();
-                if (parent != nullptr)
-                    TextInputCommitFromOsk(parent, buffer);
+                if (parent == nullptr)
+                    return;
+                switch (target)
+                {
+                    case OskTarget::TextInputWindow:
+                        TextInputCommitFromOsk(parent, buffer);
+                        break;
+                    case OskTarget::Textbox:
+                        // Push the buffer to the parent widget the same
+                        // way WindowUpdateTextbox does, then end the
+                        // engine's textbox session.
+                        parent->onTextInput(widgetIdx, buffer);
+                        WindowCancelTextbox();
+                        break;
+                }
             }
 
             void Cancel()
@@ -680,9 +711,23 @@ namespace OpenRCT2::Ui::Windows
                 auto* parent = (_parentId.classification == WindowClass::null)
                     ? nullptr
                     : windowMgr->FindByNumber(_parentId.classification, _parentId.number);
+                const auto target = _target;
                 close();
-                if (parent != nullptr)
-                    TextInputCancelFromOsk(parent);
+                if (parent == nullptr)
+                {
+                    if (target == OskTarget::Textbox)
+                        WindowCancelTextbox();
+                    return;
+                }
+                switch (target)
+                {
+                    case OskTarget::TextInputWindow:
+                        TextInputCancelFromOsk(parent);
+                        break;
+                    case OskTarget::Textbox:
+                        WindowCancelTextbox();
+                        break;
+                }
             }
 
             // What scancodes belong to the OSK while it's active.
@@ -804,24 +849,46 @@ namespace OpenRCT2::Ui::Windows
         }
     } // namespace
 
+    namespace
+    {
+        OskWindow* OpenSkeleton(WindowBase* parent, OskMode mode)
+        {
+            auto* windowMgr = GetWindowManager();
+            if (windowMgr->FindByClass(WindowClass::osk) != nullptr)
+                return nullptr;
+
+            const int32_t screenW = ContextGetWidth();
+            const int32_t screenH = ContextGetHeight();
+            const int32_t w = std::min<int32_t>(screenW, kOskWidth);
+            const auto pos = ScreenCoordsXY{ (screenW - w) / 2, screenH - kOskHeight };
+
+            auto* wnd = windowMgr->Create<OskWindow>(
+                WindowClass::osk, pos, ScreenSize{ w, kOskHeight }, WindowFlag::stickToFront);
+            if (wnd == nullptr)
+                return nullptr;
+            wnd->setMode(mode);
+            wnd->setParent(parent);
+            return wnd;
+        }
+    } // namespace
+
     void OskOpen(WindowBase* parent, OskMode mode)
     {
-        auto* windowMgr = GetWindowManager();
-        if (windowMgr->FindByClass(WindowClass::osk) != nullptr)
-            return;
-
-        const int32_t screenW = ContextGetWidth();
-        const int32_t screenH = ContextGetHeight();
-        const int32_t w = std::min<int32_t>(screenW, kOskWidth);
-        const auto pos = ScreenCoordsXY{ (screenW - w) / 2, screenH - kOskHeight };
-
-        auto* wnd = windowMgr->Create<OskWindow>(
-            WindowClass::osk, pos, ScreenSize{ w, kOskHeight }, WindowFlag::stickToFront);
+        auto* wnd = OpenSkeleton(parent, mode);
         if (wnd == nullptr)
             return;
-        wnd->setMode(mode);
-        wnd->setParent(parent);
+        wnd->setTarget(OskTarget::TextInputWindow, 0);
         wnd->setEditText(TextInputReadBuffer(parent));
+    }
+
+    void OskOpenForTextbox(
+        WindowBase* parent, WidgetIndex widgetIdx, std::string_view initialText, size_t maxLength, OskMode mode)
+    {
+        auto* wnd = OpenSkeleton(parent, mode);
+        if (wnd == nullptr)
+            return;
+        wnd->setTarget(OskTarget::Textbox, widgetIdx);
+        wnd->setEditText(initialText, maxLength);
     }
 
     void OskClose()

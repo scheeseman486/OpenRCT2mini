@@ -316,6 +316,15 @@ namespace OpenRCT2::Ui::Windows
         numpad,
     };
     void OskOpen(WindowBase* parent, OskMode mode = OskMode::full);
+    // OPENRCT2MINI: spawn the OSK for a `WindowStartTextbox`-style
+    // inline textbox. Differs from the TextInputWindow path because
+    // the parent isn't a modal dialog — it's a regular window with
+    // an embedded textbox widget. On commit the OSK fires the
+    // parent's onTextInput(widgetIdx, text) and ends the textbox
+    // session via WindowCancelTextbox.
+    void OskOpenForTextbox(
+        WindowBase* parent, WidgetIndex widgetIdx, std::string_view initialText, size_t maxLength,
+        OskMode mode = OskMode::full);
     void OskClose();
     bool OskIsActive();
     // OPENRCT2MINI: called by the OSK at commit time. Replaces the

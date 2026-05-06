@@ -572,6 +572,12 @@ namespace OpenRCT2::Ui::Windows
         _textBoxInput = existingText;
 
         _textInput = ContextStartTextInput(_textBoxInput, maxLength);
+
+        // OPENRCT2MINI: spawn the on-screen keyboard. The OSK has its
+        // own buffer; on Start it fires the parent's onTextInput and
+        // ends this textbox session.
+        OskOpenForTextbox(
+            const_cast<WindowBase*>(&callW), callWidget, existingText, static_cast<size_t>(maxLength));
     }
 
     void WindowCancelTextbox()
@@ -589,6 +595,10 @@ namespace OpenRCT2::Ui::Windows
                 windowMgr->InvalidateWidget(*w, _currentTextBox.widgetIndex);
             }
             _currentTextBox.widgetIndex = kWidgetIndexNull;
+            // OPENRCT2MINI: tear down the OSK if it's up. CloseByClass
+            // is idempotent — safe even if our own Commit just called
+            // WindowCancelTextbox after OSK::close().
+            OskClose();
         }
     }
 

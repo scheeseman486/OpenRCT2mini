@@ -354,3 +354,6 @@ discord-rpc
 
 # CMake
 cmake-build-*/
+
+# OSK design plan — same pattern as other Claude-generated planning docs
+/osk-plan.md
