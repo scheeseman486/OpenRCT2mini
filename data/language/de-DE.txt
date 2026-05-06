@@ -3822,3 +3822,6 @@ STR_7034    :Hoher Kontrast
 STR_7035    :Klassisch
 STR_7036    :(keine)
 STR_7037    :Dieser Park überschreitet die unterstützten Limits von OpenRCT2mini (Kartengröße, Fahrgeschäfte oder Entitäten) und kann auf diesem Gerät nicht geladen werden.
+# OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
+STR_7038    :Schlagschatten
+STR_7039    :Zeichnet einen halbtransparenten Schatten unter dem Cursor, damit er vor unruhigen Hintergründen besser zu erkennen ist

@@ -3825,3 +3825,6 @@ STR_7034    :Alto contraste
 STR_7035    :Clássico
 STR_7036    :(nenhuma)
 STR_7037    :Este parque excede os limites suportados pelo OpenRCT2mini (tamanho do mapa, atrações ou entidades) e não pode ser carregado neste dispositivo.
+# OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
+STR_7038    :Sombra projetada
+STR_7039    :Renderiza uma sombra translúcida sob o cursor para torná-lo mais visível em fundos carregados

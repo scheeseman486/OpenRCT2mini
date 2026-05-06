@@ -3827,3 +3827,6 @@ STR_7034    :Høj kontrast
 STR_7035    :Klassisk
 STR_7036    :(ingen)
 STR_7037    :Denne park overskrider OpenRCT2minis understøttede grænser (kortstørrelse, forlystelser eller enheder) og kan ikke indlæses på denne enhed.
+# OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
+STR_7038    :Slagskygge
+STR_7039    :Tegner en gennemsigtig skygge under markøren, så den skiller sig ud på travle baggrunde

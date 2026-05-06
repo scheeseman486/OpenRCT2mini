@@ -174,6 +174,9 @@ namespace OpenRCT2::Config
         bool enlargedUi;
         bool touchEnhancements;
         CursorStyle cursorStyle;
+        // OPENRCT2MINI: optional 50%-translucent drop shadow under the
+        // software cursor sprite, offset (+2, +2) pixels. Default off.
+        bool cursorDropShadow;
     };
 
     struct Sound

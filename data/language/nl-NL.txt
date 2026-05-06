@@ -3825,3 +3825,6 @@ STR_7034    :Hoog contrast
 STR_7035    :Klassiek
 STR_7036    :(geen)
 STR_7037    :Dit park overschrijdt de ondersteunde limieten van OpenRCT2mini (kaartgrootte, attracties of entiteiten) en kan niet op dit apparaat worden geladen.
+# OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
+STR_7038    :Slagschaduw
+STR_7039    :Render een doorzichtige schaduw onder de cursor zodat deze beter opvalt tegen drukke achtergronden

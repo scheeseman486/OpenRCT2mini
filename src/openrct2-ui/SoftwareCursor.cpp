@@ -16,7 +16,11 @@
     #include "CursorData.h"
 
     #include <openrct2-ui/windows/Windows.h>
+    #include <openrct2/config/Config.h>
     #include <openrct2/core/EnumUtils.hpp>
+    #include <openrct2/drawing/Drawing.h>
+    #include <openrct2/drawing/FilterPaletteIds.h>
+    #include <openrct2/drawing/PaletteMap.h>
 
 namespace OpenRCT2::Ui
 {
@@ -290,6 +294,43 @@ namespace OpenRCT2::Ui
 
         const int32_t x0 = x - spr->hotspotX;
         const int32_t y0 = y - spr->hotspotY;
+
+        // OPENRCT2MINI: optional drop shadow under the cursor sprite. We
+        // run a pre-pass that walks every non-transparent sprite pixel
+        // and remaps the destination FB pixel at (+2, +2) through a
+        // darken palette — equivalent to a ~50% black overlay that
+        // respects whatever's underneath. The cursor body is then drawn
+        // on top so the shadow only ends up visible around the sprite's
+        // outline. Default off; toggled in Options > Interface > Cursors.
+        if (Config::Get().interface.cursorDropShadow)
+        {
+            constexpr int32_t kShadowOffX = 2;
+            constexpr int32_t kShadowOffY = 2;
+            const auto paletteMap = ::GetPaletteMapForColour(
+                OpenRCT2::Drawing::FilterPaletteID::paletteDarken3);
+            if (paletteMap.has_value())
+            {
+                const auto& map = *paletteMap;
+                for (int sy = 0; sy < kSpriteH; ++sy)
+                {
+                    const int32_t dy = y0 + sy + kShadowOffY;
+                    if (dy < 0 || dy >= bitsH)
+                        continue;
+                    const uint8_t* srcRow = spr->pixels.data() + sy * kSpriteW;
+                    auto* dstRow = bits + static_cast<size_t>(dy) * bitsW;
+                    for (int sx = 0; sx < kSpriteW; ++sx)
+                    {
+                        if (srcRow[sx] == kTransparent)
+                            continue;
+                        const int32_t dx = x0 + sx + kShadowOffX;
+                        if (dx < 0 || dx >= bitsW)
+                            continue;
+                        const auto under = static_cast<OpenRCT2::Drawing::PaletteIndex>(dstRow[dx]);
+                        dstRow[dx] = static_cast<OpenRCT2::Drawing::PaletteIndex>(map[static_cast<size_t>(under)]);
+                    }
+                }
+            }
+        }
 
         for (int sy = 0; sy < kSpriteH; ++sy)
         {

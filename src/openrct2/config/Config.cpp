@@ -439,6 +439,8 @@ namespace OpenRCT2::Config
                 model->cursorStyle = CursorStyle::HighContrast;
             else
                 model->cursorStyle = CursorStyle::Default;
+            // OPENRCT2MINI: optional drop shadow under the software cursor.
+            model->cursorDropShadow = reader->GetBoolean("cursor_drop_shadow", false);
         }
     }
 
@@ -474,6 +476,8 @@ namespace OpenRCT2::Config
         else if (model->cursorStyle == CursorStyle::HighContrast)
             styleName = "high_contrast";
         writer->WriteString("cursor_style", styleName);
+        // OPENRCT2MINI: optional drop shadow under the software cursor.
+        writer->WriteBoolean("cursor_drop_shadow", model->cursorDropShadow);
     }
 
     static void ReadSound(IIniReader* reader)

@@ -224,6 +224,8 @@ namespace OpenRCT2::Ui::Windows
         WIDX_CURSOR_STYLE_LABEL,
         WIDX_CURSOR_STYLE,
         WIDX_CURSOR_STYLE_DROPDOWN,
+        // OPENRCT2MINI: optional drop shadow under the software cursor.
+        WIDX_CURSOR_DROP_SHADOW,
 
         // Controls
         WIDX_CONTROLS_GROUP = WIDX_PAGE_START,
@@ -446,10 +448,13 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({155, kToolbarGroupStart + 91}, {145, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_ROTATE_ANTI_CLOCKWISE,           STR_ROTATE_VIEW_ANTI_CLOCKWISE_IN_TOOLBAR_TIP),  // Rotate anti-clockwise
 
         // OPENRCT2MINI revision 59: Cursors group with Cursor Style dropdown.
-        makeWidget({  5, kCursorsGroupStart +  0}, {300, 32}, WidgetType::groupbox,     WindowColour::secondary, STR_OPTIONS_CURSORS_GROUP                                                ),
+        // OPENRCT2MINI: drop-shadow checkbox added below the dropdown — group
+        // height grew from 32 to 47 px to fit the new row at +30.
+        makeWidget({  5, kCursorsGroupStart +  0}, {300, 47}, WidgetType::groupbox,     WindowColour::secondary, STR_OPTIONS_CURSORS_GROUP                                                ),
         makeWidget({ 10, kCursorsGroupStart + 14}, { 90, 12}, WidgetType::label,        WindowColour::secondary, STR_OPTIONS_CURSOR_STYLE_LABEL,  STR_OPTIONS_CURSOR_STYLE_TIP            ),
         makeWidget({105, kCursorsGroupStart + 14}, {190, 14}, WidgetType::dropdownMenu, WindowColour::secondary, kStringIdEmpty,                  STR_OPTIONS_CURSOR_STYLE_TIP            ),
-        makeWidget({283, kCursorsGroupStart + 15}, { 11, 12}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH,              STR_OPTIONS_CURSOR_STYLE_TIP            )
+        makeWidget({283, kCursorsGroupStart + 15}, { 11, 12}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH,              STR_OPTIONS_CURSOR_STYLE_TIP            ),
+        makeWidget({ 10, kCursorsGroupStart + 30}, {285, 12}, WidgetType::checkbox,     WindowColour::tertiary,  STR_OPTIONS_CURSOR_DROP_SHADOW,  STR_OPTIONS_CURSOR_DROP_SHADOW_TIP      )
     );
 
     constexpr int32_t kTitleSequenceStart = 53;
@@ -1869,6 +1874,15 @@ namespace OpenRCT2::Ui::Windows
                     ContextOpenWindow(WindowClass::themes);
                     invalidate();
                     break;
+                // OPENRCT2MINI: toggle the optional cursor drop shadow.
+                // SoftwareCursor::Composite re-reads the config flag every
+                // frame, so no explicit invalidation is needed beyond the
+                // checkbox redraw.
+                case WIDX_CURSOR_DROP_SHADOW:
+                    Config::Get().interface.cursorDropShadow ^= 1;
+                    Config::Save();
+                    invalidate();
+                    break;
             }
         }
 
@@ -1978,6 +1992,9 @@ namespace OpenRCT2::Ui::Windows
                     break;
             }
             widgets[WIDX_CURSOR_STYLE].text = cursorStyleStr;
+
+            // OPENRCT2MINI: drop-shadow checkbox state.
+            setCheckboxValue(WIDX_CURSOR_DROP_SHADOW, Config::Get().interface.cursorDropShadow);
         }
 
 #pragma endregion

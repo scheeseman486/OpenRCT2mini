@@ -1217,6 +1217,9 @@ namespace OpenRCT2
         STR_OPTIONS_CURSOR_STYLE_CLASSIC = 7035,
         // OPENRCT2MINI revision 67: explicit "no title sequence" entry.
         STR_TITLE_SEQUENCE_NONE = 7036,
+        // OPENRCT2MINI: optional cursor drop shadow checkbox.
+        STR_OPTIONS_CURSOR_DROP_SHADOW = 7038,
+        STR_OPTIONS_CURSOR_DROP_SHADOW_TIP = 7039,
         STR_OPTIONS_TWEAKS = 6170,
         STR_OPTION_DISABLED_DURING_NETWORK_PLAY = 6103,
         STR_PATH_TO_RCT1 = 6033,
