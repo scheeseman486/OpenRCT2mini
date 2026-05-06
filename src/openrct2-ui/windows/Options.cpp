@@ -1909,19 +1909,20 @@ namespace OpenRCT2::Ui::Windows
                     invalidateWidget(WIDX_THEMES_DROPDOWN);
                     break;
                 }
-                // OPENRCT2MINI revision 59 / 61: cursor-style dropdown.
-                // Three themes — the dropdown index matches the
+                // OPENRCT2MINI revision 59 / 61 / 77: cursor-style dropdown.
+                // Four themes — the dropdown index matches the
                 // CursorStyle enum value: 0=Classic, 1=Default,
-                // 2=HighContrast.
+                // 2=HighContrast, 3=Windows.
                 case WIDX_CURSOR_STYLE_DROPDOWN:
                 {
                     gDropdown.items[0] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_CLASSIC);
                     gDropdown.items[1] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_DEFAULT);
                     gDropdown.items[2] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_HIGH_CONTRAST);
+                    gDropdown.items[3] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_WINDOWS);
 
                     WindowDropdownShowTextCustomWidth(
                         { windowPos.x + widget->left, windowPos.y + widget->top }, widget->height(), colours[1], 0,
-                        Dropdown::Flag::StayOpen, 3, widget->width() - 4);
+                        Dropdown::Flag::StayOpen, 4, widget->width() - 4);
 
                     gDropdown.items[static_cast<int32_t>(Config::Get().interface.cursorStyle)].setChecked(true);
                     invalidateWidget(WIDX_CURSOR_STYLE_DROPDOWN);
@@ -1954,6 +1955,8 @@ namespace OpenRCT2::Ui::Windows
                         Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::Default;
                     else if (dropdownIndex == 2)
                         Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::HighContrast;
+                    else if (dropdownIndex == 3)
+                        Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::Windows;
                     Config::Save();
                     invalidate();
                     break;
@@ -1976,7 +1979,7 @@ namespace OpenRCT2::Ui::Windows
             _dropdownCaption = ThemeManagerGetAvailableThemeName(activeAvailableThemeIndex);
             widgets[WIDX_THEMES].setString(_dropdownCaption.c_str());
 
-            // OPENRCT2MINI revision 59 / 61: cursor-style dropdown caption.
+            // OPENRCT2MINI revision 59 / 61 / 77: cursor-style dropdown caption.
             StringId cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_DEFAULT;
             switch (Config::Get().interface.cursorStyle)
             {
@@ -1985,6 +1988,9 @@ namespace OpenRCT2::Ui::Windows
                     break;
                 case OpenRCT2::Config::CursorStyle::HighContrast:
                     cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_HIGH_CONTRAST;
+                    break;
+                case OpenRCT2::Config::CursorStyle::Windows:
+                    cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_WINDOWS;
                     break;
                 case OpenRCT2::Config::CursorStyle::Default:
                 default:

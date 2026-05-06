@@ -145,6 +145,10 @@ namespace OpenRCT2::Config
         Classic = 0,
         Default = 1,
         HighContrast = 2,
+        // OPENRCT2MINI revision 77: Windows-style theme. Same palette and
+        // bitmaps as Default, except the main pointer is replaced with a
+        // classic Win9x-style arrow (orct2mini_cursor_pointer_windows.png).
+        Windows = 3,
     };
 
     struct Interface

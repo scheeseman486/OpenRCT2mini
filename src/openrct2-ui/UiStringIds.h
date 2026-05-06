@@ -1220,6 +1220,8 @@ namespace OpenRCT2
         // OPENRCT2MINI: optional cursor drop shadow checkbox.
         STR_OPTIONS_CURSOR_DROP_SHADOW = 7038,
         STR_OPTIONS_CURSOR_DROP_SHADOW_TIP = 7039,
+        // OPENRCT2MINI revision 77: Windows cursor theme.
+        STR_OPTIONS_CURSOR_STYLE_WINDOWS = 7040,
         STR_OPTIONS_TWEAKS = 6170,
         STR_OPTION_DISABLED_DURING_NETWORK_PLAY = 6103,
         STR_PATH_TO_RCT1 = 6033,

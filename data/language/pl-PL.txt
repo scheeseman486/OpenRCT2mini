@@ -3822,3 +3822,5 @@ STR_7037    :Ten park przekracza obsługiwane limity OpenRCT2mini (rozmiar mapy,
 # OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
 STR_7038    :Cień rzucany
 STR_7039    :Renderuje przezroczysty cień pod kursorem, aby wyróżniał się na zatłoczonym tle
+# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
+STR_7040    :Windows

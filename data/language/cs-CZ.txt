@@ -3817,3 +3817,5 @@ STR_7037    :Tento park překračuje limity OpenRCT2mini (velikost mapy, atrakce
 # OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
 STR_7038    :Vržený stín
 STR_7039    :Vykreslí průhledný stín pod kurzorem, aby vynikl na rušném pozadí
+# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
+STR_7040    :Windows

@@ -3844,3 +3844,5 @@ STR_7037    :This park exceeds OpenRCT2mini's supported limits (map size, rides,
 # OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
 STR_7038    :Drop shadow
 STR_7039    :Render a translucent shadow underneath the cursor sprite to make it stand out against busy backgrounds
+# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
+STR_7040    :Windows

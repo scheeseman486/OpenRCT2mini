@@ -166,15 +166,20 @@ namespace OpenRCT2::Ui
         if (it != _sprites.end())
             return &it->second;
 
-        // OPENRCT2MINI revision 61: three themes.
+        // OPENRCT2MINI revision 61 / 77: four themes.
         //   Classic       — pi10/pi17 mono + paletted-pointer gradient.
         //   Default       — pi0 outline + pi255 fill + HC mono pointer.
         //   HighContrast  — pi255 outline + pi0 fill (Default inverted),
         //                   same bitmaps as Default.
-        // Default and HighContrast share everything except the
-        // outline/fill palette indices, which are swapped.
+        //   Windows       — same palette and bitmaps as Default, except
+        //                   the Arrow cursor is replaced with a classic
+        //                   Win9x-style pointer (kArrowCursorDataWindows).
+        // Default, Windows and HighContrast share everything except:
+        //   - HighContrast swaps the outline/fill palette indices.
+        //   - Windows swaps the Arrow bitmap (via getWindowsCursorData).
         const bool isClassic = (_style == OpenRCT2::Config::CursorStyle::Classic);
         const bool isInverted = (_style == OpenRCT2::Config::CursorStyle::HighContrast);
+        const bool isWindows = (_style == OpenRCT2::Config::CursorStyle::Windows);
         const uint8_t blackIdx = isClassic ? kBlackIdx : (isInverted ? kHCWhiteIdx : kHCBlackIdx);
         const uint8_t whiteIdx = isClassic ? kWhiteIdx : (isInverted ? kHCBlackIdx : kHCWhiteIdx);
 
@@ -208,12 +213,15 @@ namespace OpenRCT2::Ui
             }
         }
 
-        // OPENRCT2MINI revision 59 / 61: Default and HighContrast prefer a
-        // hand-drawn mono bitmap if one exists for this cursor (currently
-        // only Arrow); otherwise fall back to the regular mono blob and
-        // recolour with the theme's outline/fill palette indices.
+        // OPENRCT2MINI revision 59 / 61 / 77: theme-specific Arrow override.
+        //   - Windows prefers the Win9x pointer bitmap.
+        //   - Default and HighContrast prefer the hand-drawn mono pointer.
+        //   - All other cursors fall back to the regular mono blob and
+        //     get recoloured with the theme's outline/fill palette indices.
         const CursorData* cd = nullptr;
-        if (!isClassic)
+        if (isWindows)
+            cd = getWindowsCursorData(id);
+        if (cd == nullptr && !isClassic)
             cd = getHighContrastCursorData(id);
         if (cd == nullptr)
             cd = getCursorData(id);

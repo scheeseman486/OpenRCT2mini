@@ -3828,3 +3828,5 @@ STR_7037    :Dit park overschrijdt de ondersteunde limieten van OpenRCT2mini (ka
 # OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
 STR_7038    :Slagschaduw
 STR_7039    :Render een doorzichtige schaduw onder de cursor zodat deze beter opvalt tegen drukke achtergronden
+# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
+STR_7040    :Windows

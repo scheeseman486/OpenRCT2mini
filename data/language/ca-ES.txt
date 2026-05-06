@@ -3827,3 +3827,5 @@ STR_7037    :Aquest parc supera els límits admesos per OpenRCT2mini (mida del m
 # OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
 STR_7038    :Ombra projectada
 STR_7039    :Mostra una ombra translúcida sota el cursor perquè destaqui contra fons carregats
+# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
+STR_7040    :Windows

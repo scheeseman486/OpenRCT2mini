@@ -3828,3 +3828,5 @@ STR_7037    :Ez a park meghaladja az OpenRCT2mini által támogatott korlátokat
 # OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
 STR_7038    :Vetett árnyék
 STR_7039    :Áttetsző árnyékot rajzol a kurzor alá, hogy jobban kitűnjön zsúfolt háttéren
+# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
+STR_7040    :Windows

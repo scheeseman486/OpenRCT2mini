@@ -198,6 +198,48 @@ namespace OpenRCT2::Ui
         "                                "
     );
 
+    // OPENRCT2MINI revision 77: Win9x-style arrow pointer for the "Windows"
+    // cursor style. The bitmap below was generated from
+    // cursors/orct2mini_cursor_pointer_windows.png via cursors/png_to_cursordata.py.
+    // Default theme black-outline / white-fill recolouring rules apply
+    // (see SoftwareCursor::GetOrCreateSprite — Default + Windows share the
+    // pi0 outline / pi255 fill palette indices).
+    static constexpr CursorData kArrowCursorDataWindows = cursorFromBitMap(
+        0, 0,
+        "X                               "
+        "XX                              "
+        "X.X                             "
+        "X..X                            "
+        "X...X                           "
+        "X....X                          "
+        "X.....X                         "
+        "X......X                        "
+        "X.......X                       "
+        "X........X                      "
+        "X.........X                     "
+        "X..........X                    "
+        "X...........X                   "
+        "X......XXXXX                    "
+        "X...X..X                        "
+        "X..X X..X                       "
+        "X.X  X..X                       "
+        " X    X..X                      "
+        "      X..X                      "
+        "       X..X                     "
+        "       X..X                     "
+        "        XX                      "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+        "                                "
+    );
+
     static constexpr CursorData kHandPointCursorData = cursorFromBitMap(
         8, 0,
         "        XXX                     "
@@ -1183,6 +1225,22 @@ namespace OpenRCT2::Ui
         {
             case CursorID::Arrow:
                 return &kArrowCursorDataHighContrast;
+            default:
+                return nullptr;
+        }
+    }
+
+    // OPENRCT2MINI revision 77: Windows theme overrides. Same fallback pattern
+    // as getHighContrastCursorData — return a mono CursorData for cursors
+    // that get a Windows-specific bitmap (currently only Arrow), nullptr
+    // otherwise so SoftwareCursor falls through to the standard Default
+    // mono blob with the same black-outline / white-fill palette indices.
+    const CursorData* getWindowsCursorData(CursorID cursorId)
+    {
+        switch (cursorId)
+        {
+            case CursorID::Arrow:
+                return &kArrowCursorDataWindows;
             default:
                 return nullptr;
         }

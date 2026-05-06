@@ -3805,3 +3805,5 @@ STR_7037    :Detta park överskrider OpenRCT2minis stödgränser (kartstorlek, �
 # OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
 STR_7038    :Slagskugga
 STR_7039    :Ritar en genomskinlig skugga under markören så att den syns bättre mot röriga bakgrunder
+# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
+STR_7040    :Windows

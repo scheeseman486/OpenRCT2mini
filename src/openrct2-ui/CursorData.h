@@ -63,4 +63,10 @@ namespace OpenRCT2::Ui
     // HC palette indices). Used only when interface.cursorStyle ==
     // CursorStyle::HighContrast.
     const CursorData* getHighContrastCursorData(CursorID cursorId);
+
+    // OPENRCT2MINI revision 77: Windows-theme overrides. Returns a mono
+    // CursorData* for cursors with a Windows-specific bitmap, nullptr
+    // otherwise. Used only when interface.cursorStyle == CursorStyle::Windows;
+    // all other cursors share the Default mono blob.
+    const CursorData* getWindowsCursorData(CursorID cursorId);
 } // namespace OpenRCT2::Ui
