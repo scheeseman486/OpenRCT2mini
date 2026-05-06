@@ -173,6 +173,14 @@ void InGameConsole::OskSubmitLine(std::string_view text)
     _consoleCurrentLine.assign(text);
     RefreshCaret(_consoleCurrentLine.size());
     Input(ConsoleInput::LineExecute);
+    // ClearInput inside LineExecute re-calls ContextStartTextInput so
+    // the keyboard-driven path can keep typing. The OSK is driving
+    // input here, not the keyboard, and the OSK already disables SDL
+    // text-input on open — so re-arm the disable, otherwise SDL
+    // resumes feeding TEXTINPUT events into _consoleCurrentLine and
+    // every subsequent device-button press briefly flashes raw chars
+    // in the prompt before the OSK frame mirror overwrites them.
+    ContextStopTextInput();
 }
 
 void InGameConsole::HistoryAdd(const u8string& src)
