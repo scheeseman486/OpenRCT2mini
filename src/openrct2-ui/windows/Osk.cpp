@@ -257,8 +257,21 @@ namespace OpenRCT2::Ui::Windows
 
             void setTarget(OskTarget target, WidgetIndex widgetIdx)
             {
+                const bool targetChanged = _target != target;
                 _target = target;
                 _parentWidgetIdx = widgetIdx;
+                // BuildLayout reads _target to decide whether to leave
+                // room for the edit strip. onOpen ran with the default
+                // target (TextInputWindow → strip at top) before
+                // OskOpenForConsole could call us, so the grid was
+                // pushed down by 26 px and the bottom row clipped off
+                // the 214 px console-mode window. Rebuild now that we
+                // know we're in Console mode.
+                if (targetChanged && !widgets.empty())
+                {
+                    BuildLayout();
+                    invalidate();
+                }
             }
 
             void setParent(WindowBase* parent)
