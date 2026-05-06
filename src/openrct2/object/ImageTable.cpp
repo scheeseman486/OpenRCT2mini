@@ -23,6 +23,7 @@
 #include "../core/String.hpp"
 #include "../drawing/Drawing.h"
 #include "../drawing/ImageImporter.h"
+#include "../drawing/SpriteCache.h"
 #include "../drawing/SpriteScratch.h"
 #include "Object.h"
 #include "ObjectFactory.h"
@@ -583,6 +584,30 @@ namespace OpenRCT2
 
         if (context->ShouldLoadImages())
         {
+            // OPENRCT2MINI revision 71: try the persistent sprite-decode cache
+            // first. Hit → skip the entire decode + pack + scratch-append loop
+            // below; the G1Element offsets returned point into the process-
+            // lifetime mmap of objects.cache, same lifetime contract as
+            // scratch-backed offsets. Miss → continue to the legacy decode
+            // path, which now ALSO writes the result back to the cache so
+            // the next launch hits.
+            const auto cacheKey = OpenRCT2::Drawing::ComputeSpriteCacheKey(
+                context->GetObjectIdentifier(), context->GetSourcePath(), IsCsgLoaded());
+            if (cacheKey != 0)
+            {
+                if (auto hit = OpenRCT2::Drawing::SpriteCacheLookup(cacheKey))
+                {
+                    for (auto& e : hit->entries)
+                    {
+                        _entries.push_back(std::move(e));
+                        _entryOwnsOffset.push_back(false);
+                    }
+                    _entries.shrink_to_fit();
+                    _entryOwnsOffset.shrink_to_fit();
+                    return hit->usesFallbackSprites;
+                }
+            }
+
             // First gather all the required images from inspecting the JSON
             std::vector<std::unique_ptr<RequiredImage>> allImages;
             auto jsonImages = root["images"];
@@ -718,6 +743,26 @@ namespace OpenRCT2
                     {
                         std::memcpy(packBuf.get() + entryOffsets[i], sourceData[i], dataLengths[i]);
                     }
+                }
+
+                // OPENRCT2MINI revision 71: persist the freshly-decoded data
+                // so the next launch hits the cache and skips this whole
+                // decode + pack + write path. Build a temporary view of the
+                // entries with offsets pointing into packBuf, hand it to
+                // the cache, then proceed with the normal scratch-pack flow.
+                // The cache will silently bail if any entry references data
+                // outside packBuf (e.g. $G1[..] aliases into g1.dat).
+                if (cacheKey != 0)
+                {
+                    std::vector<G1Element> cacheEntries(newEntries);
+                    for (size_t i = 0; i < cacheEntries.size(); i++)
+                    {
+                        cacheEntries[i].offset = (dataLengths[i] > 0)
+                            ? packBuf.get() + entryOffsets[i]
+                            : nullptr;
+                    }
+                    OpenRCT2::Drawing::SpriteCacheStore(
+                        cacheKey, cacheEntries, packBuf.get(), totalSize, usesFallbackSprites);
                 }
 
                 uint8_t* scratchPtr = OpenRCT2::Drawing::SpriteScratchAppend(packBuf.get(), totalSize);

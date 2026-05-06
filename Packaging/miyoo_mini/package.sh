@@ -358,13 +358,20 @@ export MALLOC_ARENA_MAX=2
 # that name was a launch.sh bug). Without this, SpriteScratch falls through
 # to /var/tmp which on Onion is a tmpfs with a small RAM-backed limit and
 # every sprite-table append fails with ENOSPC.
+#
+# OPENRCT2MINI revision 71: this directory ALSO holds the persistent
+# sprite-decode cache (objects.cache + objects.idx). Don't wipe the
+# directory itself — that would defeat the cache. Only sweep stale
+# anonymous scratch files (mkstemp template "openrctmini-sprites-*"),
+# which are normally unlinked on creation but might survive if a previous
+# run crashed before the unlink.
 export ORCT_SCRATCH_DIR="$APPDIR/cache/sprite-scratch"
 # TMPDIR / XDG_CACHE_HOME defenses in case some other code path reaches them.
 export TMPDIR="$APPDIR/cache"
 export XDG_CACHE_HOME="$APPDIR/cache"
 mkdir -p "$APPDIR/cache"
-rm -rf "$ORCT_SCRATCH_DIR"
 mkdir -p "$ORCT_SCRATCH_DIR"
+rm -f "$ORCT_SCRATCH_DIR"/openrctmini-sprites-* 2>/dev/null || true
 
 # OPENRCT2MINI: cut 39e. Prepend our bundled libs so the loader picks the
 # matched libpng16 1.6.37 / zlib 1.2.11 pair we shipped, rather than the

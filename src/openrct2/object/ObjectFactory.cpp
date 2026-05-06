@@ -127,6 +127,10 @@ namespace OpenRCT2
         std::string _identifier;
         bool _loadImages;
         std::string _basePath;
+        // OPENRCT2MINI revision 71: source-file path for the sprite-decode
+        // cache key. Set by CreateObjectFromJson when it knows the path
+        // (zip / json file paths); empty otherwise.
+        std::string _sourcePath;
         bool _wasVerbose = false;
         bool _wasWarning = false;
         bool _wasError = false;
@@ -152,9 +156,21 @@ namespace OpenRCT2
         {
         }
 
+        // OPENRCT2MINI revision 71: setter used by CreateObjectFromJson so
+        // the sprite-decode cache can stat the source file for its key.
+        void SetSourcePath(std::string_view path)
+        {
+            _sourcePath.assign(path);
+        }
+
         std::string_view GetObjectIdentifier() override
         {
             return _identifier;
+        }
+
+        std::string_view GetSourcePath() const override
+        {
+            return _sourcePath;
         }
 
         bool ShouldLoadImages() override
@@ -590,6 +606,10 @@ namespace OpenRCT2::ObjectFactory
             result->SetFileName(Path::GetFileNameWithoutExtension(path));
             result->MarkAsJsonObject();
             auto readContext = ReadObjectContext(id, loadImageTable, fileRetriever);
+            // OPENRCT2MINI revision 71: hand the source path to the read
+            // context so ImageTable::ReadJson can derive a sprite-cache key
+            // from it (path + mtime + size).
+            readContext.SetSourcePath(path);
             result->ReadJson(&readContext, jRoot);
             if (readContext.WasError())
             {

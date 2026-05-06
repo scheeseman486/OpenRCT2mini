@@ -157,6 +157,15 @@ namespace OpenRCT2
         virtual std::vector<uint8_t> GetData(std::string_view path) = 0;
         virtual ObjectAsset GetAsset(std::string_view path) = 0;
 
+        // OPENRCT2MINI revision 71: source-file path for the sprite-decode
+        // cache key. Returns empty when the object isn't backed by a real
+        // file path (e.g. asset packs, in-memory loaders) — the cache will
+        // skip those, falling back to per-launch decode.
+        virtual std::string_view GetSourcePath() const
+        {
+            return {};
+        }
+
         virtual void LogVerbose(ObjectError code, const utf8* text) = 0;
         virtual void LogWarning(ObjectError code, const utf8* text) = 0;
         virtual void LogError(ObjectError code, const utf8* text) = 0;

@@ -29,6 +29,12 @@ namespace OpenRCT2
         // fails (e.g. /tmp full). When non-null, slices of this block are referenced by offsets
         // in entries flagged !_entryOwnsOffset.
         std::unique_ptr<uint8_t[]> _heapFallback;
+        // OPENRCT2MINI revision 71: when ReadJson hits the persistent sprite-
+        // decode cache, the G1Element offsets in _entries point into the
+        // process-lifetime mmap of objects.cache (managed by SpriteCache.cpp).
+        // We don't own that mapping, just reference it; the sprite-cache
+        // module keeps it alive for the rest of the process. Same lifetime
+        // contract as scratch-backed offsets.
         std::vector<G1Element> _entries;
         // OPENRCT2MINI: parallel to _entries. true → entry's offset is its own delete[]-able heap
         // allocation (set by AddImage). false → offset points into SpriteScratch mmap (process-
