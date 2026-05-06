@@ -14,9 +14,10 @@ OpenRCT2mini ships as an OnionUI **port**. It appears in your Game Library under
 
 It does **not** contain RCT2 game data.
 
-1. Extract the `.7z` to the **root** of your Miyoo Mini's SD card.
-2. Copy your legitimately-owned RollerCoaster Tycoon 2 install to `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct2/`. The folder must contain the original `Data/` and `ObjData/` directories with `g1.dat`, `css1.dat`, etc.
-3. From the OnionUI Game Switcher, run **Refresh roms**. "OpenRCT2mini" appears in the **Simulation** category in your Game Library.
+1. Download the [latest release](https://github.com/scheeseman486/OpenRCT2mini/releases).
+2. Extract the `.7z` to the **root** of your Miyoo Mini's SD card.
+3. Copy your legitimately-owned RollerCoaster Tycoon 2 install to `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct2/`. The folder must contain the original `Data/` and `ObjData/` directories with `g1.dat`, `css1.dat`, etc.
+4. From the OnionUI Game Switcher, run **Refresh roms**. "OpenRCT2mini" appears in the **Simulation** category in your Game Library.
 
 Optionally, RCT1 can be placed at `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct1/` to enable RCT1 scenarios.
 
