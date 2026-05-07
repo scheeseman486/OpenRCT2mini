@@ -3585,7 +3585,7 @@ STR_6585    :Nelze změnit…
 STR_6586    :OpenRCT2
 STR_6587    :Úvodní znělka OpenRCT2 je dílem Allistera Brimblea,{NEWLINE}licencováno CC BY-SA 4.0.
 STR_6588    :Poděkování Hermanu Ridderingovi za svolení k nahrání 35er Voigt.
-STR_6589    :Zobrazit tlačítka oken vlevo
+STR_6589    :Prohodit tlačítka oken
 STR_6590    :Zobrazit tlačítka oken (např. Zavřít) na levé straně titulku okna namísto pravé.
 STR_6591    :Zaměstnanec právě opravuje atrakci a nelze jej propustit.
 STR_6592    :Zaměstnanec právě provádí inspekci atrakce a nelze jej propustit.
@@ -3819,3 +3819,4 @@ STR_7038    :Vržený stín
 STR_7039    :Vykreslí průhledný stín pod kurzorem, aby vynikl na rušném pozadí
 # OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
 STR_7040    :Windows
+STR_7041    :Sbalit okno

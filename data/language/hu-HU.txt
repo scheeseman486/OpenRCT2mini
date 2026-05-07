@@ -3582,7 +3582,7 @@ STR_6585    :Nem lehet a változtatásokat végrehajtani…
 STR_6586    :OpenRCT2
 STR_6587    :Az OpenRCT2 főcímzenéje Allister Brimble műve,{NEWLINE}CC BY-SA 4.0 licenccel.
 STR_6588    :Köszönet Herman Ridderingnek, hogy lehetővé tette számunkra a 35er Voigt rögzítését.
-STR_6589    :Ablak gombok mutatása a bal oldalon
+STR_6589    :Ablakgombok cseréje
 STR_6590    :Az ablak gombok (pl. az ablak bezárása) mutatása az ablak címsorának bal oldalán, ahelyett hogy a jobb oldalon lennének.
 STR_6591    :Az alkalmazott jelenleg egy játékot javít, és nem lehet kirúgni.
 STR_6592    :Az alkalmazott jelenleg egy játékot ellenőriz, és nem lehet kirúgni.
@@ -3830,3 +3830,4 @@ STR_7038    :Vetett árnyék
 STR_7039    :Áttetsző árnyékot rajzol a kurzor alá, hogy jobban kitűnjön zsúfolt háttéren
 # OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
 STR_7040    :Windows
+STR_7041    :Ablak felhúzása

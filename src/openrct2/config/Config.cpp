@@ -240,12 +240,13 @@ namespace OpenRCT2::Config
             model->windowScale = reader->GetFloat("window_scale", Platform::GetDefaultScale());
             model->inferDisplayDPI = reader->GetBoolean("infer_display_dpi", kInferDisplayDPIDefault);
             model->showFPS = reader->GetBoolean("show_fps", false);
-#ifdef _DEBUG
-            // Always have multi-threading disabled in debug builds, this makes things slower.
+            // OPENRCT2MINI: multi-threaded rendering is a net performance
+            // regression on the Miyoo Mini's single-issue ARM core (cache /
+            // sync overhead beats the parallelism win). Force off
+            // unconditionally — ignore any "multithreading=true" left over
+            // in user config.ini files from earlier builds.
+            (void)reader->GetBoolean("multithreading", false); // discard
             model->multiThreading = false;
-#else
-            model->multiThreading = reader->GetBoolean("multithreading", true);
-#endif // _DEBUG
             model->trapCursor = reader->GetBoolean("trap_cursor", false);
             model->autoOpenShops = reader->GetBoolean("auto_open_shops", false);
 

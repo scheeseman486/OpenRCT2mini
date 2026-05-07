@@ -3582,7 +3582,7 @@ STR_6585    :Nie można wprowadzić zmian…
 STR_6586    :OpenRCT2
 STR_6587    :Motyw tytułowy OpenRCT2 jest dziełem Allistera Brimble’a,{NEWLINE}udostępnionym na licencji Creative Commons Uznanie autorstwa Na tych samych warunkach 4.0.
 STR_6588    :Dziękujemy Hermanowi Ridderingowi za umożliwienie nam nagrania 35er Voigt.
-STR_6589    :Umieść przyciski okna po lewej stronie
+STR_6589    :Zamień przyciski okna
 STR_6590    :Umieszcza przyciski okna (np. zamknięcie okna) po lewej stronie paska tytułowego zamiast po prawej.
 STR_6591    :Pracownik obecnie naprawia atrakcję i nie może zostać zwolniony.
 STR_6592    :Pracownik obecnie dokonuje inspekcji atrakcji i nie może zostać zwolniony.
@@ -3824,3 +3824,4 @@ STR_7038    :Cień rzucany
 STR_7039    :Renderuje przezroczysty cień pod kursorem, aby wyróżniał się na zatłoczonym tle
 # OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
 STR_7040    :Windows
+STR_7041    :Zwiń okno

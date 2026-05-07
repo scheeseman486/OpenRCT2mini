@@ -43,6 +43,7 @@ namespace OpenRCT2::Cursor
         { "CURSOR_ENTRANCE_DOWN", CursorID::EntranceDown },
         { "CURSOR_HAND_OPEN", CursorID::HandOpen },
         { "CURSOR_HAND_CLOSED", CursorID::HandClosed },
+        { "CURSOR_UP_DOWN_LEFT_RIGHT_ARROW", CursorID::UpDownLeftRightArrow },
         { "CURSOR_ARROW", CursorID::Arrow },
     };
 

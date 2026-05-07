@@ -38,7 +38,14 @@ using namespace OpenRCT2::Drawing;
 namespace OpenRCT2::Ui::Windows
 {
     static constexpr StringId kWindowTitle = STR_SELECT_DESIGN;
-    static constexpr ScreenSize kWindowSize = { 600, 441 };
+    // OPENRCT2MINI: shaved 32 px off the height (441 → 409) to fit the
+    // 480 px panel with toolbar headroom. The ride-statistics text below
+    // the preview moved into a vertical scroll widget (WIDX_STATS_SCROLL)
+    // so a coaster with the full G-force / drops / inversions list no
+    // longer overflows the bottom of the now-shorter window. The rotate
+    // / scenery buttons stay vertically stacked in the right column so
+    // the scroll widget can take the full width to their left.
+    static constexpr ScreenSize kWindowSize = { 600, 409 };
     static constexpr int32_t kDebugPathHeight = 12;
     static constexpr int32_t kRotateAndSceneryButtonSize = 24;
     static constexpr int32_t kWindowPadding = 5;
@@ -55,6 +62,12 @@ namespace OpenRCT2::Ui::Windows
         WIDX_TRACK_PREVIEW,
         WIDX_ROTATE,
         WIDX_TOGGLE_SCENERY,
+        // OPENRCT2MINI: stats text moved into a scrollable widget so a coaster
+        // with G-forces + drops + inversions doesn't overflow the bottom of
+        // the (now-shorter) window. Sits below the preview, left of the
+        // rotate / scenery buttons (which now share a horizontal row in the
+        // bottom-right corner).
+        WIDX_STATS_SCROLL,
     };
 
     VALIDATE_GLOBAL_WIDX(WC_TRACK_DESIGN_LIST, WIDX_ROTATE);
@@ -66,10 +79,17 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({  4,  18}, {218,  13},   WidgetType::tableHeader,  WindowColour::primary, STR_SELECT_OTHER_RIDE                                       ),
         makeWidget({  4,  32}, {124,  13},   WidgetType::textBox,      WindowColour::secondary                                                            ),
         makeWidget({130,  32}, { 92,  13},   WidgetType::button,       WindowColour::primary, STR_OBJECT_SEARCH_CLEAR                                     ),
-        makeWidget({  4,  46}, {218, 381},   WidgetType::scroll,       WindowColour::primary, SCROLL_VERTICAL,         STR_CLICK_ON_DESIGN_TO_BUILD_IT_TIP),
+        // OPENRCT2MINI: scroll list shrunk 381 → 349 to track the 32 px window crop.
+        makeWidget({  4,  46}, {218, 349},   WidgetType::scroll,       WindowColour::primary, SCROLL_VERTICAL,         STR_CLICK_ON_DESIGN_TO_BUILD_IT_TIP),
         makeWidget({224,  18}, {372, 219},   WidgetType::flatBtn,      WindowColour::primary                                                              ),
-        makeWidget({572, 405}, kFlatBtnSize, WidgetType::flatBtn,      WindowColour::primary, ImageId(SPR_ROTATE_ARROW),        STR_ROTATE_90_TIP                  ),
-        makeWidget({572, 381}, kFlatBtnSize, WidgetType::flatBtn,      WindowColour::primary, ImageId(SPR_SCENERY),             STR_TOGGLE_SCENERY_TIP             )
+        // OPENRCT2MINI: rotate (lower) + scenery (just above) stacked
+        // vertically in the bottom-right corner. y is set in onPrepareDraw.
+        makeWidget({572, 380}, kFlatBtnSize, WidgetType::flatBtn,      WindowColour::primary, ImageId(SPR_ROTATE_ARROW),        STR_ROTATE_90_TIP                  ),
+        makeWidget({572, 356}, kFlatBtnSize, WidgetType::flatBtn,      WindowColour::primary, ImageId(SPR_SCENERY),             STR_TOGGLE_SCENERY_TIP             ),
+        // OPENRCT2MINI: stats scroll box. left+top fixed; right+bottom set
+        // dynamically in onPrepareDraw to track the button column and the
+        // window's bottom margin (debugging-tools mode shrinks bottom).
+        makeWidget({224, 240}, {344, 164},   WidgetType::scroll,       WindowColour::secondary, SCROLL_VERTICAL                                            )
     );
     // clang-format on
 
@@ -329,6 +349,13 @@ namespace OpenRCT2::Ui::Windows
 
         ScreenSize onScrollGetSize(const int32_t scrollIndex) override
         {
+            // OPENRCT2MINI: scroll widget 1 is the stats text. Its content
+            // size depends on which ride flags the loaded design exposes.
+            if (scrollIndex == 1)
+            {
+                return { widgets[WIDX_STATS_SCROLL].width(), computeStatsHeight() };
+            }
+
             size_t numItems = _filteredTrackIds.size();
             if (gLegacyScene != LegacyScene::trackDesignsManager)
             {
@@ -342,6 +369,10 @@ namespace OpenRCT2::Ui::Windows
 
         void onScrollMouseDown(const int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override
         {
+            // OPENRCT2MINI: stats scroll is read-only.
+            if (scrollIndex != 0)
+                return;
+
             if (!_selectedItemIsBeingUpdated)
             {
                 int32_t i = getListItemFromPosition(screenCoords);
@@ -354,6 +385,10 @@ namespace OpenRCT2::Ui::Windows
 
         void onScrollMouseOver(const int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override
         {
+            // OPENRCT2MINI: stats scroll is read-only.
+            if (scrollIndex != 0)
+                return;
+
             if (!_selectedItemIsBeingUpdated)
             {
                 int32_t i = getListItemFromPosition(screenCoords);
@@ -414,22 +449,58 @@ namespace OpenRCT2::Ui::Windows
             {
                 widgets[WIDX_ROTATE].type = WidgetType::flatBtn;
                 widgets[WIDX_TOGGLE_SCENERY].type = WidgetType::flatBtn;
+                widgets[WIDX_STATS_SCROLL].type = WidgetType::scroll;
                 setWidgetPressed(WIDX_TOGGLE_SCENERY, !gTrackDesignSceneryToggle);
             }
             else
             {
                 widgets[WIDX_ROTATE].type = WidgetType::empty;
                 widgets[WIDX_TOGGLE_SCENERY].type = WidgetType::empty;
+                widgets[WIDX_STATS_SCROLL].type = WidgetType::empty;
             }
 
             // When debugging tools are on, shift everything up a bit to make room for displaying the path.
             const int32_t bottomMargin = Config::Get().general.debuggingTools ? (kWindowPadding + kDebugPathHeight)
                                                                               : kWindowPadding;
             widgets[WIDX_TRACK_LIST].bottom = height - bottomMargin;
+
+            // OPENRCT2MINI: rotate + scenery stacked vertically at the right
+            // edge — rotate at the bottom, scenery directly above it. The
+            // narrow right column lets the stats scroll claim the rest of
+            // the horizontal real estate below the preview.
             widgets[WIDX_ROTATE].bottom = height - bottomMargin;
             widgets[WIDX_ROTATE].top = widgets[WIDX_ROTATE].bottom - kRotateAndSceneryButtonSize;
             widgets[WIDX_TOGGLE_SCENERY].bottom = widgets[WIDX_ROTATE].top;
             widgets[WIDX_TOGGLE_SCENERY].top = widgets[WIDX_TOGGLE_SCENERY].bottom - kRotateAndSceneryButtonSize;
+
+            // OPENRCT2MINI: stats scroll fills the space below the preview,
+            // stopping 4 px short of the (vertically-stacked) right button
+            // column. Bottom tracks the same anchor as the buttons.
+            widgets[WIDX_STATS_SCROLL].bottom = height - bottomMargin;
+            widgets[WIDX_STATS_SCROLL].right = widgets[WIDX_ROTATE].left - 4;
+
+            // OPENRCT2MINI: load the selected track design here (was in onDraw)
+            // so _loadedTrackDesign is populated before drawWidgets recurses
+            // into onScrollDraw for WIDX_STATS_SCROLL.
+            if (showPreview)
+            {
+                int32_t listItemIndex = selectedListItem;
+                if (gLegacyScene != LegacyScene::trackDesignsManager)
+                    listItemIndex--;
+                if (!_filteredTrackIds.empty() && listItemIndex >= 0
+                    && static_cast<size_t>(listItemIndex) < _filteredTrackIds.size())
+                {
+                    const int32_t trackIndex = _filteredTrackIds[listItemIndex];
+                    if (_loadedTrackDesignIndex != trackIndex)
+                    {
+                        const u8string& path = _trackDesigns[trackIndex].path;
+                        if (loadDesignPreview(path))
+                            _loadedTrackDesignIndex = trackIndex;
+                        else
+                            _loadedTrackDesignIndex = kTrackDesignIndexUnloaded;
+                    }
+                }
+            }
         }
 
         void onUpdate() override
@@ -482,18 +553,9 @@ namespace OpenRCT2::Ui::Windows
             auto screenPos = windowPos + ScreenCoordsXY{ tdWidget.left + 1, tdWidget.top + 1 };
             Rectangle::fill(rt, { screenPos, screenPos + ScreenCoordsXY{ 369, 216 } }, colour); // TODO Check dpi
 
-            if (_loadedTrackDesignIndex != trackIndex)
-            {
-                if (loadDesignPreview(path))
-                {
-                    _loadedTrackDesignIndex = trackIndex;
-                }
-                else
-                {
-                    _loadedTrackDesignIndex = kTrackDesignIndexUnloaded;
-                }
-            }
-
+            // OPENRCT2MINI: design load moved to onPrepareDraw so the stats
+            // scroll widget has _loadedTrackDesign populated by the time
+            // drawWidgets recurses into onScrollDraw.
             if (!_loadedTrackDesign)
             {
                 return;
@@ -539,11 +601,22 @@ namespace OpenRCT2::Ui::Windows
             ft.Add<const utf8*>(_trackDesigns[trackIndex].name.c_str());
             drawTextEllipsised(rt, screenPos, 368, STR_TRACK_PREVIEW_NAME_FORMAT, ft, { TextAlignment::centre });
 
-            // Information
-            screenPos = windowPos + ScreenCoordsXY{ tdWidget.left + 1, tdWidget.bottom + 2 };
+            // OPENRCT2MINI: ride statistics now live in the WIDX_STATS_SCROLL
+            // scroll widget; see drawStats() / computeStatsHeight() and
+            // onScrollDraw / onScrollGetSize for that path.
+        }
 
-            // Stats
-            ft = Formatter();
+        // OPENRCT2MINI: Helper that draws the ride statistics into a render
+        // target at the given relative origin. Used by onScrollDraw to
+        // populate WIDX_STATS_SCROLL.
+        void drawStats(RenderTarget& rt, ScreenCoordsXY origin) const
+        {
+            if (!_loadedTrackDesign)
+                return;
+
+            ScreenCoordsXY screenPos = origin;
+
+            auto ft = Formatter();
             ft.Add<fixed32_2dp>(_loadedTrackDesign->statistics.ratings.excitement);
             drawText(rt, screenPos, STR_TRACK_LIST_EXCITEMENT_RATING, ft);
             screenPos.y += kListRowHeight;
@@ -558,15 +631,13 @@ namespace OpenRCT2::Ui::Windows
             drawText(rt, screenPos, STR_TRACK_LIST_NAUSEA_RATING, ft);
             screenPos.y += kListRowHeight + 4;
 
-            // Information for tracked rides.
-            if (GetRideTypeDescriptor(_loadedTrackDesign->trackAndVehicle.rtdIndex).flags.has(RtdFlag::hasTrack))
+            const auto& rtd = GetRideTypeDescriptor(_loadedTrackDesign->trackAndVehicle.rtdIndex);
+            if (rtd.flags.has(RtdFlag::hasTrack))
             {
-                const auto& rtd = GetRideTypeDescriptor(_loadedTrackDesign->trackAndVehicle.rtdIndex);
                 if (rtd.specialType != RtdSpecialType::maze)
                 {
                     if (rtd.specialType == RtdSpecialType::miniGolf)
                     {
-                        // Holes
                         ft = Formatter();
                         ft.Add<uint16_t>(_loadedTrackDesign->statistics.holes);
                         drawText(rt, screenPos, STR_HOLES, ft);
@@ -574,20 +645,17 @@ namespace OpenRCT2::Ui::Windows
                     }
                     else
                     {
-                        // Maximum speed
                         ft = Formatter();
                         ft.Add<uint16_t>(ToHumanReadableSpeed(_loadedTrackDesign->statistics.maxSpeed << 16));
                         drawText(rt, screenPos, STR_MAX_SPEED, ft);
                         screenPos.y += kListRowHeight;
 
-                        // Average speed
                         ft = Formatter();
                         ft.Add<uint16_t>(ToHumanReadableSpeed(_loadedTrackDesign->statistics.averageSpeed << 16));
                         drawText(rt, screenPos, STR_AVERAGE_SPEED, ft);
                         screenPos.y += kListRowHeight;
                     }
 
-                    // Ride length
                     ft = Formatter();
                     ft.Add<StringId>(STR_RIDE_LENGTH_ENTRY);
                     ft.Add<uint16_t>(_loadedTrackDesign->statistics.rideLength);
@@ -595,21 +663,18 @@ namespace OpenRCT2::Ui::Windows
                     screenPos.y += kListRowHeight;
                 }
 
-                if (GetRideTypeDescriptor(_loadedTrackDesign->trackAndVehicle.rtdIndex).flags.has(RtdFlag::hasGForces))
+                if (rtd.flags.has(RtdFlag::hasGForces))
                 {
-                    // Maximum positive vertical Gs
                     ft = Formatter();
                     ft.Add<int32_t>(_loadedTrackDesign->statistics.maxPositiveVerticalG);
                     drawText(rt, screenPos, STR_MAX_POSITIVE_VERTICAL_G, ft);
                     screenPos.y += kListRowHeight;
 
-                    // Maximum negative vertical Gs
                     ft = Formatter();
                     ft.Add<int32_t>(_loadedTrackDesign->statistics.maxNegativeVerticalG);
                     drawText(rt, screenPos, STR_MAX_NEGATIVE_VERTICAL_G, ft);
                     screenPos.y += kListRowHeight;
 
-                    // Maximum lateral Gs
                     ft = Formatter();
                     ft.Add<int32_t>(_loadedTrackDesign->statistics.maxLateralG);
                     drawText(rt, screenPos, STR_MAX_LATERAL_G, ft);
@@ -617,7 +682,6 @@ namespace OpenRCT2::Ui::Windows
 
                     if (_loadedTrackDesign->statistics.totalAirTime != 0)
                     {
-                        // Total air time
                         ft = Formatter();
                         ft.Add<int32_t>(ToHumanReadableAirTime(_loadedTrackDesign->statistics.totalAirTime));
                         drawText(rt, screenPos, STR_TOTAL_AIR_TIME, ft);
@@ -625,15 +689,13 @@ namespace OpenRCT2::Ui::Windows
                     }
                 }
 
-                if (GetRideTypeDescriptor(_loadedTrackDesign->trackAndVehicle.rtdIndex).flags.has(RtdFlag::hasDrops))
+                if (rtd.flags.has(RtdFlag::hasDrops))
                 {
-                    // Drops
                     ft = Formatter();
                     ft.Add<uint16_t>(_loadedTrackDesign->statistics.drops);
                     drawText(rt, screenPos, STR_DROPS, ft);
                     screenPos.y += kListRowHeight;
 
-                    // Drop height is multiplied by 0.75
                     ft = Formatter();
                     ft.Add<uint16_t>((_loadedTrackDesign->statistics.highestDropHeight * 3) / 4);
                     drawText(rt, screenPos, STR_HIGHEST_DROP_HEIGHT, ft);
@@ -653,7 +715,6 @@ namespace OpenRCT2::Ui::Windows
 
             if (!_loadedTrackDesign->statistics.spaceRequired.IsNull())
             {
-                // Space required
                 ft = Formatter();
                 ft.Add<uint16_t>(_loadedTrackDesign->statistics.spaceRequired.x);
                 ft.Add<uint16_t>(_loadedTrackDesign->statistics.spaceRequired.y);
@@ -669,10 +730,61 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
+        // OPENRCT2MINI: Mirrors drawStats's conditional structure exactly,
+        // accumulating heights instead of drawing. Used by onScrollGetSize so
+        // the scroll bar reflects the actual content size for the loaded
+        // design.
+        int32_t computeStatsHeight() const
+        {
+            if (!_loadedTrackDesign)
+                return 0;
+
+            int32_t h = 0;
+            h += kListRowHeight * 3 + 4; // excitement, intensity, nausea + gap
+
+            const auto& rtd = GetRideTypeDescriptor(_loadedTrackDesign->trackAndVehicle.rtdIndex);
+            if (rtd.flags.has(RtdFlag::hasTrack))
+            {
+                if (rtd.specialType != RtdSpecialType::maze)
+                {
+                    if (rtd.specialType == RtdSpecialType::miniGolf)
+                        h += kListRowHeight; // holes
+                    else
+                        h += kListRowHeight * 2; // max speed + avg speed
+                    h += kListRowHeight; // ride length
+                }
+                if (rtd.flags.has(RtdFlag::hasGForces))
+                {
+                    h += kListRowHeight * 3; // max+, max-, max lateral
+                    if (_loadedTrackDesign->statistics.totalAirTime != 0)
+                        h += kListRowHeight;
+                }
+                if (rtd.flags.has(RtdFlag::hasDrops))
+                    h += kListRowHeight * 2; // drops + drop height
+                if (_loadedTrackDesign->statistics.inversions != 0)
+                    h += kListRowHeight;
+                h += 4;
+            }
+
+            if (!_loadedTrackDesign->statistics.spaceRequired.IsNull())
+                h += kListRowHeight; // space required
+            if (_loadedTrackDesign->gameStateData.cost != 0)
+                h += kListRowHeight; // cost
+
+            return h;
+        }
+
         void onScrollDraw(const int32_t scrollIndex, RenderTarget& rt) override
         {
             auto paletteIndex = getColourMap(colours[0].colour).midLight;
             GfxClear(rt, paletteIndex);
+
+            // OPENRCT2MINI: scroll widget 1 hosts the ride statistics text.
+            if (scrollIndex == 1)
+            {
+                drawStats(rt, ScreenCoordsXY{ 2, 1 });
+                return;
+            }
 
             auto screenCoords = ScreenCoordsXY{ 0, 0 };
             size_t listIndex = 0;

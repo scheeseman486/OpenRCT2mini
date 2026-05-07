@@ -421,7 +421,7 @@ namespace OpenRCT2::Ui::Windows
             {
                 // Always swallow these scancodes while the OSK is up so
                 // shortcut chord handlers further down the pipeline
-                // don't fire (e.g. F16 = X = game-speed cycle).
+                // don't fire (e.g. C = X = window-drag shortcut).
                 const bool consumed = IsOskScancode(scancode);
                 if (!consumed)
                     return false;
@@ -922,16 +922,23 @@ namespace OpenRCT2::Ui::Windows
                     case SDL_SCANCODE_RIGHT:
                     case SDL_SCANCODE_Z:      // A button — insert
                     case SDL_SCANCODE_X:      // B button — backspace
-                    case SDL_SCANCODE_F16:    // X button — space
-                    case SDL_SCANCODE_F17:    // Y button — caps
+                    case SDL_SCANCODE_C:      // X button — space (was F16, see W0)
+                    case SDL_SCANCODE_V:      // Y button — caps  (was F17, see W0)
+                    // L1 = Q + LSHIFT dual-emit (W0). LSHIFT carries the
+                    // OpenRCT2 Shift-modifier reach; we still match it here
+                    // (and Q below) so the OSK consumes the L1 press cleanly.
+                    case SDL_SCANCODE_Q:
                     case SDL_SCANCODE_LSHIFT: // L1 — caret left
                     case SDL_SCANCODE_RSHIFT:
+                    // R1 = A + LALT dual-emit (W0). Same shape — match both
+                    // the user-facing letter and the modifier scancode.
+                    case SDL_SCANCODE_A:
                     case SDL_SCANCODE_LALT:   // R1 — caret right
                     case SDL_SCANCODE_RALT:
                     case SDL_SCANCODE_RETURN: // Start — commit
                     case SDL_SCANCODE_ESCAPE: // Select — cancel
-                    case SDL_SCANCODE_F14:    // L2 — swallow (no-op)
-                    case SDL_SCANCODE_F15:    // R2 — swallow (no-op)
+                    case SDL_SCANCODE_W:      // L2 — swallow / console scroll prev (was F14)
+                    case SDL_SCANCODE_S:      // R2 — swallow / console scroll next (was F15)
                         return true;
                     default:
                         return false;
@@ -960,20 +967,35 @@ namespace OpenRCT2::Ui::Windows
                     case SDL_SCANCODE_X:
                         Backspace();
                         break;
-                    case SDL_SCANCODE_F16:
+                    case SDL_SCANCODE_C: // X button — space (W0: was F16)
                         if (_mode == OskMode::numpad)
                             ToggleSign();
                         else
                             InsertChar(' ');
                         break;
-                    case SDL_SCANCODE_F17:
+                    case SDL_SCANCODE_V: // Y button — caps (W0: was F17)
                         if (_mode == OskMode::full)
                             _caps = !_caps;
                         // Numpad: Y is unused — see §6.3.
                         break;
+                    // L1 = Q + LSHIFT dual-emit (W0). Either fires CaretLeft.
+                    // The dual emission means we'll get two FireScancode
+                    // calls per press (one for Q, one for LSHIFT), but
+                    // they're idempotent: caret moves twice — wait, no,
+                    // CaretLeft moves the caret. Two fires = caret moves
+                    // twice. We need to dedupe.
+                    case SDL_SCANCODE_Q:
+                        // Skip — LSHIFT carries the meaning, Q is just a
+                        // testability echo. handleKey returns true for
+                        // both, so nothing leaks; FireScancode no-ops here.
+                        break;
                     case SDL_SCANCODE_LSHIFT:
                     case SDL_SCANCODE_RSHIFT:
                         CaretLeft();
+                        break;
+                    // R1 = A + LALT dual-emit (W0). Skip A for the same
+                    // dedup reason.
+                    case SDL_SCANCODE_A:
                         break;
                     case SDL_SCANCODE_LALT:
                     case SDL_SCANCODE_RALT:
@@ -985,12 +1007,12 @@ namespace OpenRCT2::Ui::Windows
                     case SDL_SCANCODE_ESCAPE:
                         Cancel();
                         break;
-                    case SDL_SCANCODE_F14: // L2
+                    case SDL_SCANCODE_W: // L2 (W0: was F14)
                         if (_target == OskTarget::Console)
                             OpenRCT2::Ui::GetInGameConsole().Input(ConsoleInput::ScrollPrevious);
                         // Otherwise swallow as no-op (already in IsOskScancode).
                         break;
-                    case SDL_SCANCODE_F15: // R2
+                    case SDL_SCANCODE_S: // R2 (W0: was F15)
                         if (_target == OskTarget::Console)
                             OpenRCT2::Ui::GetInGameConsole().Input(ConsoleInput::ScrollNext);
                         break;
@@ -1021,16 +1043,20 @@ namespace OpenRCT2::Ui::Windows
             {
                 switch (sc)
                 {
-                    case SDL_SCANCODE_F14: // L2 — repeat console scroll
-                    case SDL_SCANCODE_F15: // R2 — repeat console scroll
+                    case SDL_SCANCODE_W: // L2 — repeat console scroll (W0: was F14)
+                    case SDL_SCANCODE_S: // R2 — repeat console scroll (W0: was F15)
                         return _target == OskTarget::Console;
                     case SDL_SCANCODE_UP:
                     case SDL_SCANCODE_DOWN:
                     case SDL_SCANCODE_LEFT:
                     case SDL_SCANCODE_RIGHT:
                     case SDL_SCANCODE_X:      // backspace
+                    // L1/R1 dual-emit (W0): match both letter and modifier so
+                    // either one triggers caret repeat consistently.
+                    case SDL_SCANCODE_Q:
                     case SDL_SCANCODE_LSHIFT:
                     case SDL_SCANCODE_RSHIFT:
+                    case SDL_SCANCODE_A:
                     case SDL_SCANCODE_LALT:
                     case SDL_SCANCODE_RALT:
                         return true;

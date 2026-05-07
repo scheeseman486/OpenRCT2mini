@@ -3587,7 +3587,7 @@ STR_6585    :Impossibile effettuare modifiche…
 STR_6586    :OpenRCT2
 STR_6587    :Il tema musicale principale di OpenRCT2 è opera di Allister Brimble,{NEWLINE}con licenza CC BY-SA 4.0.
 STR_6588    :Si ringrazia Herman Riddering per averci permesso di registrare il 35er Voigt.
-STR_6589    :Mostra i pulsanti di controllo della finestra a sinistra
+STR_6589    :Inverti pulsanti finestra
 STR_6590    :Mostra i pulsanti di controllo della finestra (ad es. per chiuderla) a sinistra della barra del titolo invece che a destra.
 STR_6591    :Il dipendente sta riparando un’attrazione e non può essere licenziato.
 STR_6592    :Il dipendente sta ispezionando un’attrazione e non può essere licenziato.

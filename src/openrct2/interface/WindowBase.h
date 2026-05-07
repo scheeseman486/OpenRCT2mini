@@ -115,11 +115,24 @@ namespace OpenRCT2
         bool isVisible = true;
         EntityId viewportSmartFollowSprite{ EntityId::GetNull() }; // Handles setting viewport target sprite etc
 
+        // OPENRCT2MINI W5: window-shade state. When isShaded is true,
+        // resizeFrame() collapses the window to title-bar height and sets
+        // WidgetFlag::shadeHidden on every body widget. The three restore*
+        // fields capture the pre-shade dimensions so toggleShade() can put
+        // them back. Defaults to false; opens always show fully expanded.
+        bool isShaded{ false };
+        int16_t shadeRestoreHeight{ 0 };
+        int16_t shadeRestoreMinHeight{ 0 };
+        int16_t shadeRestoreMaxHeight{ 0 };
+
         void setViewportLocation(const CoordsXYZ& coords);
         void invalidate();
         void removeViewport();
         void setWidgets(std::span<const Widget> newWidgets);
         void resizeFrame();
+        // OPENRCT2MINI W5: flip isShaded and trigger a resizeFrame().
+        // Saves/restores height fields around the toggle.
+        void toggleShade();
 
         int16_t getTitleBarTargetHeight() const;
         int16_t getTitleBarCurrentHeight() const;
@@ -161,6 +174,16 @@ namespace OpenRCT2
         {
         }
         virtual void onDraw(Drawing::RenderTarget& rt)
+        {
+        }
+        // OPENRCT2MINI W5: render only the title bar chrome (frame +
+        // caption + closeBox + shadeBox) when the window is shaded, so the
+        // body content's custom drawing in onDraw — viewports, tab images,
+        // graphs, custom text — never runs. The Window shim in openrct2-ui
+        // overrides this to call WindowDrawWidgets, which respects
+        // shadeHidden and naturally skips body widgets. Default is empty
+        // for libopenrct2 layer only.
+        virtual void drawShadedChrome(Drawing::RenderTarget& rt)
         {
         }
         virtual void onDrawWidget(WidgetIndex widgetIndex, Drawing::RenderTarget& rt)

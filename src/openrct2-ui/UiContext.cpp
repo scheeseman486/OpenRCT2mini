@@ -142,6 +142,22 @@ private:
     // cursor defeats the precision it provides.
     bool _vKbCtrl = false;
 
+    // OPENRCT2MINI W9: face-X (scancode C) shade controls. Tap shades the
+    // window under the cursor (or unshades it if it was already shaded).
+    // A 500 ms hold fires a shade-all toggle once: if any shadable window
+    // is currently expanded the action shades them all, otherwise it
+    // unshades all. The hold fires once per press — releasing X is
+    // required before another hold can re-trigger.
+    bool _vKbCPressed = false;
+    bool _vKbCHoldFired = false;
+    uint32_t _vKbCPressedAtMs = 0;
+    static constexpr uint32_t kShadeAllHoldMs = 500;
+    // OPENRCT2MINI: R1+X = close window under cursor. The chord fires on
+    // X-press (immediate response), and we set this flag so the matching
+    // X-release skips the normal tap-shade action. Cleared on every fresh
+    // X-press so independent presses don't accidentally inherit it.
+    bool _vKbCSuppressShade = false;
+
     // OPENRCT2MINI OSK: when a KEYDOWN handed to OskHandleKey closes the
     // OSK (e.g. ESCAPE → Cancel, RETURN → Commit), we still need to
     // swallow the matching KEYUP. Otherwise the now-active topmost
@@ -162,6 +178,81 @@ private:
     // just freezes the cursor and leaves the user unable to click Cancel
     // or OK. Cursor movement is always more useful than within-text-field
     // arrow nav for these targets.
+    // OPENRCT2MINI W9: a window is shadable iff it has the standard
+    // caption + closeBox prefix and isn't flagged noTitleBar — same rule
+    // resizeFrame() uses to decide whether to append a shadeBox button.
+    static bool isShadableWindow(const WindowBase& w)
+    {
+        if (w.flags.has(WindowFlag::noTitleBar))
+            return false;
+        if (w.widgets.size() < 3)
+            return false;
+        if (w.widgets[1].type != WidgetType::caption)
+            return false;
+        if (w.widgets[2].type != WidgetType::closeBox)
+            return false;
+        return true;
+    }
+
+    void ShadeWindowUnderCursor()
+    {
+        auto* wm = GetWindowManager();
+        if (wm == nullptr)
+            return;
+        // _cursorState.position is in scaled (game-canvas) pixels — same
+        // coordinate space FindFromPoint compares against w->windowPos.
+        WindowBase* w = wm->FindFromPoint(_cursorState.position);
+        if (w == nullptr)
+            return;
+        if (!isShadableWindow(*w))
+            return;
+        w->toggleShade();
+    }
+
+    // OPENRCT2MINI: R1+X close-window. Closes the window under the cursor
+    // if it has a closeBox in the standard slot — that's the same bar the
+    // user could click manually with face-A on the closeBox itself, so
+    // there's no risk of closing a modal / toolbar / tooltip that doesn't
+    // expose a close button. Toolbars (noBackground) and the main viewport
+    // shell (stickToBack / noTitleBar) all fail isShadableWindow for the
+    // same caption + closeBox reason and are excluded automatically.
+    void CloseWindowUnderCursor()
+    {
+        auto* wm = GetWindowManager();
+        if (wm == nullptr)
+            return;
+        WindowBase* w = wm->FindFromPoint(_cursorState.position);
+        if (w == nullptr || w->flags.has(WindowFlag::dead))
+            return;
+        if (!isShadableWindow(*w))
+            return;
+        wm->Close(*w);
+    }
+
+    void ToggleShadeAll()
+    {
+        // Decide direction in one pass: if any shadable window is
+        // currently expanded, shade everything; otherwise unshade all.
+        bool anyExpanded = false;
+        WindowVisitEach([&anyExpanded](WindowBase* w) {
+            if (w == nullptr || w->flags.has(WindowFlag::dead))
+                return;
+            if (!isShadableWindow(*w))
+                return;
+            if (!w->isShaded)
+                anyExpanded = true;
+        });
+        const bool target = anyExpanded; // true == should be shaded
+        WindowVisitEach([target](WindowBase* w) {
+            if (w == nullptr || w->flags.has(WindowFlag::dead))
+                return;
+            if (!isShadableWindow(*w))
+                return;
+            if (w->isShaded != target)
+                w->toggleShade();
+        });
+    }
+
     bool InterceptVirtualCursorKey(SDL_Scancode sc, bool down)
     {
         // OPENRCT2MINI OSK: when the on-screen keyboard is up, route every
@@ -192,6 +283,36 @@ private:
             case SDL_SCANCODE_RIGHT: _vKbRight = down; return true;
             case SDL_SCANCODE_Z:     _vKbZ = down;     return true;
             case SDL_SCANCODE_X:     _vKbX = down;     return true;
+            // OPENRCT2MINI W0: device L1 dual-emits Q + LSHIFT and R1 dual-
+            // emits A + LALT (the SDL2 set_key patch in build-deps.sh). On
+            // host PC there's no patch, so pressing the user-facing letter
+            // alone doesn't fire the modifier side. Shadow the modifier
+            // bits here so a host dev pressing Q/A gets the same effective
+            // behavior as a device user pressing L1/R1.
+            //
+            // Q → LSHIFT in SDL mod state, so OpenRCT2's "Shift modifier"
+            // paths (raise placement Z, vertical track stack, etc.) fire.
+            // A → fast-cursor + gamepad-mod flags directly, mirroring the
+            // LALT case below; we don't bother updating SDL mod state for
+            // ALT because the LALT case immediately clears it anyway.
+            //
+            // Text-input guard: yield Q/A to typing in peep-rename / chat /
+            // console fields. On device the OSK eats keys before they reach
+            // here, so this guard only matters on host.
+            case SDL_SCANCODE_Q:
+                if (IsTextInputActive())
+                    return false;
+                if (down)
+                    SDL_SetModState(static_cast<SDL_Keymod>(SDL_GetModState() | KMOD_LSHIFT));
+                else
+                    SDL_SetModState(static_cast<SDL_Keymod>(SDL_GetModState() & ~KMOD_LSHIFT));
+                return true;
+            case SDL_SCANCODE_A:
+                if (IsTextInputActive())
+                    return false;
+                _vKbShift = down;
+                _vGamepadMod = down;
+                return true;
             // OPENRCT2MINI cut 58/59/60/61: R1 = LALT (was RSHIFT in 58, F13
             // in 59-60). Alt is on every PC keyboard so the dev can test
             // fast-cursor / gamepad-mod natively. We swallow the event AND
@@ -224,9 +345,13 @@ private:
             // ProcessVirtualGamepadCursor to suppress fast cursor.
             case SDL_SCANCODE_LCTRL:
             case SDL_SCANCODE_RCTRL: _vKbCtrl = down; return false;
-            // OPENRCT2MINI cut 59: face X / face Y / L2 / R2 onto F-keys
-            // emitted by the cut 43 set_key patch. Action fires on press;
-            // release is silent.
+            // OPENRCT2MINI W0 (was cut 59): face X / face Y / L2 / R2 onto
+            // WASD-cluster letters emitted by the SDL2 set_key patch. F-keys
+            // (F14-F17) were testable only on full-size PC keyboards; letters
+            // are universal. Each case is gated on !hasTextInputFocus so a
+            // dev typing in a peep-rename / chat / console field still gets
+            // the literal letter; the OSK is the device-side text-entry
+            // path and routes its own keys via OskHandleKey above.
             // OPENRCT2MINI polish: rotate view is the default for L2/R2;
             // R1 (gamepad-modifier) flips them to zoom. The original
             // arrangement (zoom default, R1 to rotate) was awkward when
@@ -234,8 +359,15 @@ private:
             // rotation, and zoom is occasional. The chord pattern stays
             // consistent: the modifier always swaps to the secondary
             // function.
-            case SDL_SCANCODE_F14: // L2 — rotate view CCW, or zoom out with R1
-                if (down)
+            case SDL_SCANCODE_W: // L2 — rotate view CCW, or zoom out with R1
+                if (IsTextInputActive())
+                    return false;
+                // OPENRCT2MINI: viewport actions are no-ops on the title
+                // sequence — the cinematic auto-pan owns the camera there
+                // and rotating / zooming derails the loop. Still swallow
+                // the key (return true) so it doesn't fall through to any
+                // user-bound shortcut and produce surprises.
+                if (down && gLegacyScene != LegacyScene::titleSequence)
                 {
                     if (_vGamepadMod)
                         Windows::MainWindowZoom(false, false);
@@ -243,8 +375,10 @@ private:
                         ViewportRotateAll(-1);
                 }
                 return true;
-            case SDL_SCANCODE_F15: // R2 — rotate view CW, or zoom in with R1
-                if (down)
+            case SDL_SCANCODE_S: // R2 — rotate view CW, or zoom in with R1
+                if (IsTextInputActive())
+                    return false;
+                if (down && gLegacyScene != LegacyScene::titleSequence)
                 {
                     if (_vGamepadMod)
                         Windows::MainWindowZoom(true, false);
@@ -252,29 +386,48 @@ private:
                         ViewportRotateAll(1);
                 }
                 return true;
-            case SDL_SCANCODE_F16: // face X — cycle game speed (Normal -> Quick
-                                   // -> Fast -> Turbo -> Pause -> Normal)
-                if (down && gLegacyScene != LegacyScene::titleSequence
-                    && Network::GetMode() == Network::Mode::none)
+            // OPENRCT2MINI W9: face-X (scancode C) drives the shade
+            // controls. We just latch press / release here; the actions
+            // fire from ProcessVirtualGamepadCursor's per-frame poll
+            // (hold) and the release branch below (tap). Cycle-game-speed
+            // (cut 31) and window-drag (cut 270) used to live on this
+            // button; both are gone now.
+            case SDL_SCANCODE_C:
+                if (IsTextInputActive())
+                    return false;
+                if (down)
                 {
-                    if (GameIsPaused())
+                    if (!_vKbCPressed)
                     {
-                        PauseToggle();
-                        if (gGameSpeed != 1)
-                            GameResetSpeed();
+                        _vKbCPressed = true;
+                        _vKbCPressedAtMs = SDL_GetTicks();
+                        _vKbCHoldFired = false;
+                        _vKbCSuppressShade = false;
+                        // OPENRCT2MINI: R1+X = close the window under the
+                        // cursor. Fires immediately on press; the matching
+                        // X-release sees _vKbCSuppressShade and skips the
+                        // tap-shade action that would otherwise follow.
+                        if (_vGamepadMod)
+                        {
+                            CloseWindowUnderCursor();
+                            _vKbCSuppressShade = true;
+                        }
                     }
-                    else if (gGameSpeed >= 4)
+                }
+                else
+                {
+                    if (_vKbCPressed)
                     {
-                        PauseToggle();
-                    }
-                    else
-                    {
-                        GameIncreaseGameSpeed();
+                        _vKbCPressed = false;
+                        if (!_vKbCHoldFired && !_vKbCSuppressShade)
+                            ShadeWindowUnderCursor();
                     }
                 }
                 return true;
-            case SDL_SCANCODE_F17: // face Y — rotate construction object CW
-                                   // (3x = anti-clockwise when R1 held)
+            case SDL_SCANCODE_V: // face Y — rotate construction object CW
+                                 // (3x = anti-clockwise when R1 held)
+                if (IsTextInputActive())
+                    return false;
                 if (down)
                 {
                     int turns = _vGamepadMod ? 3 : 1;
@@ -513,6 +666,26 @@ public:
 
     void SetCursorPosition(const ScreenCoordsXY& cursorPosition) override
     {
+#ifdef ENABLE_SOFTWARE_CURSOR
+        // OPENRCT2MINI: in cursor-lock drags (camera drag, scroll-drag) the
+        // input pipeline calls SetCursorPosition each frame to pin the
+        // cursor at gInputDragLast. SDL_WarpMouseInWindow's effect arrives
+        // as a SDL_MOUSEMOTION event on the NEXT frame — between now and
+        // then, the software-cursor draw reads _cursorState.position which
+        // the virtual-cursor poll has already shifted by D-pad/arrow-key
+        // motion this frame, so the cursor visibly jitters one pixel away
+        // from the lock point and snaps back. Sync _cursorState.position
+        // and the virtual-cursor latches up immediately so the very next
+        // draw shows the cursor at the lock point.
+        const float scale = static_cast<float>(Config::Get().general.windowScale);
+        const int32_t scaledX = static_cast<int32_t>(std::round(static_cast<float>(cursorPosition.x) / scale));
+        const int32_t scaledY = static_cast<int32_t>(std::round(static_cast<float>(cursorPosition.y) / scale));
+        _cursorState.position = { scaledX, scaledY };
+        _vcursorX = static_cast<float>(cursorPosition.x);
+        _vcursorY = static_cast<float>(cursorPosition.y);
+        _vcursorLastIntX = scaledX;
+        _vcursorLastIntY = scaledY;
+#endif
         SDL_WarpMouseInWindow(nullptr, cursorPosition.x, cursorPosition.y);
     }
 
@@ -1119,7 +1292,29 @@ private:
         {
             _vKbUp = _vKbDown = _vKbLeft = _vKbRight = false;
             _vKbZ = _vKbX = false;
+            // OPENRCT2MINI W9: also drop any in-flight C press / hold so
+            // the OSK closing mid-hold doesn't immediately fire either
+            // shade action when control returns to the world view.
+            _vKbCPressed = false;
+            _vKbCHoldFired = false;
+            _vKbCSuppressShade = false;
             return;
+        }
+
+        // OPENRCT2MINI W9: per-frame X-button poll. Tap is handled in
+        // InterceptVirtualCursorKey on the KEYUP edge; hold needs a timer
+        // to fire once when the threshold is crossed. _vKbCSuppressShade is
+        // set when R1+X closed a window on press — in that case we've
+        // already done the action and the user holding the chord shouldn't
+        // also fire shade-all.
+        if (_vKbCPressed && !_vKbCHoldFired && !_vKbCSuppressShade)
+        {
+            const uint32_t held = SDL_GetTicks() - _vKbCPressedAtMs;
+            if (held >= kShadeAllHoldMs)
+            {
+                ToggleShadeAll();
+                _vKbCHoldFired = true;
+            }
         }
         const auto& controllers = _inputManager.getGameControllers();
 
@@ -1276,10 +1471,21 @@ private:
                                 uint8_t cursorOldUp) {
             if (now_pressed == prev_pressed)
                 return;
-            ScreenCoordsXY pos = {
-                static_cast<int32_t>(_vcursorX / scale),
-                static_cast<int32_t>(_vcursorY / scale),
-            };
+            // OPENRCT2MINI W9: use _cursorState.position (the authoritative
+            // current cursor pos) instead of recomputing from _vcursorX/Y
+            // via truncate. The D-pad write block above stores
+            // _cursorState.position by ROUNDING _vcursorX/Y, but truncate
+            // here disagreed with that round whenever _vcursorX had a
+            // fractional part >= 0.5 — which happens any time the user
+            // navigated via D-pad / arrow keys to a non-integer float
+            // position. The 1-pixel mismatch made gInputDragLast (set
+            // from the press event's truncated pos) lag _cursorState.position
+            // during a drag; per-frame newWindowCoords ended up at
+            // windowPos+1 even though the cursor was completely still,
+            // and on release the truncate-based release event snapped
+            // the window back to windowPos. Reading _cursorState.position
+            // directly removes the disagreement.
+            ScreenCoordsXY pos = _cursorState.position;
             if (now_pressed)
             {
                 StoreMouseInput(pressEvent, pos);

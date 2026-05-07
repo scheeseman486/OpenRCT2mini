@@ -29,6 +29,7 @@
 #include <openrct2/actions/footpath/FootpathRemoveAction.h>
 #include <openrct2/audio/Audio.h>
 #include <openrct2/core/FlagHolder.hpp>
+#include <openrct2/drawing/ColourMap.h>
 #include <openrct2/drawing/Drawing.h>
 #include <openrct2/drawing/Text.h>
 #include <openrct2/localisation/Formatter.h>
@@ -126,7 +127,23 @@ namespace OpenRCT2::Ui::Windows
 #pragma region Measurements
 
     static constexpr StringId kWindowTitle = STR_FOOTPATHS;
-    static constexpr ScreenSize kWindowSize = { 106, 461 };
+    // OPENRCT2MINI: was {106, 461} — overflowed the 480 px panel by ~25 px
+    // after subtracting top + bottom toolbars. The three mode buttons in
+    // the bottom group used to be a triad (two on top, one centred below)
+    // because their 36×36 footprints couldn't fit three across the 100 px
+    // group. We now clip each sprite to a 25×25 viewport (offset 4,10
+    // into the 36×36 source), wrap that in a 27×27 widget, and lay all
+    // three across one row — saving ~53 px of vertical space.
+    static constexpr ScreenSize kWindowSize = { 106, 408 };
+
+    // OPENRCT2MINI: clipped-mode-button geometry. The 36×36 sprite is
+    // cropped to a 25×25 viewport — its (4, 10)..(28, 34) region. The
+    // cropped image sits inside a 27×27 widget with a 1 px padding ring.
+    static constexpr int32_t kModeButtonSize = 27;
+    static constexpr int32_t kModeButtonInner = 25;
+    static constexpr int32_t kModeButtonInnerPad = (kModeButtonSize - kModeButtonInner) / 2; // 1
+    static constexpr int32_t kModeButtonSpriteOffsetX = 4;
+    static constexpr int32_t kModeButtonSpriteOffsetY = 10;
 
 #pragma endregion
 
@@ -187,11 +204,16 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({ 8, 242}, { 90, 90}, WidgetType::flatBtn,  WindowColour::secondary, 0xFFFFFFFF,                                 STR_CONSTRUCT_THE_SELECTED_FOOTPATH_SECTION_TIP),
         makeWidget({30, 335}, { 46, 24}, WidgetType::flatBtn,  WindowColour::secondary, ImageId(SPR_DEMOLISH_CURRENT_SECTION),      STR_REMOVE_PREVIOUS_FOOTPATH_SECTION_TIP       ),
 
-        // Mode group
-        makeWidget({ 3, 361}, {100, 99}, WidgetType::groupbox, WindowColour::primary                                                                                               ),
-        makeWidget({13, 372}, { 36, 36}, WidgetType::flatBtn,  WindowColour::secondary, ImageId(SPR_CONSTRUCTION_FOOTPATH_LAND),    STR_CONSTRUCT_FOOTPATH_ON_LAND_TIP             ),
-        makeWidget({57, 372}, { 36, 36}, WidgetType::flatBtn,  WindowColour::secondary, ImageId(SPR_CONSTRUCTION_FOOTPATH_BRIDGE),  STR_CONSTRUCT_BRIDGE_OR_TUNNEL_FOOTPATH_TIP    ),
-        makeWidget({35, 416}, { 36, 36}, WidgetType::flatBtn,  WindowColour::secondary, ImageId(SPR_G2_ICON_PATH_DRAG_TOOL),        STR_DRAG_AREA_OF_FOOTPATH_TIP                  )
+        // Mode group — OPENRCT2MINI: was 100×99 with a triad button layout;
+        // now 100×42 with all three 27×27 mode buttons on one row at y=372.
+        // Image is intentionally undefined on each button so the default
+        // WidgetDrawImage path skips them; onDraw renders a clipped 25×25
+        // sub-region of each 36×36 source sprite manually (see
+        // drawClippedModeButtonImage).
+        makeWidget({ 3, 361}, {100, 42}, WidgetType::groupbox, WindowColour::primary                                                                                               ),
+        makeWidget({10, 372}, { 27, 27}, WidgetType::flatBtn,  WindowColour::secondary, kWidgetContentEmpty,                       STR_CONSTRUCT_FOOTPATH_ON_LAND_TIP             ),
+        makeWidget({39, 372}, { 27, 27}, WidgetType::flatBtn,  WindowColour::secondary, kWidgetContentEmpty,                       STR_CONSTRUCT_BRIDGE_OR_TUNNEL_FOOTPATH_TIP    ),
+        makeWidget({68, 372}, { 27, 27}, WidgetType::flatBtn,  WindowColour::secondary, kWidgetContentEmpty,                       STR_DRAG_AREA_OF_FOOTPATH_TIP                  )
     );
 
 #pragma endregion
@@ -558,6 +580,59 @@ namespace OpenRCT2::Ui::Windows
             ScreenCoordsXY screenCoords;
             WindowDrawWidgets(*this, rt);
             WindowFootpathDrawDropdownButtons(rt);
+
+            // OPENRCT2MINI: render the three mode buttons' icons by clipping
+            // each 36×36 source sprite to a 25×25 viewport. The widgets carry
+            // kWidgetContentEmpty so WidgetDrawImage skipped them; the inset
+            // border is already drawn by WindowDrawWidgets.
+            //
+            // We can't use rt.Crop() — its math assumes the parent rt has
+            // origin (0, 0), but onDraw receives an rt that's already been
+            // clipped to (windowPos ∩ dirty-block), giving rt.x/rt.y a
+            // non-zero world origin. Compounding via Crop()'s bits offset
+            // walks the pointer off-buffer (and crashed). Build the clipped
+            // sub-RT manually instead, taking rt.x / rt.y into account, and
+            // intersect against the parent rt's visible region so we never
+            // dereference outside of it.
+            auto drawClippedModeButton = [&](WidgetIndex idx, uint32_t spriteIdx) {
+                const auto& wbtn = widgets[idx];
+                const ScreenCoordsXY worldTL = windowPos
+                    + ScreenCoordsXY{ wbtn.left + kModeButtonInnerPad, wbtn.top + kModeButtonInnerPad };
+
+                // Clip the desired 25×25 window to the parent rt's bounds.
+                int32_t clipL = std::max<int32_t>(worldTL.x, rt.x);
+                int32_t clipT = std::max<int32_t>(worldTL.y, rt.y);
+                int32_t clipR = std::min<int32_t>(worldTL.x + kModeButtonInner, rt.x + rt.width);
+                int32_t clipB = std::min<int32_t>(worldTL.y + kModeButtonInner, rt.y + rt.height);
+                if (clipL >= clipR || clipT >= clipB)
+                    return;
+
+                Drawing::RenderTarget cropped = rt;
+                cropped.bits = rt.bits + (clipL - rt.x) + (clipT - rt.y) * rt.LineStride();
+                cropped.x = clipL;
+                cropped.y = clipT;
+                cropped.width = clipR - clipL;
+                cropped.height = clipB - clipT;
+                cropped.pitch = rt.LineStride() - cropped.width;
+
+                const auto spritePos = worldTL
+                    - ScreenCoordsXY{ kModeButtonSpriteOffsetX, kModeButtonSpriteOffsetY };
+                if (isWidgetDisabled(idx))
+                {
+                    auto colour = colours[wbtn.colour].colour;
+                    auto lighter = getColourMap(colour).lighter;
+                    auto midLight = getColourMap(colour).midLight;
+                    GfxDrawSpriteSolid(cropped, ImageId(spriteIdx), spritePos + ScreenCoordsXY{ 1, 1 }, lighter);
+                    GfxDrawSpriteSolid(cropped, ImageId(spriteIdx), spritePos, midLight);
+                }
+                else
+                {
+                    GfxDrawSprite(cropped, ImageId(spriteIdx), spritePos);
+                }
+            };
+            drawClippedModeButton(WIDX_CONSTRUCT_ON_LAND, SPR_CONSTRUCTION_FOOTPATH_LAND);
+            drawClippedModeButton(WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL, SPR_CONSTRUCTION_FOOTPATH_BRIDGE);
+            drawClippedModeButton(WIDX_CONSTRUCT_DRAG_AREA, SPR_G2_ICON_PATH_DRAG_TOOL);
 
             if (!isWidgetDisabled(WIDX_CONSTRUCT))
             {

@@ -15,7 +15,7 @@
 #define kOpenRCT2Version "0.5.0"
 // OPENRCT2MINI: fork version, distinct from upstream. kOpenRCT2Version above
 // is preserved at "0.5.0" so save compatibility advertising stays accurate.
-#define kOpenRCT2miniVersion "0.2.0"
+#define kOpenRCT2miniVersion "0.3.0"
 
 #if defined(__amd64__) || defined(_M_AMD64)
     #define OPENRCT2_ARCHITECTURE "x86-64"

@@ -3587,7 +3587,7 @@ STR_6585    :Els canvis no es poden fer…
 STR_6586    :OpenRCT2
 STR_6587    :El tema principal de l’OpenRCT2 és obra de l’Allister Brimble,{NEWLINE}amb llicència CC BY-SA 4.0.
 STR_6588    :Gràcies al Herman Riddering per permetre’ns gravar el 35er Voigt.
-STR_6589    :Mostra els botons de les finestres a l’esquerra
+STR_6589    :Intercanviar botons de finestra
 STR_6590    :Mostra els botons de les finestres (com ara el de tancar la finestra) a l’esquerra en lloc de mostrar-los a la dreta.
 STR_6591    :L’empleat ara mateix arregla una atracció i no se’l pot acomiadar.
 STR_6592    :L’empleat ara mateix fa una inspecció i no se’l pot acomiadar.
@@ -3829,3 +3829,4 @@ STR_7038    :Ombra projectada
 STR_7039    :Mostra una ombra translúcida sota el cursor perquè destaqui contra fons carregats
 # OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
 STR_7040    :Windows
+STR_7041    :Plega la finestra

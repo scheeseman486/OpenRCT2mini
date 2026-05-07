@@ -39,6 +39,30 @@ fi
 for arg in "$@"; do
     if [ "$arg" = "--rebuild-toolchain" ]; then NEED_BUILD=1; fi
 done
+# OPENRCT2MINI: also force-rebuild when the inputs that bake into the
+# image (Dockerfile / build-deps.sh — the latter contains the vendor SDL2
+# patches that drive device-button → SDL-scancode mapping) are newer than
+# the cached image. Without this check, edits to build-deps.sh quietly
+# wouldn't reach the device until somebody passed --rebuild-toolchain or
+# blew the image away. We hit that exact bug after the W0 keymap rework
+# (face-X/Y/L2/R2 moved off F14-F17 onto C/V/W/S) — the host build picked
+# up the new UiContext intercepts but the device kept emitting the old
+# F-key scancodes from the cached SDL2, so all four face-cluster buttons
+# silently no-op'd on hardware.
+if [ "$NEED_BUILD" = "0" ] && docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+    IMAGE_EPOCH=$(docker image inspect "$IMAGE_TAG" --format '{{.Created}}' \
+        | xargs -I{} date -d {} +%s 2>/dev/null || echo 0)
+    for f in "$DOCKERFILE_DIR/Dockerfile" "$DOCKERFILE_DIR/build-deps.sh"; do
+        if [ -f "$f" ]; then
+            FILE_EPOCH=$(stat -c '%Y' "$f" 2>/dev/null || echo 0)
+            if [ "$FILE_EPOCH" -gt "$IMAGE_EPOCH" ]; then
+                echo "==[ toolchain image is older than $(basename "$f") — rebuilding ]=="
+                NEED_BUILD=1
+                break
+            fi
+        fi
+    done
+fi
 
 if [ "$NEED_BUILD" = "1" ]; then
     echo "==[ docker build openrctmini-toolchain — first-run takes ~10 min ]=="

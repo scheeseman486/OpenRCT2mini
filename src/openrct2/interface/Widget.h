@@ -54,6 +54,10 @@ namespace OpenRCT2
         custom = 28,
         textBox = 27,
         horizontalSeparator = 30,
+        // OPENRCT2MINI W5: window-shade button. Drawn like closeBox but
+        // toggles WindowBase::isShaded instead of closing. Positioned by
+        // resizeFrame() on the side opposite the close box.
+        shadeBox = 31,
     };
 
     enum class WidgetFlag : uint8_t
@@ -64,6 +68,11 @@ namespace OpenRCT2
         tooltipIsString = 4,
         isHidden = 5,
         isHoldable = 6,
+        // OPENRCT2MINI W4: window-shade body hide. Set on every body widget
+        // (anything except frame/caption/closeBox/shadeBox) when the window
+        // is shaded. isVisible() checks both isHidden and shadeHidden so the
+        // shade collapse is independent of per-window setWidgetHidden calls.
+        shadeHidden = 7,
     };
     using WidgetFlags = FlagHolder<uint8_t, WidgetFlag>;
 
@@ -78,6 +87,21 @@ namespace OpenRCT2
     constexpr const char* kCloseBoxStringBlackLarge = u8"{BLACK}X";
     constexpr const char* kCloseBoxStringWhiteNormal = u8"{WHITE}❌";
     constexpr const char* kCloseBoxStringWhiteLarge = u8"{WHITE}X";
+
+    // OPENRCT2MINI W5: window-shade button glyphs. Triangles point in the
+    // direction the body would move on click — ▾ when expanded ("click to
+    // collapse downward into title bar"), ▴ when shaded ("click to expand
+    // back out"). All four glyphs are in the OpenRCT2 sprite font (see
+    // UnicodeChar::small_down/small_up/down/up in core/UnicodeChar.h and
+    // their Font.cpp registrations); no g2.dat work needed.
+    constexpr const char* kShadeBoxStringExpandBlackNormal = u8"{BLACK}▾";
+    constexpr const char* kShadeBoxStringExpandWhiteNormal = u8"{WHITE}▾";
+    constexpr const char* kShadeBoxStringExpandBlackLarge = u8"{BLACK}▼";
+    constexpr const char* kShadeBoxStringExpandWhiteLarge = u8"{WHITE}▼";
+    constexpr const char* kShadeBoxStringCollapseBlackNormal = u8"{BLACK}▴";
+    constexpr const char* kShadeBoxStringCollapseWhiteNormal = u8"{WHITE}▴";
+    constexpr const char* kShadeBoxStringCollapseBlackLarge = u8"{BLACK}▲";
+    constexpr const char* kShadeBoxStringCollapseWhiteLarge = u8"{WHITE}▲";
 
     struct Widget
     {
@@ -178,7 +202,10 @@ namespace OpenRCT2
 
         bool isVisible() const
         {
-            return !flags.has(WidgetFlag::isHidden);
+            // OPENRCT2MINI W4: shadeHidden is set on body widgets when the
+            // owning window is shaded. Both flags must be clear for the
+            // widget to render and be hit-testable.
+            return !flags.has(WidgetFlag::isHidden) && !flags.has(WidgetFlag::shadeHidden);
         }
 
         void setString(StringId newStringId)

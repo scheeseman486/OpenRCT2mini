@@ -11,6 +11,7 @@
 
 #include "core/StringTypes.h"
 
+#include <atomic>
 #include <memory>
 
 namespace OpenRCT2
@@ -86,6 +87,18 @@ void SaveGameAs();
 void SaveGameCmd(u8string_view name = {});
 void SaveGameWithName(u8string_view name);
 void GameAutosave();
+
+// OPENRCT2MINI: poweroff save. The signal handler installed in
+// openrct2-ui/Ui.cpp sets gPowerOffSaveRequested when SIGTERM / SIGHUP /
+// SIGINT arrives — typically because the device launcher is asking us to
+// shut down (Miyoo Mini sends SIGTERM when the user holds the power
+// button). The flag is async-signal-safe to set; the actual save (which
+// is not signal-safe — it allocates, opens files, takes locks) happens
+// from RunFrame() between ticks via HandlePowerOffSaveIfRequested(),
+// which writes the loaded park to <user>/save/poweroff.park and then
+// asks the Context to exit the game loop cleanly.
+extern std::atomic<bool> gPowerOffSaveRequested;
+void HandlePowerOffSaveIfRequested();
 void RCT2StringToUTF8Self(char* buffer, size_t length);
 void GameFixSaveVars();
 void StartSilentRecord();

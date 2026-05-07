@@ -498,7 +498,12 @@ namespace OpenRCT2::Ui::Windows
 
             auto* windowMgr = GetWindowManager();
             WindowBase* other = windowMgr->FindFromPoint(state->position);
-            if (other == this)
+            // Skip the auto-resize logic when shaded so the collapsed height is preserved.
+            if (isShaded)
+            {
+                // fall through to the rest of onUpdate without touching min/max/height
+            }
+            else if (other == this)
             {
                 ScreenCoordsXY window = state->position - ScreenCoordsXY{ windowPos.x - 26, windowPos.y };
 

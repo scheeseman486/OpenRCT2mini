@@ -89,11 +89,24 @@ namespace OpenRCT2::Platform
             case SpecialFolder::userConfig:
             case SpecialFolder::userData:
             {
+                // OPENRCT2MINI: self-contained user data. The device sets
+                // XDG_CONFIG_HOME=$APPDIR/save and Linux GetFolderPath picks
+                // it up — config/saves/cache all end up under
+                // $APPDIR/save/OpenRCT2/. The host build now mirrors that
+                // layout: user data lives next to the binary in <exeDir>/save,
+                // not in ~/.config. This makes the project tree fully
+                // self-contained for development (config persists across
+                // rebuilds since they only touch the binary, not save/) and
+                // makes host behavior predictable / matches the device.
+                //
+                // XDG_CONFIG_HOME is still honored if explicitly set, so a
+                // dev who wants the standard FHS layout can opt in via the
+                // env var.
                 auto path = GetEnvironmentPath("XDG_CONFIG_HOME");
                 if (path.empty())
                 {
-                    auto home = GetFolderPath(SpecialFolder::userHome);
-                    path = Path::Combine(home, u8".config");
+                    auto exeDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
+                    path = Path::Combine(exeDir, u8"save");
                 }
                 return path;
             }

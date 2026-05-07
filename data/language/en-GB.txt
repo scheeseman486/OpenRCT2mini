@@ -3584,7 +3584,7 @@ STR_6585    :Can’t make changes…
 STR_6586    :OpenRCT2
 STR_6587    :The OpenRCT2 Title Theme is a work of Allister Brimble,{NEWLINE}licensed CC BY-SA 4.0.
 STR_6588    :Thanks to Herman Riddering for allowing us to record the 35er Voigt.
-STR_6589    :Show window buttons on the left
+STR_6589    :Swap window buttons
 STR_6590    :Show the window buttons (e.g. to close the window) on the left of the title bar instead of on the right.
 STR_6591    :Staff member is currently fixing a ride and can’t be fired.
 STR_6592    :Staff member is currently inspecting a ride and can’t be fired.
@@ -3846,3 +3846,5 @@ STR_7038    :Drop shadow
 STR_7039    :Render a translucent shadow underneath the cursor sprite to make it stand out against busy backgrounds
 # OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
 STR_7040    :Windows
+STR_7041    :Shade window
+# OPENRCT2MINI W1b: hold to drag any window from any pixel inside it (face X / keyboard C by default).

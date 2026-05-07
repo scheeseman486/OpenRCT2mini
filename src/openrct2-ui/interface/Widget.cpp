@@ -113,6 +113,7 @@ namespace OpenRCT2::Ui
                 WidgetCaptionDraw(rt, w, widgetIndex);
                 break;
             case WidgetType::closeBox:
+            case WidgetType::shadeBox: // OPENRCT2MINI W7: same draw as closeBox; only the glyph differs
                 WidgetCloseboxDraw(rt, w, widgetIndex);
                 break;
             case WidgetType::scroll:
@@ -572,17 +573,26 @@ namespace OpenRCT2::Ui
         topLeft = w.windowPos + ScreenCoordsXY{ widget->left + 2, widget->top + 1 };
         int32_t width = widget->width() - 5;
 
-        if (static_cast<size_t>(widgetIndex + 1) < w.widgets.size()
-            && (w.widgets[widgetIndex + 1]).type == WidgetType::closeBox)
+        // OPENRCT2MINI W7: scan the full widget array for title-bar
+        // buttons (closeBox + shadeBox). The pre-W5 code checked only
+        // widgetIndex+1/+2 because OpenRCT2 originally placed close box(es)
+        // immediately after the caption; shadeBox is appended at the tail
+        // by resizeFrame() so a full scan is now required. For each button
+        // found, subtract kCloseButtonSize from the title's available
+        // width, and if it sits on the left half, shift the centered text
+        // right by kCloseButtonSize so it doesn't overlap the button.
+        int32_t leftButtonShift = 0;
+        const int32_t windowMidX = w.width / 2;
+        for (const auto& other : w.widgets)
         {
-            width -= kCloseButtonSize;
-            if (static_cast<size_t>(widgetIndex + 2) < w.widgets.size()
-                && (w.widgets[widgetIndex + 2]).type == WidgetType::closeBox)
+            if (other.type == WidgetType::closeBox || other.type == WidgetType::shadeBox)
+            {
                 width -= kCloseButtonSize;
+                if (other.left < windowMidX)
+                    leftButtonShift += kCloseButtonSize;
+            }
         }
-        topLeft.x += width / 2;
-        if (Config::Get().interface.windowButtonsOnTheLeft)
-            topLeft.x += kCloseButtonSize;
+        topLeft.x += width / 2 + leftButtonShift;
         if (Config::Get().interface.enlargedUi)
             topLeft.y += kTitleHeightLarge / 4;
 
@@ -618,7 +628,33 @@ namespace OpenRCT2::Ui
         auto borderStyle = Rectangle::BorderStyle::outset;
         if (w.flags.has(WindowFlag::higherContrastOnPress))
             brightness = Rectangle::FillBrightness::dark;
-        if (widgetIsPressed(w, widgetIndex) || isToolActive(w, widgetIndex))
+        // OPENRCT2MINI W7: shadeBox is a momentary toggle — never persistently
+        // pressed. We can't trust WidgetFlag::isPressed for it because some
+        // windows (e.g. Scenery's updatePressedTab) drive press state by
+        // INDEX, and the shadeBox is appended at the end of the widgets
+        // array by resizeFrame, where its index can transiently collide
+        // with one of those windows' enum slots (e.g. WIDX_SCENERY_TAB_1).
+        // For shadeBox, look only at the active mouse-press state.
+        bool buttonIsPressed;
+        if (widget.type == WidgetType::shadeBox)
+        {
+            buttonIsPressed = false;
+            if (InputGetState() == InputState::WidgetPressed || InputGetState() == InputState::DropdownActive)
+            {
+                if (gInputFlags.has(InputFlag::widgetPressed)
+                    && gPressedWidget.windowClassification == w.classification
+                    && gPressedWidget.windowNumber == w.number
+                    && gPressedWidget.widgetIndex == widgetIndex)
+                {
+                    buttonIsPressed = true;
+                }
+            }
+        }
+        else
+        {
+            buttonIsPressed = widgetIsPressed(w, widgetIndex);
+        }
+        if (buttonIsPressed || isToolActive(w, widgetIndex))
             borderStyle = Rectangle::BorderStyle::inset;
 
         auto colour = w.colours[widget.colour];
@@ -629,7 +665,16 @@ namespace OpenRCT2::Ui
         if (widget.string == nullptr)
             return;
 
-        const auto closeButtonTextOffset = Config::Get().interface.enlargedUi ? 5 : 6;
+        // OPENRCT2MINI W7: closebox's text-y offset is calibrated for the ❌
+        // glyph's font metrics. The shade glyphs (▾/▴/▼/▲) sit lower in
+        // their cell and rendering at the same offset puts them near the
+        // top of the button. In enlarged UI the larger triangles
+        // (▼/▲) happen to align well at the same offset.
+        int closeButtonTextOffset;
+        if (widget.type == WidgetType::shadeBox && !Config::Get().interface.enlargedUi)
+            closeButtonTextOffset = 3;
+        else
+            closeButtonTextOffset = Config::Get().interface.enlargedUi ? 5 : 6;
         auto crossMidPoint = w.windowPos + ScreenCoordsXY{ widget.midX() - 1, widget.midY() - closeButtonTextOffset };
 
         if (widgetIsDisabled(w, widgetIndex))

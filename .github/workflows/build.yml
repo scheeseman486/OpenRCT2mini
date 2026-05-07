@@ -109,12 +109,28 @@ jobs:
           retention-days: 30
 
       # On a v* tag, also publish a GitHub Release with the port archive attached.
+      # Body comes from release-notes-<tag>.md if present, otherwise GitHub
+      # auto-generates from commits.
+      - name: Resolve release body path
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: relbody
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          if [ -f "release-notes-${tag}.md" ]; then
+              echo "path=release-notes-${tag}.md" >> "$GITHUB_OUTPUT"
+              echo "Using release-notes-${tag}.md"
+          else
+              echo "path=" >> "$GITHUB_OUTPUT"
+              echo "No release-notes-${tag}.md — falling back to auto-generated notes."
+          fi
+
       - name: Create release on tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/OpenRCT2mini-*.7z
-          generate_release_notes: true
+          body_path: ${{ steps.relbody.outputs.path }}
+          generate_release_notes: ${{ steps.relbody.outputs.path == '' }}
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

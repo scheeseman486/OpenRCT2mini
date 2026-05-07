@@ -1222,6 +1222,8 @@ namespace OpenRCT2
         STR_OPTIONS_CURSOR_DROP_SHADOW_TIP = 7039,
         // OPENRCT2MINI revision 77: Windows cursor theme.
         STR_OPTIONS_CURSOR_STYLE_WINDOWS = 7040,
+        // OPENRCT2MINI W8: tooltip on the window-shade button.
+        STR_SHADE_WINDOW_TIP = 7041,
         STR_OPTIONS_TWEAKS = 6170,
         STR_OPTION_DISABLED_DURING_NETWORK_PLAY = 6103,
         STR_PATH_TO_RCT1 = 6033,

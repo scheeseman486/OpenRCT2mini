@@ -3577,7 +3577,7 @@ STR_6585    :Kan ikke gjøre endringer…
 STR_6586    :OpenRCT2
 STR_6587    :OpenRCT2's Titteltema er et verk av Allister Brimble,{NEWLINE}lisensiert CC BY-SA 4.0.
 STR_6588    :Takk til Herman Riddering for å tillate oss å ta opp 35er Voigten.
-STR_6589    :Vis vinduknapper til venstre
+STR_6589    :Bytt om vinduknapper
 STR_6590    :Vis vinduknappene (f.eks for nærme vinduet) på venstre side av tittel-linjen istedet for til høyre.
 STR_6591    :Personale fikser en attraksjon akkurat nå og kan ikke bli sparket.
 STR_6592    :Personale inspiserer en attraksjon akkurat nå og kan ikke bli sparket.

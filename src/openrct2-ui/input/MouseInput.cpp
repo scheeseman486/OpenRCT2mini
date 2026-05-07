@@ -308,22 +308,70 @@ namespace OpenRCT2
                             w = windowMgr->BringToFront(*w);
                         }
 
-                        if (widgetIndex != kWidgetIndexNull)
+                        if (w != nullptr)
                         {
-                            switch (widget->type)
+                            // OPENRCT2MINI: right-click is the universal
+                            // context-sensitive drag gesture.
+                            //   - Over the main viewport (stickToBack /
+                            //     noBackground / noTitleBar — i.e. a window
+                            //     that can't itself be dragged) → camera
+                            //     pan / quick click =
+                            //     ViewportInteractionRightClick ("delete"
+                            //     in game world). Existing.
+                            //   - Over a viewport widget INSIDE a regular
+                            //     dialog (Park, Ride, Guest, …) → fall
+                            //     through to window-drag. Trying to
+                            //     camera-pan a small embedded viewport
+                            //     just silently fails because most of
+                            //     those windows have noScrolling.
+                            //   - Over a scroll widget → drag-scroll the
+                            //     list contents. Existing.
+                            //   - Over any other widget (or no widget at all,
+                            //     just window chrome) on a title-barred,
+                            //     non-toolbar window → drag the window. New.
+                            // Toolbars / tooltips / dropdowns / error popups
+                            // / debug overlays are excluded by their flags
+                            // (noTitleBar / noBackground / stickToBack).
+                            const auto wType = widget != nullptr ? widget->type : WidgetType::empty;
+                            const bool isUndraggableShell = w->flags.hasAny(
+                                WindowFlag::stickToBack, WindowFlag::noBackground, WindowFlag::noTitleBar);
+                            if (wType == WidgetType::viewport && isUndraggableShell)
                             {
-                                case WidgetType::viewport:
-                                    if (!(gLegacyScene == LegacyScene::trackDesignsManager
-                                          || gLegacyScene == LegacyScene::titleSequence))
-                                    {
-                                        InputViewportDragBegin(*w);
-                                    }
-                                    break;
-                                case WidgetType::scroll:
-                                    InputScrollDragBegin(screenCoords, w, widgetIndex);
-                                    break;
-                                default:
-                                    break;
+                                if (!(gLegacyScene == LegacyScene::trackDesignsManager
+                                      || gLegacyScene == LegacyScene::titleSequence))
+                                {
+                                    InputViewportDragBegin(*w);
+                                }
+                            }
+                            else if (wType == WidgetType::scroll && [&] {
+                                         // OPENRCT2MINI: only do drag-scroll if
+                                         // the scrollable region actually
+                                         // overflows. Many scroll widgets in
+                                         // OpenRCT2 (object selectors, lists)
+                                         // declare scroll capability but their
+                                         // content fits in the visible area —
+                                         // there's nothing to scroll. In that
+                                         // case fall through to the window-drag
+                                         // branch so right-click still works as
+                                         // a "grab the window" gesture.
+                                         const auto scrollIdx = WindowGetScrollDataIndex(*w, widgetIndex);
+                                         const auto& scroll = w->scrolls[scrollIdx];
+                                         const bool hOverflow = (widget->content & SCROLL_HORIZONTAL)
+                                             && scroll.contentWidth > widget->width();
+                                         const bool vOverflow = (widget->content & SCROLL_VERTICAL)
+                                             && scroll.contentHeight > widget->height();
+                                         return hOverflow || vOverflow;
+                                     }())
+                            {
+                                InputScrollDragBegin(screenCoords, w, widgetIndex);
+                            }
+                            else if (!isUndraggableShell)
+                            {
+                                // widgetIndex 0 (frame) when cursor is in a
+                                // dead zone — only used for tooltip
+                                // restoration on release, harmless.
+                                InputWindowPositionBegin(
+                                    *w, widgetIndex == kWidgetIndexNull ? 0 : widgetIndex, screenCoords);
                             }
                         }
                         break;
@@ -345,7 +393,10 @@ namespace OpenRCT2
                 else
                 {
                     InputWindowPositionContinue(*w, gInputDragLast, screenCoords);
-                    if (state == MouseState::leftRelease)
+                    // OPENRCT2MINI: drag may have begun via left-click on the
+                    // caption (existing) OR via right-click anywhere on
+                    // window chrome (new). Either button releasing ends it.
+                    if (state == MouseState::leftRelease || state == MouseState::rightRelease)
                     {
                         InputWindowPositionEnd(*w, screenCoords);
                     }
@@ -495,6 +546,26 @@ namespace OpenRCT2
         w.onMoved(screenCoords);
     }
 
+    // OPENRCT2MINI W2: held-state-driven window drag.
+    //
+    // Polled once per frame from InputManager::processHoldEvents. The
+    // shortcut (default "C", which is the device's face X button under the
+    // W0 keymap) begins a positioning drag on rising edge and ends it on
+    // falling edge. Internally tracks the previous-frame held state for
+    // edge detection.
+    //
+    // Begin path is gated on:
+    //   * _inputState being Normal/Reset — don't stomp on resize, scroll,
+    //     viewport drag, widget press, dropdown, etc. that already own the
+    //     state machine.
+    //   * A non-toolbar window being under the cursor. stickToBack is the
+    //     main viewport, stickToFront is the in-game console; noBackground
+    //     covers the top/bottom toolbars and tooltips. None of those are
+    //     draggable today via the title-bar path either.
+    //
+    // End path looks up the dragged window via the static _dragWidget set
+    // by InputWindowPositionBegin and calls InputWindowPositionEnd, mirror-
+    // ing what the leftRelease branch in GameHandleInputMouse does.
     static void InputWindowResizeBegin(WindowBase& w, WidgetIndex widgetIndex, const ScreenCoordsXY& screenCoords)
     {
         _inputState = InputState::Resizing;
@@ -1067,7 +1138,11 @@ namespace OpenRCT2
         {
             case WidgetType::frame:
             case WidgetType::resize:
-                if (w->canBeResized()
+                // OPENRCT2MINI W6: don't enter resize mode while the window
+                // is shaded — the resize handle's hot zone overlaps the
+                // title bar in collapsed state, and minHeight==maxHeight
+                // means a resize attempt would no-op anyway.
+                if (w->canBeResized() && !w->isShaded
                     && (screenCoords.x >= w->windowPos.x + w->width - 19 && screenCoords.y >= w->windowPos.y + w->height - 19))
                     InputWindowResizeBegin(*w, widgetIndex, screenCoords);
                 break;
@@ -1112,6 +1187,7 @@ namespace OpenRCT2
             case WidgetType::spinner:
             case WidgetType::dropdownMenu:
             case WidgetType::closeBox:
+            case WidgetType::shadeBox: // OPENRCT2MINI W6: same press-handling as closeBox
             case WidgetType::checkbox:
             case WidgetType::textBox:
             case WidgetType::custom:
@@ -1421,7 +1497,19 @@ namespace OpenRCT2
                     break;
 
                 windowMgr->InvalidateWidgetByNumber(cursor_w_class, cursor_w_number, widgetIndex);
-                w->onMouseUp(widgetIndex);
+                // OPENRCT2MINI W6: shade button is framework-level — every
+                // window with the standard caption+closeBox prefix gets one
+                // appended by resizeFrame(). The click toggles isShaded
+                // directly here without dispatching to per-window onMouseUp,
+                // so no per-window handler needs to know about shadeBox.
+                if (widget->type == WidgetType::shadeBox)
+                {
+                    w->toggleShade();
+                }
+                else
+                {
+                    w->onMouseUp(widgetIndex);
+                }
                 return;
 
             default:
@@ -1546,6 +1634,21 @@ namespace OpenRCT2
         if (_inputState == InputState::Resizing)
         {
             cursor_id = CursorID::DiagonalArrows;
+        }
+        // OPENRCT2MINI: during drag operations show the 4-direction move
+        // arrow for a clear "drag in any direction" affordance. Covers
+        // ScrollRight (right-click drag-scroll) and ViewportRight
+        // (right-click camera-pan), where the cursor is pinned at
+        // gInputDragLast and motion translates into list / world
+        // movement. Also covers PositioningWindow — which is entered
+        // from BOTH the title-bar left-click drag and the right-click
+        // anywhere-on-chrome drag — so the user gets the same affordance
+        // either way and the drag-window action looks the same regardless
+        // of where on the window they grabbed it.
+        else if (_inputState == InputState::ScrollRight || _inputState == InputState::ViewportRight
+                 || _inputState == InputState::PositioningWindow)
+        {
+            cursor_id = CursorID::UpDownLeftRightArrow;
         }
         ContextSetCurrentCursor(cursor_id);
     }

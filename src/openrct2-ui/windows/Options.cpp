@@ -1046,8 +1046,8 @@ namespace OpenRCT2::Ui::Windows
 
             // OPENRCT2MINI: a chunk of the Display section is moot on a
             // 640x480 fullscreen device. Disable everything that doesn't
-            // make sense; keep Show FPS + Multithreading active because
-            // those still tell the user something useful.
+            // make sense; keep Show FPS active because that still tells
+            // the user something useful.
             //
             //   Window section: fullscreen mode (we can't switch), resolution
             //     (panel is fixed), window scale (no point on 640x480).
@@ -1055,6 +1055,9 @@ namespace OpenRCT2::Ui::Windows
             //     (DISABLE_OPENGL).
             //   Frame rate limit: tied to the drawing pipeline; vsync /
             //     uncapped variants don't apply.
+            //   Multi-threaded rendering: a net regression on the Miyoo
+            //     Mini's single-issue ARM core — force-disabled in
+            //     Config.cpp so the checkbox is grey + unticked.
             //   Behaviour: minimize-on-focus-loss (we never lose focus on
             //     OnionUI) and disable-screensaver (the device is always-on
             //     while powered).
@@ -1063,6 +1066,7 @@ namespace OpenRCT2::Ui::Windows
                               WIDX_SCALE_LABEL, WIDX_SCALE, WIDX_SCALE_UP, WIDX_SCALE_DOWN,
                               WIDX_DRAWING_ENGINE_LABEL, WIDX_DRAWING_ENGINE, WIDX_DRAWING_ENGINE_DROPDOWN,
                               WIDX_FRAME_RATE_LIMIT_LABEL, WIDX_FRAME_RATE_LIMIT, WIDX_FRAME_RATE_LIMIT_DROPDOWN,
+                              WIDX_MULTITHREADING_CHECKBOX,
                               WIDX_MINIMIZE_FOCUS_LOSS, WIDX_DISABLE_SCREENSAVER_LOCK })
             {
                 widgetSetEnabled(*this, idx, false);
@@ -1804,6 +1808,12 @@ namespace OpenRCT2::Ui::Windows
             // OPENRCT2MINI: trap-mouse-cursor is meaningless on a 640x480
             // fullscreen device with no real mouse. Disable the checkbox.
             widgetSetEnabled(*this, WIDX_TRAP_CURSOR, false);
+            // OPENRCT2MINI: disable the "Shortcut Keys..." button. The
+            // device's gamepad controls are fixed by the build-deps.sh
+            // SDL2 patch + UiContext intercepts and aren't user-rebindable
+            // — the upstream ShortcutKeys window doesn't surface those
+            // intercepts, so editing it does nothing useful here.
+            widgetSetEnabled(*this, WIDX_HOTKEY_DROPDOWN, false);
             setCheckboxValue(WIDX_INVERT_DRAG, Config::Get().general.invertViewportDrag);
             setCheckboxValue(WIDX_ZOOM_TO_CURSOR, Config::Get().general.zoomToCursor);
             setCheckboxValue(WIDX_WINDOW_BUTTONS_ON_THE_LEFT, Config::Get().interface.windowButtonsOnTheLeft);

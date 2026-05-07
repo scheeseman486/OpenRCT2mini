@@ -3583,7 +3583,7 @@ STR_6585    :Kan ikke foretage ændringer…
 STR_6586    :OpenRCT2
 STR_6587    :OpenRCT2 Titelmelodi er et værk af Allister Brimble,{NEWLINE}licenseret CC BY-SA 4.0.
 STR_6588    :Tak til Herman Riddering for at give os mulighed for at optage 35er Voigt.
-STR_6589    :Vis vinduesknapperne til venstre
+STR_6589    :Byt om på vinduesknapper
 STR_6590    :Vis vinduesknapperne (f.eks. for at lukke vinduet) til venstre for titellinjen i stedet for til højre.
 STR_6591    :Medarbejder er i øjeblikket ved at ordne en tur og kan ikke fyres.
 STR_6592    :Medarbejder inspicerer i øjeblikket en forlystelse og kan ikke fyres.
@@ -3832,3 +3832,4 @@ STR_7038    :Slagskygge
 STR_7039    :Tegner en gennemsigtig skygge under markøren, så den skiller sig ud på travle baggrunde
 # OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
 STR_7040    :Windows
+STR_7041    :Rul vindue op

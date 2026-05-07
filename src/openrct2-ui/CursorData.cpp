@@ -1116,6 +1116,44 @@ namespace OpenRCT2::Ui
         "                XX.........XX   "
         "                 XXXXXXXXXX     ");
 
+    // OPENRCT2MINI: 4-direction "move" arrow used during right-click drag
+    // operations (camera drag, scroll-drag) for visual feedback that the
+    // cursor is locked and motion translates into world / list movement.
+    static constexpr CursorData kUpDownLeftRightArrowCursorData = cursorFromBitMap(
+        15, 15,
+        "                                "
+        "                X               "
+        "               X.X              "
+        "              X.X.X             "
+        "             X.X X.X            "
+        "            X.X   X.X           "
+        "           X.XXX XXX.X          "
+        "          X....X X....X         "
+        "           XXX.XXX.XXX          "
+        "        X    X.....X    X       "
+        "       X.X    XXXXX    X.X      "
+        "      X..X             X..X     "
+        "     X.X.XX           XX.X.X    "
+        "    X.XX...X    X    X...XX.X   "
+        "   X.X XXX.X   X.X   X.XXX X.X  "
+        "  X.X    X.X  X...X  X.X    X.X "
+        "   X.X XXX.X   X.X   X.XXX X.X  "
+        "    X.XX...X    X    X...XX.X   "
+        "     X.X.XX           XX.X.X    "
+        "      X..X             X..X     "
+        "       X.X    XXXXX    X.X      "
+        "        X    X.....X    X       "
+        "           XXX.XXX.XXX          "
+        "          X....X X....X         "
+        "           X.XXX XXX.X          "
+        "            X.X   X.X           "
+        "             X.X X.X            "
+        "              X.X.X             "
+        "               X.X              "
+        "                X               "
+        "                                "
+        "                                ");
+
     static constexpr CursorData kBulldozerCursorData = cursorFromBitMap(
         6, 31,
         "                 XXX            "
@@ -1183,6 +1221,7 @@ namespace OpenRCT2::Ui
         &kHandOpenDownCursorData,   // CursorID::HandOpen
         &kHandClosedDownCursorData, // CursorID::HandClosed
         &kBulldozerCursorData,      // CursorID::Bulldozer
+        &kUpDownLeftRightArrowCursorData, // CursorID::UpDownLeftRightArrow
     };
 
     const CursorData* getCursorData(CursorID cursorId)

@@ -457,6 +457,16 @@ namespace OpenRCT2
         if ((!x_diff) && (!y_diff))
             return;
 
+        // OPENRCT2MINI W5: skip the framebuffer pixel-shift when the
+        // viewport is hidden (window shaded, or fully occluded). The shift
+        // operates on the viewport's screen rect, but a hidden viewport's
+        // rect now lies under the main viewport; shifting moves the main
+        // viewport's pixels in the direction of the hidden viewport's
+        // scroll. viewport->viewPos is still updated above so the state
+        // stays consistent when the window is un-shaded.
+        if (!viewport->isVisible)
+            return;
+
         const int32_t left = std::max(viewport->pos.x, 0);
         const int32_t top = std::max(viewport->pos.y, 0);
         const int32_t right = std::min(left + viewport->width + std::min(viewport->pos.x, 0), ContextGetWidth());
@@ -1083,12 +1093,25 @@ namespace OpenRCT2
 
     void Viewport::Invalidate() const
     {
+        // OPENRCT2MINI W5: VIEWPORT_FLAG_RENDERING_INHIBITED gates rendering
+        // already (see ViewportRender). Extending it here means the shaded
+        // window's PIP viewport (which won't render because its window's
+        // onDraw is gated by isShaded) also stops marking screen regions
+        // dirty. Without this, animated map tiles in the PIP's view area
+        // would dirty rects below the shaded title bar; the main viewport
+        // behind would partially repaint those rects with its own world
+        // view, producing jitter/smear over the area where the body used
+        // to be.
+        if (flags & VIEWPORT_FLAG_RENDERING_INHIBITED)
+            return;
         ViewportInvalidate(this, { viewPos, viewPos + ScreenCoordsXY{ ViewWidth(), ViewHeight() } });
     }
 
     void Viewport::Invalidate(
         const int32_t x, const int32_t y, const int32_t z0, const int32_t z1, const ZoomLevel maxZoom) const
     {
+        if (flags & VIEWPORT_FLAG_RENDERING_INHIBITED)
+            return;
         if ((maxZoom == ZoomLevel{ -1 } || zoom <= ZoomLevel{ maxZoom }))
         {
             const auto screenCoord = Translate3DTo2DWithZ(

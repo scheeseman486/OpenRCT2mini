@@ -1488,6 +1488,14 @@ namespace OpenRCT2
             }
             ++s_kptFrameNo;
 
+            // OPENRCT2MINI: poll the poweroff flag at the top of every
+            // frame. If a SIGTERM has arrived since the last frame, this
+            // saves the loaded park to <user>/save/poweroff.park and
+            // calls Finish() so the loop exits cleanly on the next
+            // iteration. No-op when the flag isn't set, so the cost in
+            // the common case is one relaxed atomic load.
+            HandlePowerOffSaveIfRequested();
+
             const auto deltaTime = _timer.GetElapsedTimeAndRestart().count();
 
             // Make sure we catch the state change and reset it.

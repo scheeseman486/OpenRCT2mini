@@ -3586,7 +3586,7 @@ STR_6585    :No se puede realizar cambios…
 STR_6586    :OpenRCT2
 STR_6587    :El tema principal de OpenRTC es una obra de Allister Brimble,{NEWLINE}licenciada bajo CC BY-SA 4.0.
 STR_6588    :Gracias a Herman Riddering por permitirnos grabar el 35er Voigt.
-STR_6589    :Mostrar botones de ventana a la izquierda
+STR_6589    :Intercambiar botones de ventana
 STR_6590    :Mostrar los botones de ventana (como el de cerrar la ventana) a la izquierda de la barra de título en lugar de a la derecha.
 STR_6591    :El empleado está reparando una atracción y no puede ser despedido.
 STR_6592    :El empleado está inspeccionando una atracción y no puede ser despedido.
@@ -3817,3 +3817,4 @@ STR_7038    :Sombra paralela
 STR_7039    :Muestra una sombra translúcida bajo el cursor para que destaque sobre fondos recargados
 # OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
 STR_7040    :Windows
+STR_7041    :Plegar la ventana

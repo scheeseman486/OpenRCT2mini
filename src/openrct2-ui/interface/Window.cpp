@@ -342,6 +342,15 @@ namespace OpenRCT2::Ui
         widgetDraw(rt, *this, widgetIndex);
     }
 
+    void Window::drawShadedChrome(RenderTarget& rt)
+    {
+        // OPENRCT2MINI W5: WindowDrawWidgets skips widgets that have
+        // WidgetFlag::shadeHidden, which resizeFrame() sets on every body
+        // widget when isShaded is true. So this single call paints frame +
+        // caption + closeBox + shadeBox and nothing else.
+        Windows::WindowDrawWidgets(*this, rt);
+    }
+
     void Window::initScrollWidgets()
     {
         Windows::WindowInitScrollWidgets(*this);
@@ -517,7 +526,28 @@ namespace OpenRCT2::Ui
 
     ScreenCoordsXY WindowGetViewportSoundIconPos(WindowBase& w)
     {
-        const uint8_t buttonOffset = (Config::Get().interface.windowButtonsOnTheLeft) ? kCloseButtonSize + 2 : 0;
+        // OPENRCT2MINI W5: the title bar's left edge is now occupied
+        // either by the close button (when windowButtonsOnTheLeft is set)
+        // OR by the shade button (when close is on the right and the
+        // window has the standard caption+closeBox prefix → resizeFrame
+        // appends a shadeBox on the opposite side from close, i.e. left).
+        // Either way, the ear icon needs to clear that left-edge button.
+        // Shift it inward by closeButtonSize+2 if we know there's a
+        // shadeBox present, otherwise fall back to the original logic.
+        bool hasShadeOnLeft = false;
+        if (!Config::Get().interface.windowButtonsOnTheLeft)
+        {
+            for (const auto& wgt : w.widgets)
+            {
+                if (wgt.type == WidgetType::shadeBox)
+                {
+                    hasShadeOnLeft = true;
+                    break;
+                }
+            }
+        }
+        const uint8_t buttonOffset
+            = (Config::Get().interface.windowButtonsOnTheLeft || hasShadeOnLeft) ? kCloseButtonSize + 2 : 0;
         return w.windowPos + ScreenCoordsXY{ 2 + buttonOffset, 2 };
     }
 } // namespace OpenRCT2::Ui

@@ -3583,7 +3583,7 @@ STR_6585    :Non se poden facer trocos…
 STR_6586    :OpenRCT2
 STR_6587    :O tema principal de OpenRTC é un traballo de Allister Brimble,{NEWLINE}con licenza CC BY-SA 4.0.
 STR_6588    :Grazas a Herman Riddering por permitirnos gravar o 35er Voigt.
-STR_6589    :Mostrar os botóns da xanela á esquerda
+STR_6589    :Intercambiar botóns da xanela
 STR_6590    :Mostrar os botóns da xanela (como pechar a xanela) á esquerda da barra de título en lugar da dereita.
 STR_6591    :O empregado está a reparar unha atracción e non pode ser despedido.
 STR_6592    :O empregado está inspeccionando unha atracción e non pode ser despedido.
@@ -3831,3 +3831,4 @@ STR_7038    :Sombra paralela
 STR_7039    :Mostra unha sombra translúcida baixo o cursor para que destaque en fondos cargados
 # OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
 STR_7040    :Windows
+STR_7041    :Pregar a xanela

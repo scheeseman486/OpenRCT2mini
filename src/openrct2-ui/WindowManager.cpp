@@ -1377,7 +1377,17 @@ public:
 
                 if (itSourcePos != itDestPos)
                 {
+                    // OPENRCT2MINI: BOTH swapped windows change z-order.
+                    // The previously-frontmost window (at itDestPos before
+                    // the swap) gets demoted — its pixels in the area
+                    // beyond `w`'s footprint must be redrawn or they leak
+                    // through (most visible when the demoted window has a
+                    // viewport that was actively repainting). Capture its
+                    // pointer before the swap and invalidate it too.
+                    WindowBase* const demoted = itDestPos->get();
                     std::iter_swap(itSourcePos, itDestPos);
+                    if (demoted != nullptr && demoted != &w)
+                        demoted->invalidate();
                 }
                 w.invalidate();
 

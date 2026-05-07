@@ -25,6 +25,11 @@ namespace OpenRCT2::Ui
     {
         void onDraw(Drawing::RenderTarget& rt) override;
         void onDrawWidget(WidgetIndex widgetIndex, Drawing::RenderTarget& rt) override;
+        // OPENRCT2MINI W5: shaded windows render only the title bar chrome.
+        // Body widgets are skipped via shadeHidden flag inside
+        // WindowDrawWidgets, so this just calls that — no per-window code
+        // needs to override or be aware of shaded state.
+        void drawShadedChrome(Drawing::RenderTarget& rt) override;
 
         void scrollToViewport();
         void initScrollWidgets();

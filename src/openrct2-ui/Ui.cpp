@@ -23,6 +23,7 @@
 #endif
 #include <openrct2/Context.h>
 #include <openrct2/Diagnostic.h>
+#include <openrct2/Game.h>  // OPENRCT2MINI: gPowerOffSaveRequested
 #include <openrct2/MiniDebug.h>  // OPENRCT2MINI revision 64 — gated debug logging
 #include <openrct2/OpenRCT2.h>
 #include <openrct2/PlatformEnvironment.h>
@@ -134,6 +135,24 @@ int main(int argc, const char** argv)
         ::signal(SIGFPE, SegvHandler::Handle);
         ::signal(SIGABRT, SegvHandler::Handle);
         ::signal(SIGILL, SegvHandler::Handle);
+
+        // OPENRCT2MINI: poweroff handler. The Miyoo Mini launcher kills
+        // running games by sending SIGTERM (and may follow with SIGHUP /
+        // SIGINT depending on launcher version) when the user holds the
+        // power button. We just flip an atomic flag here — the save runs
+        // from the main loop in HandlePowerOffSaveIfRequested() since
+        // SaveGameWithName allocates / opens files / takes locks, none
+        // of which is async-signal-safe. The handler does not re-raise:
+        // letting the loop exit cleanly is the goal, not crashing.
+        struct PowerOffHandler {
+            static void Handle(int /*sig*/)
+            {
+                gPowerOffSaveRequested.store(true, std::memory_order_relaxed);
+            }
+        };
+        ::signal(SIGTERM, PowerOffHandler::Handle);
+        ::signal(SIGHUP, PowerOffHandler::Handle);
+        ::signal(SIGINT, PowerOffHandler::Handle);
     }
     kpt("signal handlers installed");
 #endif

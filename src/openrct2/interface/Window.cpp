@@ -138,6 +138,18 @@ static constexpr float kWindowScrollLocations[][2] = {
                 window.isVisible = true;
                 continue;
             }
+            // OPENRCT2MINI W5: a shaded window's viewport is conceptually
+            // invisible — the viewport's screen footprint is hidden under
+            // the collapsed title bar. Mark it not-visible so all the
+            // ViewportsInvalidate paths skip it (they gate on isVisible).
+            // The window itself remains visible so the title bar / shade
+            // button still draw and respond to clicks.
+            if (window.isShaded)
+            {
+                window.isVisible = true;
+                window.viewport->isVisible = false;
+                continue;
+            }
             if (window.classification == WindowClass::mainWindow)
             {
                 window.isVisible = true;
@@ -634,7 +646,17 @@ static constexpr float kWindowScrollLocations[][2] = {
         gCurrentWindowColours[1] = w.colours[1].colour;
         gCurrentWindowColours[2] = w.colours[2].colour;
 
-        w.onDraw(copy);
+        // OPENRCT2MINI W5: when the window is shaded, skip its custom
+        // onDraw entirely (which would otherwise render PIP viewports,
+        // tab images, graphs, custom labels — all body content that
+        // ignores the rt clipping rectangle and uses absolute window-
+        // relative coordinates for direct sprite calls). drawShadedChrome
+        // calls WindowDrawWidgets which respects shadeHidden and renders
+        // ONLY the title bar widgets.
+        if (w.isShaded)
+            w.drawShadedChrome(copy);
+        else
+            w.onDraw(copy);
     }
 
     bool isToolActive(WindowClass cls)

@@ -399,14 +399,17 @@ if [ -f "$CONF_INI" ]; then
     sed -i '/^window_width *=/d; /^window_height *=/d; /^current_title_sequence *=/d; /^use_native_browse_dialog *=/d' "$CONF_INI" 2>/dev/null || true
 fi
 
-# OPENRCT2MINI cut 44: one-time wipe of shortcuts.json. Older builds (pre-
-# cut-44) wrote default keybinds for arrows / Z / X / etc. into the file,
-# and loadUserBindings overrides the binary's empty defaults with whatever
-# is on disk — so cut 44's "no preset shortcuts" doesn't take effect on
-# upgrades. Marker-gated so we only wipe once: future runs preserve
+# OPENRCT2MINI cut 44 / W0: one-time wipe of shortcuts.json. Older builds
+# wrote default keybinds for arrows / Z / X / F-keys into the file, and
+# loadUserBindings overrides the binary's defaults with whatever is on
+# disk — so subsequent default changes wouldn't take effect on upgrades.
+# W0 changed the device → keyboard scancode map (face X/Y and L2/R2
+# moved off F14-F17 onto C/V/W/S, L1/R1 dual-emit Q/A alongside the
+# modifier keys), so any stored bindings referencing the old F-keys are
+# stale. New marker name forces re-wipe on upgrade. Future runs preserve
 # whatever the user rebinds via the in-game UI.
 SHORTCUTS_FILE="$XDG_CONFIG_HOME/OpenRCT2/shortcuts.json"
-WIPE_MARKER="$XDG_CONFIG_HOME/OpenRCT2/.shortcuts_wiped_cut44"
+WIPE_MARKER="$XDG_CONFIG_HOME/OpenRCT2/.shortcuts_wiped_w0"
 if [ -f "$SHORTCUTS_FILE" ] && [ ! -f "$WIPE_MARKER" ]; then
     rm -f "$SHORTCUTS_FILE"
     mkdir -p "$XDG_CONFIG_HOME/OpenRCT2"
@@ -660,23 +663,32 @@ INSTALLING
 CONTROLS
 -----------------
 
-  D-pad        Move cursor
-  A            Left click
-  B            Right click
-  X            Cycle game speed
-  Y            Rotate construction object clockwise
-  L1           Shift modifier (raise placement Z, vertical stack, etc.)
-  R1           Hold for fast cursor (~2.5x speed); also acts as the
-               gamepad modifier for L2 / R2 / Y below
-  L2           Rotate view counter-clockwise
-  R2           Rotate view clockwise
-  L1 + R1      Ctrl modifier (sample-and-lock placement Z onto a
-               clicked element -- footpaths, track, scenery)
-  R1 + L2      Zoom out
-  R1 + R2      Zoom in
-  R1 + Y       Rotate construction object counter-clockwise
-  Start        Confirm / open in-game menu
-  Select       Cancel / back
+(Host PC test keys in parentheses. Each device button maps to a
+common keyboard key so all controls are testable on a normal
+keyboard.)
+
+  D-pad           Move cursor                              (arrow keys)
+  A    (Z)        Left click
+  B    (X)        Right click — context-sensitive drag:
+                  • over a window's title bar / body → drag the window
+                  • over the game viewport → camera pan / quick-click =
+                    delete object
+                  • over a scrollable list → drag-scroll the list
+  X    (C)        (unbound)
+  Y    (V)        Rotate construction object clockwise
+  L1   (Q)        Shift modifier — also raises placement Z,
+                  enables vertical stack, etc.
+  R1   (A)        Hold for fast cursor (~2.5x speed); also acts
+                  as the gamepad modifier for L2 / R2 / Y below
+  L2   (W)        Rotate view counter-clockwise
+  R2   (S)        Rotate view clockwise
+  L1 + R1         Ctrl modifier (sample-and-lock placement Z onto a
+                  clicked element -- footpaths, track, scenery)
+  R1 + L2         Zoom out
+  R1 + R2         Zoom in
+  R1 + Y          Rotate construction object counter-clockwise
+  Start          Confirm / open in-game menu                (Enter)
+  Select         Cancel / back                              (Esc)
 
 EOF
 

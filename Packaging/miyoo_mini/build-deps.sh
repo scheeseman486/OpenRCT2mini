@@ -369,22 +369,19 @@ new = ('static void set_key(uint32_t bit, int val)\n'
        '            case MYKEY_RIGHT:  sc = SDL_SCANCODE_RIGHT;  break;\n'
        '            case MYKEY_A:      sc = SDL_SCANCODE_Z;      break;\n'
        '            case MYKEY_B:      sc = SDL_SCANCODE_X;      break;\n'
-       # OPENRCT2MINI cut 59: face X / face Y / L2 / R2 onto F-keys.
-       # The face button X used to send SDL_SCANCODE_C and Y sent V; L2
-       # and R2 weren't mapped here at all, but the PumpEvents code[]
-       # fallback (also disabled by this cut) sent TAB / BACKSPACE for
-       # them and OpenRCT2 binds those to "Show map" / "Close top
-       # window". UiContext now intercepts F14/F15/F16/F17 directly:
-       #   F16 = face X = cycle game speed (Normal -> Quick -> Fast ->
-       #         Turbo -> Pause -> Normal)
-       #   F17 = face Y = rotate construction object (anti-clockwise if
-       #         R1 is held)
-       #   F14 = L2     = zoom out (rotate view CCW if R1 is held)
-       #   F15 = R2     = zoom in  (rotate view CW  if R1 is held)
-       '            case MYKEY_X:      sc = SDL_SCANCODE_F16;    break;\n'
-       '            case MYKEY_Y:      sc = SDL_SCANCODE_F17;    break;\n'
-       '            case MYKEY_L2:     sc = SDL_SCANCODE_F14;    break;\n'
-       '            case MYKEY_R2:     sc = SDL_SCANCODE_F15;    break;\n'
+       # OPENRCT2MINI W0: face X/Y, L2/R2 onto WASD-cluster letters
+       # (was F14-F17 in cut 59). Reverts to PC-keyboard-friendly keys
+       # so devs can test all device controls on host without F13-F17.
+       # UiContext intercepts these letter keys for special handling and
+       # checks hasTextInputFocus() to avoid colliding with text entry.
+       #   C = face X = window drag (was: cycle game speed)
+       #   V = face Y = rotate construction object (3x = CCW with R1)
+       #   W = L2     = rotate view CCW (zoom out with R1)
+       #   S = R2     = rotate view CW  (zoom in  with R1)
+       '            case MYKEY_X:      sc = SDL_SCANCODE_C;      break;\n'
+       '            case MYKEY_Y:      sc = SDL_SCANCODE_V;      break;\n'
+       '            case MYKEY_L2:     sc = SDL_SCANCODE_W;      break;\n'
+       '            case MYKEY_R2:     sc = SDL_SCANCODE_S;      break;\n'
        # OPENRCT2MINI cut 58: R1 -> F13 (was RSHIFT). RSHIFT made the
        # cursor go fast AND set SDL_GetModState() to KMOD_SHIFT.
        # cut 59: L1 stays on LSHIFT (Shift modifier reach) but no longer
@@ -400,7 +397,15 @@ new = ('static void set_key(uint32_t bit, int val)\n'
        # and CTRL+ALT+C (cheats), neither matters on the device. The
        # UiContext intercept clears KMOD_LALT/RALT from SDL's mod state
        # after latching so R1+Start doesn't accidentally fire ALT+RETURN.
+       # OPENRCT2MINI W0: dual-emit. L1 sends Q + LSHIFT (or LCTRL via
+       # chord); R1 sends A + LALT. The letter is the user-facing test
+       # key (visible in shortcut bindings, accessible on PC keyboard);
+       # the modifier drives OpenRCT2's existing Shift/Alt/Ctrl modifier
+       # semantics (raise placement Z, gamepad mod, construction Z-lock).
+       # Q and A continue held alongside the modifier swap during chord.
        '            case MYKEY_R1:\n'
+       '                /* dual-emit: A for testability */\n'
+       '                SDL_SendKeyboardKey(val ? SDL_PRESSED : SDL_RELEASED, SDL_SCANCODE_A);\n'
        '                sc = SDL_SCANCODE_LALT;\n'
        '                if (evt.keypad.bitmaps & (1 << MYKEY_L1)) {\n'
        '                    if (val) {\n'
@@ -415,6 +420,8 @@ new = ('static void set_key(uint32_t bit, int val)\n'
        '                }\n'
        '                break;\n'
        '            case MYKEY_L1:\n'
+       '                /* dual-emit: Q for testability */\n'
+       '                SDL_SendKeyboardKey(val ? SDL_PRESSED : SDL_RELEASED, SDL_SCANCODE_Q);\n'
        '                if (val) {\n'
        '                    l1_emitted_sc = (evt.keypad.bitmaps & (1 << MYKEY_R1))\n'
        '                                        ? SDL_SCANCODE_LCTRL : SDL_SCANCODE_LSHIFT;\n'
