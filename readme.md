@@ -27,7 +27,7 @@ Optionally, RCT1 can be placed at `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct1/` 
   D-pad        Move cursor (accelerates after 300 ms hold)
   A            Left click
   B            Right click
-  X            Cycle game speed (Normal -> Quick -> Fast -> Turbo -> Pause -> Normal)
+  X            Shade window (hold to shade/unshade all windows)
   Y            Rotate construction object clockwise
   L1           Shift modifier (raise placement Z, vertical-stack scenery, etc.)
   R1           Hold for fast cursor (~2.5x speed); also acts as gamepad modifier button
@@ -36,6 +36,7 @@ Optionally, RCT1 can be placed at `/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct1/` 
   L1 + R1      Ctrl modifier (sample-and-lock placement Z onto a clicked element)
   R1 + L2      Zoom out
   R1 + R2      Zoom in
+  R1 + X       Close window
   R1 + Y       Rotate construction object counter-clockwise
   Start        Confirm / open in-game menu
   Select       Cancel / back
