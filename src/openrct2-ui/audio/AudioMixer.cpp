@@ -33,15 +33,12 @@ void AudioMixer::Init(const char* device)
     want.freq = 22050;
     want.format = AUDIO_S16SYS;
     want.channels = 2;
-    // OPENRCT2MINI: 4096 samples (~85 ms at 48 kHz) instead of upstream's
-    // 2048 (~42 ms). On the Miyoo Mini the audio callback's deadline
-    // budget is fragile during scrolling: the main thread page-faults
-    // SpriteScratch pages from SD, contends with the audio thread on
-    // glibc arenas (MALLOC_ARENA_MAX=2 from revision 51) and on shared
-    // DRAM bandwidth. Any per-callback overrun causes audible stutter
-    // at 2048. 4096 doubles the headroom; 8192 was tried and gave
-    // noticeable input/SFX latency with no real benefit over 4096.
-    want.samples = 4096;
+    // Upstream OpenRCT2 default. Earlier revisions of OpenRCT2mini
+    // experimented with 8192 (too much input latency) and 4096 (caused a
+    // visible slowdown on the device — wider audio thread wake-ups
+    // contended with the render thread for cache / DRAM bandwidth even
+    // on the empty title screen) before settling back here.
+    want.samples = 2048;
     want.callback = [](void* arg, uint8_t* dst, int32_t length) -> void {
         auto* mixer = static_cast<AudioMixer*>(arg);
         mixer->GetNextAudioChunk(dst, static_cast<size_t>(length));
