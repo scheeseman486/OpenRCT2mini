@@ -219,6 +219,13 @@ if (DISABLE_ICU)
     target_compile_definitions(libopenrct2 PUBLIC DISABLE_ICU)
 endif ()
 
+# OPENRCT2MINI: performance profiler — see profiler-plan.md.
+if (ENABLE_PERFORMANCE_PROFILER)
+    target_compile_definitions(libopenrct2 PUBLIC
+        ENABLE_PERFORMANCE_PROFILER
+        PROFILER_HISTORY_SECONDS=${PROFILER_HISTORY_SECONDS})
+endif ()
+
 if (NOT DISABLE_TTF)
     if (STATIC)
         target_link_libraries(libopenrct2 ${FREETYPE_STATIC_LIBRARIES})

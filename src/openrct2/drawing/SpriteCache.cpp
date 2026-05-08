@@ -5,6 +5,7 @@
 
 #include "SpriteCache.h"
 #include "../Diagnostic.h"
+#include "../profiling/Sampler.h"
 
 #include <atomic>
 #include <cerrno>
@@ -357,6 +358,11 @@ namespace OpenRCT2::Drawing
 
     std::optional<SpriteCacheHit> SpriteCacheLookup(SpriteCacheKey key)
     {
+        // Sentinel keys (key==0 is "caller couldn't stat the source") aren't
+        // recorded as either hits or misses — they're "don't try". Every
+        // other path below is either a real hit or a real miss, and gets
+        // accounted before returning. Safe to call when the profiler is
+        // closed: recordSpriteCache* checks isEnabled internally.
         if (key == 0) return std::nullopt;
         auto& s = State();
         std::lock_guard<std::mutex> g(s.lock);
@@ -364,12 +370,21 @@ namespace OpenRCT2::Drawing
         if (s.disabled || s.cacheMmap == nullptr) return std::nullopt;
 
         auto it = s.index.find(key);
-        if (it == s.index.end()) return std::nullopt;
+        if (it == s.index.end())
+        {
+#ifdef ENABLE_PERFORMANCE_PROFILER
+            ::OpenRCT2::Profiling::Sampler::recordSpriteCacheMiss();
+#endif
+            return std::nullopt;
+        }
 
         const IdxRecord& rec = it->second;
         if (rec.cacheOffset + rec.totalLen > s.cacheMmapSize)
         {
             LOG_WARNING("SpriteCache: idx record references beyond cache file (corrupt); ignoring");
+#ifdef ENABLE_PERFORMANCE_PROFILER
+            ::OpenRCT2::Profiling::Sampler::recordSpriteCacheMiss();
+#endif
             return std::nullopt;
         }
 
@@ -380,6 +395,9 @@ namespace OpenRCT2::Drawing
         if (std::memcmp(hdr.magic, kEntryMagic, 8) != 0)
         {
             LOG_WARNING("SpriteCache: entry magic mismatch at offset %llu, ignoring", static_cast<unsigned long long>(rec.cacheOffset));
+#ifdef ENABLE_PERFORMANCE_PROFILER
+            ::OpenRCT2::Profiling::Sampler::recordSpriteCacheMiss();
+#endif
             return std::nullopt;
         }
 
@@ -388,6 +406,9 @@ namespace OpenRCT2::Drawing
         if (pixelBlock + hdr.pixelDataLen > s.cacheMmap + s.cacheMmapSize)
         {
             LOG_WARNING("SpriteCache: entry extends past cache mapping, ignoring");
+#ifdef ENABLE_PERFORMANCE_PROFILER
+            ::OpenRCT2::Profiling::Sampler::recordSpriteCacheMiss();
+#endif
             return std::nullopt;
         }
 
@@ -410,6 +431,9 @@ namespace OpenRCT2::Drawing
             hit.entries.push_back(e);
         }
         hit.usesFallbackSprites = (rec.flags & kFlagUsesFallbackSprites) != 0;
+#ifdef ENABLE_PERFORMANCE_PROFILER
+        ::OpenRCT2::Profiling::Sampler::recordSpriteCacheHit();
+#endif
         return hit;
     }
 

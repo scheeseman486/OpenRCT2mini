@@ -18,6 +18,9 @@
 #include "../core/Guard.hpp"
 #include "../core/JobPool.h"
 #include "../core/Numerics.hpp"
+#ifdef ENABLE_PERFORMANCE_PROFILER
+    #include "../profiling/Sampler.h"
+#endif
 #include "../drawing/Drawing.h"
 #include "../drawing/IDrawingEngine.h"
 #include "../drawing/Rectangle.h"
@@ -1001,6 +1004,25 @@ namespace OpenRCT2
         {
             _paintJobs->Join();
         }
+
+#ifdef ENABLE_PERFORMANCE_PROFILER
+        // OPENRCT2MINI P7: feed paint counters to the profiler before
+        // we tear the sessions down. Records peak across viewports
+        // drawn this frame; cheap when sampler is disabled.
+        ::OpenRCT2::Profiling::Sampler::recordPaintColumnCount(
+            static_cast<uint16_t>(std::min<size_t>(_paintColumns.size(), UINT16_MAX)));
+        size_t peakEntries = 0;
+        for (auto* session : _paintColumns)
+        {
+            const auto& store = session->paintEntries;
+            const size_t used = store.fixedPaintEntries.size()
+                + (store.dynamicPaintEntries.has_value() ? store.dynamicPaintEntries->size() : 0);
+            if (used > peakEntries)
+                peakEntries = used;
+        }
+        ::OpenRCT2::Profiling::Sampler::recordPaintEntriesUsed(
+            static_cast<uint16_t>(std::min<size_t>(peakEntries, UINT16_MAX)));
+#endif
 
         // Release resources.
         for (auto* session : _paintColumns)

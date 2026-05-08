@@ -144,6 +144,25 @@ option(DISABLE_ICU      "Disable ICU. Falls back to a CP1252 lookup table for le
 # more than playing nice with the upstream OS cursor.
 option(ENABLE_SOFTWARE_CURSOR "Render the cursor as a sprite in the framebuffer (use on platforms with no OS cursor)." ON)
 option(ENABLE_SCRIPTING "Enable script / plugin support." ON)
+
+# OPENRCT2MINI: in-game performance profiler window. See profiler-plan.md.
+# Default ON for both host and device — the sampler is gated by an atomic
+# flag so the cost when the window has never been opened is essentially
+# zero. Disable for release builds that want a smaller binary.
+option(ENABLE_PERFORMANCE_PROFILER "Build the in-game performance profiler window." ON)
+
+# How many seconds of frame-rate history the profiler keeps in its ring
+# buffer. Slow-poll (memory / IO) ring is sized as 3× this value at 1 Hz.
+# Device default 10 sec keeps the buffer at ~25 KB resident. Host default
+# 30 sec for more comfortable inspection (~75 KB). Set via CACHE STRING
+# rather than option() because option() is for booleans only.
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+    set(PROFILER_HISTORY_SECONDS_DEFAULT 10)
+else()
+    set(PROFILER_HISTORY_SECONDS_DEFAULT 30)
+endif()
+set(PROFILER_HISTORY_SECONDS ${PROFILER_HISTORY_SECONDS_DEFAULT}
+    CACHE STRING "Seconds of profiler frame-rate history to retain.")
 option(ENABLE_ASAN "Enable the AddressSanitizer.")
 option(ENABLE_UBSAN "Enable the UndefinedBehaviourSanitizer.")
 option(ENABLE_HEADERS_CHECK "Check if include directives in header files are correct. Only works with clang" OFF)

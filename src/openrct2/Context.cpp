@@ -68,6 +68,9 @@
 #include "platform/Crash.h"
 #include "platform/Platform.h"
 #include "profiling/Profiling.h"
+#ifdef ENABLE_PERFORMANCE_PROFILER
+    #include "profiling/Sampler.h"
+#endif
 #include "rct1/Csg.h"  // OPENRCT2MINI revision 65 — Csg1datPresentAtLocation gate
 #include "rct2/RCT2.h"
 #include "ride/TrackDesignRepository.h"
@@ -1496,6 +1499,13 @@ namespace OpenRCT2
             // the common case is one relaxed atomic load.
             HandlePowerOffSaveIfRequested();
 
+            // OPENRCT2MINI P1: performance profiler frame-start hook.
+            // No-op when the sampler is disabled (one relaxed atomic
+            // load + branch). See profiler-plan.md.
+#ifdef ENABLE_PERFORMANCE_PROFILER
+            ::OpenRCT2::Profiling::Sampler::onFrameStart();
+#endif
+
             const auto deltaTime = _timer.GetElapsedTimeAndRestart().count();
 
             // Make sure we catch the state change and reset it.
@@ -1532,6 +1542,11 @@ namespace OpenRCT2
 
             Network::Flush();
             if (kptThis) { MINI_DBG_PUTS("  frame: complete"); }
+
+            // OPENRCT2MINI P1: performance profiler frame-end hook.
+#ifdef ENABLE_PERFORMANCE_PROFILER
+            ::OpenRCT2::Profiling::Sampler::onFrameEnd();
+#endif
         }
 
         void UpdateTimeAccumulators(float deltaTime)

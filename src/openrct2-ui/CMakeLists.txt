@@ -156,6 +156,9 @@ target_compile_definitions(openrct2 PUBLIC
     $<$<BOOL:${DISABLE_VORBIS}>:DISABLE_VORBIS>
     # OPENRCT2MINI: cut 38. Software cursor toggle.
     $<$<BOOL:${ENABLE_SOFTWARE_CURSOR}>:ENABLE_SOFTWARE_CURSOR>
+    # OPENRCT2MINI: in-game performance profiler window (P1+).
+    $<$<BOOL:${ENABLE_PERFORMANCE_PROFILER}>:ENABLE_PERFORMANCE_PROFILER>
+    PROFILER_HISTORY_SECONDS=${PROFILER_HISTORY_SECONDS}
     # If OpenGL is enabled then we want to dynamically look up symbols.
     # If its disabled and somehow we magically end up linking to OpenGL we don't want look up the OpenGL symbols????
     $<IF:$<BOOL:${DISABLE_OPENGL}>,DISABLE_OPENGL,OPENGL_NO_LINK>

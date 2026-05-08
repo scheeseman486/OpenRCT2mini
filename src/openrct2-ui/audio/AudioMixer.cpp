@@ -10,9 +10,13 @@
 #include "AudioMixer.h"
 
 #include <algorithm>
+#include <chrono>
 #include <iterator>
 #include <openrct2/OpenRCT2.h>
 #include <openrct2/config/Config.h>
+#ifdef ENABLE_PERFORMANCE_PROFILER
+    #include <openrct2/profiling/Sampler.h>
+#endif
 
 using namespace OpenRCT2::Audio;
 
@@ -29,7 +33,15 @@ void AudioMixer::Init(const char* device)
     want.freq = 22050;
     want.format = AUDIO_S16SYS;
     want.channels = 2;
-    want.samples = 2048;
+    // OPENRCT2MINI: 4096 samples (~85 ms at 48 kHz) instead of upstream's
+    // 2048 (~42 ms). On the Miyoo Mini the audio callback's deadline
+    // budget is fragile during scrolling: the main thread page-faults
+    // SpriteScratch pages from SD, contends with the audio thread on
+    // glibc arenas (MALLOC_ARENA_MAX=2 from revision 51) and on shared
+    // DRAM bandwidth. Any per-callback overrun causes audible stutter
+    // at 2048. 4096 doubles the headroom; 8192 was tried and gave
+    // noticeable input/SFX latency with no real benefit over 4096.
+    want.samples = 4096;
     want.callback = [](void* arg, uint8_t* dst, int32_t length) -> void {
         auto* mixer = static_cast<AudioMixer*>(arg);
         mixer->GetNextAudioChunk(dst, static_cast<size_t>(length));
@@ -50,6 +62,20 @@ void AudioMixer::Init(const char* device)
     _outputFormat.format = have.format;
     _outputFormat.channels = have.channels;
     _outputFormat.freq = have.freq;
+
+#ifdef ENABLE_PERFORMANCE_PROFILER
+    // OPENRCT2MINI P8: register the audio buffer's deadline budget
+    // (ms per callback) with the profiler. Used by the Audio tab to
+    // overlay a horizontal "deadline" line on the callback duration
+    // graph — visualises how much margin we have before underrunning.
+    if (have.freq > 0)
+    {
+        const uint32_t bufferMs = static_cast<uint32_t>(
+            (static_cast<uint64_t>(have.samples) * 1000) / static_cast<uint64_t>(have.freq));
+        ::OpenRCT2::Profiling::Sampler::recordAudioBufferMs(
+            static_cast<uint16_t>(std::min<uint32_t>(bufferMs, UINT16_MAX)));
+    }
+#endif
 
     SDL_PauseAudioDevice(_deviceId, 0);
 }
@@ -134,6 +160,14 @@ const AudioFormat& AudioMixer::GetFormat() const
 // TODO: investigate replacing this with OpenAL (#26035)
 void AudioMixer::GetNextAudioChunk(uint8_t* dst, size_t length)
 {
+#ifdef ENABLE_PERFORMANCE_PROFILER
+    // OPENRCT2MINI P8: wall-clock the audio callback so the Audio tab
+    // can show how close we are to the buffer's deadline. Single
+    // chrono start/end + relaxed atomic_store at the bottom — no
+    // exclusive ops on the audio thread.
+    const auto callbackStart = std::chrono::steady_clock::now();
+#endif
+
     UpdateAdjustedSound();
 
     // Zero the output buffer
@@ -162,6 +196,15 @@ void AudioMixer::GetNextAudioChunk(uint8_t* dst, size_t length)
             it++;
         }
     }
+
+#ifdef ENABLE_PERFORMANCE_PROFILER
+    const auto callbackEnd = std::chrono::steady_clock::now();
+    const auto durationUs = static_cast<uint32_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(callbackEnd - callbackStart).count());
+    ::OpenRCT2::Profiling::Sampler::recordAudioCallbackUs(durationUs);
+    ::OpenRCT2::Profiling::Sampler::recordAudioChannelCount(
+        static_cast<uint16_t>(std::min<size_t>(_channels.size(), UINT16_MAX)));
+#endif
 }
 
 // TODO: investigate replacing this with OpenAL (#26035)

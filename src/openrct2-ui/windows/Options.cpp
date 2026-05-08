@@ -289,6 +289,9 @@ namespace OpenRCT2::Ui::Windows
         WIDX_EXPORT_EMSCRIPTEN_DATA,
         WIDX_IMPORT_EMSCRIPTEN_DATA,
 #endif
+#ifdef ENABLE_PERFORMANCE_PROFILER
+        WIDX_START_PROFILER,
+#endif
         WIDX_ASSET_PACKS,
     };
 
@@ -510,6 +513,13 @@ namespace OpenRCT2::Ui::Windows
 #ifdef __EMSCRIPTEN__
         makeWidget        ({ 10, kAdvancedStart + 46}, {135, 14}, WidgetType::button,       WindowColour::secondary, STR_EXPORT_EMSCRIPTEN,                     kStringIdNone                                ), // Emscripten data export
         makeWidget        ({150, kAdvancedStart + 46}, {150, 14}, WidgetType::button,       WindowColour::secondary, STR_IMPORT_EMSCRIPTEN,                     kStringIdNone                                ), // Emscripten data import
+#endif
+#ifdef ENABLE_PERFORMANCE_PROFILER
+        // OPENRCT2MINI: title-screen entry point for the Performance
+        // Profiler. Sits to the left of the asset-packs button. y is set
+        // dynamically alongside asset-packs in AdvancedPrepareDraw so both
+        // pin to the bottom of the group box.
+        makeWidget        ({ 10, kAdvancedStart + 64}, {135, 14}, WidgetType::button,       WindowColour::secondary, STR_PERFORMANCE_PROFILER_START_BUTTON,     STR_PERFORMANCE_PROFILER_START_BUTTON_TIP    ), // Start Profiler
 #endif
         makeWidget        ({150, kAdvancedStart + 64}, {150, 14}, WidgetType::button,       WindowColour::secondary, STR_EDIT_ASSET_PACKS_BUTTON,               kStringIdNone                                )  // Asset packs
     );
@@ -2335,6 +2345,18 @@ namespace OpenRCT2::Ui::Windows
                 case WIDX_ASSET_PACKS:
                     ContextOpenWindow(WindowClass::assetPacks);
                     break;
+#ifdef ENABLE_PERFORMANCE_PROFILER
+                case WIDX_START_PROFILER:
+                    // sceneInvariant flag on the profiler window means it
+                    // survives the title -> park transition, so opening
+                    // from the title screen is the supported way to capture
+                    // park-load metrics (sprite cache hits, peak frame
+                    // times during ImageTable load, etc.). On a device
+                    // without an in-game toolbar route, this is also the
+                    // only way to surface the window.
+                    ContextOpenWindow(WindowClass::performanceProfiler);
+                    break;
+#endif
 #ifdef __EMSCRIPTEN__
                 case WIDX_EXPORT_EMSCRIPTEN_DATA:
                     ExportPersistentData();
@@ -2442,6 +2464,12 @@ namespace OpenRCT2::Ui::Windows
 
             widgets[WIDX_ASSET_PACKS].top = widgets[WIDX_GROUP_ADVANCED].bottom - 20;
             widgets[WIDX_ASSET_PACKS].bottom = widgets[WIDX_GROUP_ADVANCED].bottom - 6;
+#ifdef ENABLE_PERFORMANCE_PROFILER
+            // Sit the Start Profiler button on the same baseline as Asset
+            // Packs — both are pinned to the bottom of the Advanced group.
+            widgets[WIDX_START_PROFILER].top = widgets[WIDX_ASSET_PACKS].top;
+            widgets[WIDX_START_PROFILER].bottom = widgets[WIDX_ASSET_PACKS].bottom;
+#endif
         }
 
         void AdvancedDraw(RenderTarget& rt)

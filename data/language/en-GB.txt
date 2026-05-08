@@ -3847,4 +3847,21 @@ STR_7039    :Render a translucent shadow underneath the cursor sprite to make it
 # OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
 STR_7040    :Windows
 STR_7041    :Shade window
+# OPENRCT2MINI P1: in-game performance profiler. See profiler-plan.md.
+STR_7042    :Performance Profiler
+STR_7043    :Display per-frame CPU, memory, I/O, and audio metrics
+STR_7044    :Overview
+STR_7045    :CPU
+STR_7046    :Memory
+STR_7047    :I/O
+STR_7048    :Entities
+STR_7049    :Paint
+STR_7050    :Audio
+# OPENRCT2MINI P9: snapshot save controls.
+STR_7051    :Save snapshot
+STR_7052    :Snapshot saved: {STRING}
+STR_7053    :Snapshot save failed
+# OPENRCT2MINI: title-screen entry point for the Performance Profiler.
+STR_7054    :Start Profiler
+STR_7055    :Open the Performance Profiler window. The profiler persists across the title screen and game so it can capture park-load metrics.
 # OPENRCT2MINI W1b: hold to drag any window from any pixel inside it (face X / keyboard C by default).

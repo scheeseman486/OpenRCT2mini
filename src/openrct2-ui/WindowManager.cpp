@@ -74,6 +74,10 @@ public:
                 return openView(WindowView::changelog);
             case WindowClass::cheats:
                 return CheatsOpen();
+#ifdef ENABLE_PERFORMANCE_PROFILER
+            case WindowClass::performanceProfiler:
+                return PerformanceProfilerOpen();
+#endif
             case WindowClass::clearScenery:
                 return ClearSceneryOpen();
             case WindowClass::customCurrencyConfig:

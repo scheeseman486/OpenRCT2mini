@@ -90,6 +90,16 @@ namespace OpenRCT2
         higherContrastOnPress,
         noTitleBar,
         noSnapping,
+        // OPENRCT2MINI: window survives scene transitions (title <-> park,
+        // park <-> park savegame loads, editor transitions). Spared by
+        // WindowInitAll's CloseAllExceptFlags as well as the scenario-start
+        // CloseAllExceptFlags in Scenario.cpp. The window is responsible
+        // for tolerating empty/uninitialised game state in its draw paths
+        // — see e.g. the Performance Profiler's defensive try/catch around
+        // getGameState().entities. Distinct from noAutoClose, which is
+        // about "don't auto-close when too many windows are open" and is
+        // used by ride-construction windows that hold scene-bound state.
+        sceneInvariant,
 
         // *ONLY* create only flags below
         autoPosition,

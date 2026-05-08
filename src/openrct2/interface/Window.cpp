@@ -900,7 +900,14 @@ static constexpr float kWindowScrollLocations[][2] = {
     void WindowInitAll()
     {
         auto* windowMgr = Ui::GetWindowManager();
-        windowMgr->CloseAllExceptFlags({});
+        // OPENRCT2MINI: spare windows flagged sceneInvariant. WindowInitAll
+        // is the broadest reset path (called from ContextResetSubsystems for
+        // title/park/editor transitions and savegame loads when
+        // gLoadKeepWindowsOpen is false), so this is the only place we need
+        // to amend for cross-scene persistence — Scenario.cpp's scenario-
+        // start close-all already takes a flag set and just needs the new
+        // bit added to its allowlist.
+        windowMgr->CloseAllExceptFlags({ WindowFlag::sceneInvariant });
     }
 
     void WindowFollowSprite(WindowBase& w, EntityId spriteIndex)

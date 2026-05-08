@@ -167,7 +167,7 @@ namespace OpenRCT2::Ui::Windows
 
     enum
     {
-        DDIDX_CHEATS,
+        DDIDX_CHEATS = 0,
         DDIDX_TILE_INSPECTOR = 1,
         DDIDX_OBJECT_SELECTION = 2,
         DDIDX_INVENTIONS_LIST = 3,
@@ -177,12 +177,16 @@ namespace OpenRCT2::Ui::Windows
         DDIDX_DISABLE_CLEARANCE_CHECKS = 7,
         DDIDX_DISABLE_SUPPORT_LIMITS = 8,
         // OPENRCT2MINI: cut 30. Debug items folded into the cheats dropdown so
-        // the toolbar drops one button. Indices 9/10 are added at runtime when
-        // Config::general.debuggingTools is on; the standalone WIDX_DEBUG
-        // widget is hidden permanently.
+        // the toolbar drops one button. Indices 9..12 are added at runtime
+        // when Config::general.debuggingTools is on; the standalone
+        // WIDX_DEBUG widget is hidden permanently.
         // 9 is a separator (added when debug items are appended)
         DDIDX_DEBUG_CONSOLE = 10,
         DDIDX_DEBUG_PAINT_TOOL = 11,
+        // OPENRCT2MINI P1: performance profiler. Sits at the bottom of the
+        // debug-tools cluster and is only surfaced when debuggingTools is on.
+        // See profiler-plan.md.
+        DDIDX_PERFORMANCE_PROFILER = 12,
 
         TOP_TOOLBAR_CHEATS_COUNT,
     };
@@ -705,13 +709,21 @@ namespace OpenRCT2::Ui::Windows
             size_t numItems = std::size(baseItems);
             if (showDebugItems)
             {
-                // Slot 9 is a separator, 10 = console, 11 = debug paint. Use the
-                // Item-typed overloads (no ItemID), matching the legacy debug
-                // dropdown's pattern at the bottom of this file.
+                // Slot 9 is a separator, 10 = console, 11 = debug paint, 12 =
+                // performance profiler. Use the Item-typed overloads (no
+                // ItemID), matching the legacy debug dropdown's pattern at the
+                // bottom of this file. The profiler is gated here too — it
+                // only surfaces when Options > Advanced > Enable debugging
+                // tools is checked.
                 gDropdown.items[9] = Dropdown::Separator();
                 gDropdown.items[DDIDX_DEBUG_CONSOLE] = Dropdown::ToggleOption(STR_DEBUG_DROPDOWN_CONSOLE);
                 gDropdown.items[DDIDX_DEBUG_PAINT_TOOL] = Dropdown::ToggleOption(STR_DEBUG_DROPDOWN_DEBUG_PAINT);
+#ifdef ENABLE_PERFORMANCE_PROFILER
+                gDropdown.items[DDIDX_PERFORMANCE_PROFILER] = Dropdown::ToggleOption(STR_PERFORMANCE_PROFILER);
+                numItems = DDIDX_PERFORMANCE_PROFILER + 1;
+#else
                 numItems = DDIDX_DEBUG_PAINT_TOOL + 1;
+#endif
             }
 
             WindowDropdownShowText(
@@ -763,6 +775,11 @@ namespace OpenRCT2::Ui::Windows
             {
                 case DDIDX_CHEATS:
                     ContextOpenWindow(WindowClass::cheats);
+                    break;
+                case DDIDX_PERFORMANCE_PROFILER:
+#ifdef ENABLE_PERFORMANCE_PROFILER
+                    ContextOpenWindow(WindowClass::performanceProfiler);
+#endif
                     break;
                 case DDIDX_TILE_INSPECTOR:
                     ContextOpenWindow(WindowClass::tileInspector);

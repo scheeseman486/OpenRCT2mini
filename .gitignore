@@ -359,5 +359,10 @@ cmake-build-*/
 # OSK design plan — same pattern as other Claude-generated planning docs
 /osk-plan.md
 
+# Performance Profiler design plan — same pattern as the other planning docs
+/profiler-plan.md
+# Captured .orctprof snapshots from local / device runs — ad-hoc test data
+/profile_captures/
+
 # Release notes drafts — local until published as a GitHub release
 /release-notes-v*.md

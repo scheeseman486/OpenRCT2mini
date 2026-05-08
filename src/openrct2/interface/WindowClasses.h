@@ -95,6 +95,9 @@ enum class WindowClass : uint8_t
     // sit above stickToFront windows so the OSK is always topmost.
     osk = 140,
 
+    // OPENRCT2MINI: performance profiler window. See profiler-plan.md.
+    performanceProfiler = 141,
+
     // Only used for colour schemes
     staff = 220,
     editorTrackBottomToolbar = 221,

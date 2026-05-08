@@ -62,6 +62,11 @@ namespace OpenRCT2::Ui::Windows
     // Cheats
     WindowBase* CheatsOpen();
 
+    // OPENRCT2MINI P1: Performance Profiler. See profiler-plan.md.
+#ifdef ENABLE_PERFORMANCE_PROFILER
+    WindowBase* PerformanceProfilerOpen();
+#endif
+
     // ClearScenery
     WindowBase* ClearSceneryOpen();
     void ToggleClearSceneryWindow();
