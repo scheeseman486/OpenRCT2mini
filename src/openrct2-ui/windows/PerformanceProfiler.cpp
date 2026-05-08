@@ -175,16 +175,22 @@ namespace OpenRCT2::Ui::Windows
             void onUpdate() override
             {
                 _frameCounter++;
-                // Invalidate the whole window, not just the active tab.
-                // The Overview / CPU / etc. tabs render live data that
-                // changes every frame — we need the whole content area
-                // marked dirty so onDraw runs across the full window
-                // bounds, not just the tab widget's rect. Without this,
-                // the strip directly below the tabs (which falls inside
-                // the tab widget's bounding box) gets inconsistent
-                // updates while the rest of the graph stays static at
-                // its window-open snapshot.
-                invalidate();
+                // OPENRCT2MINI: rate-limit the full-window invalidate.
+                // Each invalidate() marks the profiler's bounds dirty,
+                // and the dirty-block dispatcher then redraws every
+                // window that overlaps that rect — including the main
+                // viewport underneath, which has to re-walk ~440x320 of
+                // world content. On the device this is the dominant cost
+                // of having the profiler open. Updating live data and
+                // tab animations at ~7-15 Hz on host / ~1.5-2 Hz on
+                // device is a good trade for half-to-quarter of the
+                // profiler-induced viewport overhead.
+                //
+                // Toast appearance/expiry and tab clicks invalidate
+                // explicitly via setPage() / handleSaveSnapshot, so the
+                // user-interactive paths still get immediate feedback.
+                if ((_frameCounter & 0x3) == 0)
+                    invalidate();
             }
 
             void onMouseUp(WidgetIndex widgetIndex) override
