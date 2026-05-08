@@ -168,12 +168,22 @@ struct PaintSessionCore
 
 struct PaintNodeStorage
 {
-    // OPENRCT2MINI: was 1024; reduced to keep sizeof(PaintSession) small.
-    // Overflow falls through to dynamicPaintEntries — no functional impact.
-    sfl::static_vector<PaintEntry, 256> fixedPaintEntries;
+    // OPENRCT2MINI revision 94 (P1): was 256, before that 1024 (upstream).
+    // 256 was too small — busy parks (e.g. Alton Towers, ~2300 guests) hit
+    // a per-session peak of ~390 entries, overflowing into the heap-backed
+    // dynamicPaintEntries every frame. With ~6 ViewportPaint dispatches /
+    // frame on busy scenes, that's multiple malloc/free pairs per frame
+    // contributing to the 1079/sec minor-fault spikes seen in profiler
+    // captures. 512 covers observed peaks with headroom while keeping the
+    // session footprint reasonable: per-session 17.4 KB → 34.8 KB; pool
+    // peak ~80 sessions → +~1.4 MB persistent RSS. Access pattern is
+    // streaming (sequential append on generate, sequential read on
+    // arrange/draw) so L1d capacity isn't a constraint — hardware
+    // prefetcher handles the larger buffer at the same throughput.
+    sfl::static_vector<PaintEntry, 512> fixedPaintEntries;
 
     // This has to be wrapped in optional as it allocates memory before it is used.
-    std::optional<sfl::segmented_vector<PaintEntry, 256>> dynamicPaintEntries;
+    std::optional<sfl::segmented_vector<PaintEntry, 512>> dynamicPaintEntries;
 
     PaintEntry* allocate()
     {
