@@ -162,10 +162,16 @@ void AudioMixer::GetNextAudioChunk(uint8_t* dst, size_t length)
 {
 #ifdef ENABLE_PERFORMANCE_PROFILER
     // OPENRCT2MINI P8: wall-clock the audio callback so the Audio tab
-    // can show how close we are to the buffer's deadline. Single
-    // chrono start/end + relaxed atomic_store at the bottom — no
-    // exclusive ops on the audio thread.
-    const auto callbackStart = std::chrono::steady_clock::now();
+    // can show how close we are to the buffer's deadline. Gated on
+    // Sampler::isEnabled() so we don't pay even the chrono::now() cost
+    // when nobody's looking. The audio thread does an extra atomic load
+    // per callback (~12 callbacks/sec) — negligible on its own, but the
+    // gate avoids the two clock_gettime() calls and the atomic store
+    // that would otherwise run unconditionally.
+    const bool profSampling = ::OpenRCT2::Profiling::Sampler::isEnabled();
+    std::chrono::steady_clock::time_point callbackStart{};
+    if (profSampling)
+        callbackStart = std::chrono::steady_clock::now();
 #endif
 
     UpdateAdjustedSound();
@@ -198,12 +204,15 @@ void AudioMixer::GetNextAudioChunk(uint8_t* dst, size_t length)
     }
 
 #ifdef ENABLE_PERFORMANCE_PROFILER
-    const auto callbackEnd = std::chrono::steady_clock::now();
-    const auto durationUs = static_cast<uint32_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(callbackEnd - callbackStart).count());
-    ::OpenRCT2::Profiling::Sampler::recordAudioCallbackUs(durationUs);
-    ::OpenRCT2::Profiling::Sampler::recordAudioChannelCount(
-        static_cast<uint16_t>(std::min<size_t>(_channels.size(), UINT16_MAX)));
+    if (profSampling)
+    {
+        const auto callbackEnd = std::chrono::steady_clock::now();
+        const auto durationUs = static_cast<uint32_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(callbackEnd - callbackStart).count());
+        ::OpenRCT2::Profiling::Sampler::recordAudioCallbackUs(durationUs);
+        ::OpenRCT2::Profiling::Sampler::recordAudioChannelCount(
+            static_cast<uint16_t>(std::min<size_t>(_channels.size(), UINT16_MAX)));
+    }
 #endif
 }
 

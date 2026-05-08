@@ -1097,7 +1097,14 @@ public:
     {
         CloseByClass(WindowClass::dropdown);
         CloseByCondition([cls](WindowBase* w) -> bool {
-            return w->classification != cls && !w->flags.hasAny(WindowFlag::stickToBack, WindowFlag::stickToFront);
+            // OPENRCT2MINI: spare sceneInvariant alongside stickToBack /
+            // stickToFront. CloseAllExceptClass fires from the savegame
+            // load path (Game.cpp), the file browser, and editor object
+            // selection — all transition-adjacent, so the same survival
+            // contract as WindowInitAll applies.
+            return w->classification != cls
+                && !w->flags.hasAny(
+                    WindowFlag::stickToBack, WindowFlag::stickToFront, WindowFlag::sceneInvariant);
         });
     }
 

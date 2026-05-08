@@ -1006,22 +1006,28 @@ namespace OpenRCT2
         }
 
 #ifdef ENABLE_PERFORMANCE_PROFILER
-        // OPENRCT2MINI P7: feed paint counters to the profiler before
-        // we tear the sessions down. Records peak across viewports
-        // drawn this frame; cheap when sampler is disabled.
-        ::OpenRCT2::Profiling::Sampler::recordPaintColumnCount(
-            static_cast<uint16_t>(std::min<size_t>(_paintColumns.size(), UINT16_MAX)));
-        size_t peakEntries = 0;
-        for (auto* session : _paintColumns)
+        // OPENRCT2MINI P7: feed paint counters to the profiler. Gated on
+        // Sampler::isEnabled() so the peakEntries walk only happens when
+        // someone's looking — ViewportPaint is in the painter's hot path
+        // and the loop touches every column's paintEntries vectors which
+        // are otherwise cold cache. Skipping it when nobody cares saves
+        // ~150 cache-unfriendly iterations per frame on busy parks.
+        if (::OpenRCT2::Profiling::Sampler::isEnabled())
         {
-            const auto& store = session->paintEntries;
-            const size_t used = store.fixedPaintEntries.size()
-                + (store.dynamicPaintEntries.has_value() ? store.dynamicPaintEntries->size() : 0);
-            if (used > peakEntries)
-                peakEntries = used;
+            ::OpenRCT2::Profiling::Sampler::recordPaintColumnCount(
+                static_cast<uint16_t>(std::min<size_t>(_paintColumns.size(), UINT16_MAX)));
+            size_t peakEntries = 0;
+            for (auto* session : _paintColumns)
+            {
+                const auto& store = session->paintEntries;
+                const size_t used = store.fixedPaintEntries.size()
+                    + (store.dynamicPaintEntries.has_value() ? store.dynamicPaintEntries->size() : 0);
+                if (used > peakEntries)
+                    peakEntries = used;
+            }
+            ::OpenRCT2::Profiling::Sampler::recordPaintEntriesUsed(
+                static_cast<uint16_t>(std::min<size_t>(peakEntries, UINT16_MAX)));
         }
-        ::OpenRCT2::Profiling::Sampler::recordPaintEntriesUsed(
-            static_cast<uint16_t>(std::min<size_t>(peakEntries, UINT16_MAX)));
 #endif
 
         // Release resources.
