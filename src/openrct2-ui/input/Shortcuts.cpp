@@ -955,9 +955,14 @@ void ShortcutManager::registerDefaultShortcuts()
     registerPadDefault(ShortcutId::kInterfacePause,        "PAD START");
     registerPadDefault(ShortcutId::kDebugToggleConsole,    "PAD GUIDE");
 
-    // East face = cancel/back. The closest existing shortcut is "close
-    // top-most window" which is the broad-strokes "go back" action.
-    // Construction-mode cancel (kInterfaceCancelConstruction) is a
-    // narrower variant; user can rebind PAD A to that if they prefer.
-    registerPadDefault(ShortcutId::kInterfaceCloseTop, "PAD A");
+    // Face buttons (A / B / X / Y, plus the four DPAD directions) are
+    // intentionally NOT bound here. They're currently captured by the
+    // _vKb*-driven virtual cursor system in UiContext::Process-
+    // VirtualGamepadCursor (lines 1338-1356) for left-click / right-click /
+    // shade / cursor motion. Adding a shortcut binding for any of these
+    // alongside the existing direct-poll behaviour produces double-fires:
+    // pressing south face would both left-click AND fire the bound
+    // shortcut. Phase 1.5 migrates the cursor / click / shade behaviours
+    // to ShortcutManager, at which point face-button defaults can ship
+    // without conflict.
 }

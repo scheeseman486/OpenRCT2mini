@@ -146,8 +146,8 @@ Default bindings, expressed in the `PAD ...` string format:
 
 ```
 PAD DPAD_UP / DPAD_DOWN / DPAD_LEFT / DPAD_RIGHT  → cursor up/down/left/right (held)
-PAD B (south face)                                 → click / confirm           // Mini "B" position
-PAD A (east face)                                  → cancel / back             // Mini "A" position
+PAD A (south face)                                 → click / confirm           // Mini "B" position
+PAD B (east face)                                  → cancel / back             // Mini "A" position
 PAD Y (north face)                                 → toggle window shade       // Mini "X" position
 PAD X (west face)                                  → swap window               // Mini "Y" position
 PAD L1                                             → rotate view ccw           // Mini L1
@@ -159,7 +159,7 @@ PAD START                                          → toolbar / pause          
 PAD GUIDE                                          → toggle console            // Mini MENU
 
 // Existing Mini-style chord behaviors migrated from _vKb-based scancode handling:
-PAD R1+X                                           → close window under cursor // existing rev W*
+PAD R1+Y                                           → close window under cursor // existing rev W*; Mini "X" press = SDL Y
 PAD L1+R1                                          → construction Z-lock modifier (held)
 PAD R1                                             → fast-cursor modifier (held; see 1.5)
 
@@ -168,9 +168,16 @@ LEFTSTICK_AXIS                                     → analog cursor motion     
 RIGHTSTICK_AXIS                                    → analog camera pan         // see 1.9
 ```
 
-The face-button mapping uses Nintendo-style positions (Mini layout) rather than Xbox-style — `PAD B` is east, `PAD A` is south. Documented prominently in the rebinding UI.
+SDL canonicalises face buttons by physical position:
+`BUTTON_A` = south (Xbox A / PS Cross / Nintendo B);
+`BUTTON_B` = east  (Xbox B / PS Circle / Nintendo A);
+`BUTTON_X` = west  (Xbox X / PS Square / Nintendo Y);
+`BUTTON_Y` = north (Xbox Y / PS Triangle / Nintendo X).
+The Mini's button labelling follows Nintendo convention — Mini "A" is right-side (east), Mini "B" is bottom (south) — so the plan's mapping above ties Mini "A" → `PAD B` and Mini "B" → `PAD A`. Phase 2's vendor SDL2 mapping does the same translation in the joystick driver so the same shortcut bindings work identically on both platforms.
 
-**1.4 also includes a conflict audit:** for each existing default keyboard binding, verify the new default gamepad binding fires the same shortcut ID. E.g. `kInterfaceCancelConstruction` defaults to ESCAPE; we add `PAD A` → same shortcut. Two bindings on one shortcut, both fire it — that's the model. No conflict, but verified explicitly so we don't accidentally bind `PAD A` to a different shortcut than what users expect from "cancel".
+**Phase ordering caveat for face buttons:** binding `PAD A` / `PAD B` / `PAD X` / `PAD Y` in 1.4 produces double-fires while the `_vKb*`-driven virtual cursor system still polls `SDL_CONTROLLER_BUTTON_A` / `_B` / `_RIGHTSHOULDER` directly (UiContext::ProcessVirtualGamepadCursor lines 1338-1356). Pressing south face would both left-click AND fire the new shortcut. Face-button bindings therefore ship in **1.5** alongside the cursor / click / shade migration, not in 1.4. Only the conflict-free buttons (L1, R1, L2, R2, START, GUIDE, BACK) ship as defaults in 1.4.
+
+**1.4 also includes a conflict audit:** for each existing default keyboard binding, verify the new default gamepad binding fires the same shortcut ID. E.g. `kInterfaceCancelConstruction` defaults to ESCAPE; in 1.5 we add `PAD B` → same shortcut. Two bindings on one shortcut, both fire it — that's the model.
 
 ### 1.5 Migrate `_vKb*`-based behaviors to ShortcutManager
 
@@ -181,8 +188,8 @@ Behaviors to enumerate during 1.1 audit and migrate before deleting `_vKb*`:
 | Behavior | Today's path | Migrated to |
 |---|---|---|
 | Cursor up/down/left/right (held) | `_vKbUp/Down/Left/Right` flags + `dpadUp/Down/Left/Right` direct poll | held shortcut bound to `PAD DPAD_*` |
-| Click | `_vKbZ` + `dpadA` (BUTTON_A poll) | shortcut fired on `PAD B` |
-| Cancel | `_vKbX` + `dpadB` (BUTTON_B poll) | shortcut fired on `PAD A` |
+| Click | `_vKbZ` + `dpadA` (BUTTON_A poll = south face) | shortcut fired on `PAD A` |
+| Cancel | `_vKbX` + `dpadB` (BUTTON_B poll = east face) | shortcut fired on `PAD B` |
 | Fast cursor (R1 held) | `_vGamepadMod` + RIGHTSHOULDER poll | held shortcut `PAD R1` (modifier-only) |
 | Z-lock (Ctrl held / L1+R1 chord) | `_vKbCtrl` from LCTRL scancode | held shortcut `PAD L1+R1` |
 | Shade window (X tap) / Shade all (X hold) | `_vKbCPressedAtMs` + `_vKbCHoldFired` state machine on Y-scancode | tap-vs-hold variant of `PAD Y` shortcut (existing tap/hold model in shortcut catalog) |
