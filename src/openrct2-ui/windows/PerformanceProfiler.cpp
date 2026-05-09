@@ -29,13 +29,16 @@
     #include <openrct2/interface/Widget.h>
     #include <openrct2/localisation/Formatter.h>
     #include <openrct2/PlatformEnvironment.h>
+    #include <openrct2/Version.h>
     #include <openrct2/core/Path.hpp>
+    #include <openrct2/core/String.hpp>
     #include <openrct2/profiling/Sampler.h>
     #include <openrct2/profiling/SnapshotWriter.h>
     #include <openrct2/ui/WindowManager.h>
 
-    #include <chrono>
-    #include <ctime>
+    #include <filesystem>
+
+    #include <cctype>
 
 using namespace OpenRCT2::Drawing;
 
@@ -217,36 +220,67 @@ namespace OpenRCT2::Ui::Windows
 
             // ----- P9 snapshot button handler --------------------------
             //
-            // Composes the path `<user>/profiler/snapshot-YYYYMMDD-HHMMSS.orctprof`,
-            // ensures the directory exists, calls SnapshotWriter, stashes
-            // the result message for the next draw cycle.
+            // Composes the path `<user>/profiler/snapshot-NNNN-<short_sha>.orctprof`
+            // — a sequential index plus the build's git short SHA. Wall-clock
+            // timestamps don't survive the device boot (Miyoo Mini has no RTC,
+            // OnionUI fakes the date as 1970-something), so chronological
+            // ordering by filename is meaningless. The sequence number gives
+            // run order; the SHA disambiguates between binaries when the
+            // same SD card has snapshots from multiple revisions.
             std::string _snapshotMessage;
             uint32_t _snapshotMessageExpireFrame = 0;
+
+            // Scan the profiler dir for the highest existing
+            // snapshot-NNNN-* sequence number. Returns max+1 (or 1 if none).
+            // Slow path — only runs when the user clicks Save Snapshot.
+            uint32_t findNextSnapshotIndex(const std::string& profilerDir) const
+            {
+                uint32_t maxSeen = 0;
+                std::error_code ec;
+                for (const auto& entry : std::filesystem::directory_iterator(profilerDir, ec))
+                {
+                    if (ec || !entry.is_regular_file(ec))
+                        continue;
+                    const std::string name = entry.path().filename().string();
+                    // Match: "snapshot-NNNN-...orctprof" — read NNNN.
+                    if (name.size() < 14)
+                        continue;
+                    if (name.compare(0, 9, "snapshot-") != 0)
+                        continue;
+                    uint32_t n = 0;
+                    size_t i = 9;
+                    bool any = false;
+                    while (i < name.size() && std::isdigit(static_cast<unsigned char>(name[i])))
+                    {
+                        n = n * 10 + static_cast<uint32_t>(name[i] - '0');
+                        ++i;
+                        any = true;
+                    }
+                    if (any && n > maxSeen)
+                        maxSeen = n;
+                }
+                return maxSeen + 1;
+            }
 
             void handleSaveSnapshot()
             {
                 auto& env = GetContext()->GetPlatformEnvironment();
 
-                // Build target directory + path. The user-data root is
-                // a u8string we treat as a regular filesystem path.
                 std::string userDir = env.GetDirectoryPath(DirBase::user);
                 std::string profilerDir = ::OpenRCT2::Path::Combine(userDir, "profiler");
                 ::OpenRCT2::Path::CreateDirectory(profilerDir);
 
-                // Filename with current local time.
-                const auto now = std::chrono::system_clock::now();
-                const std::time_t t = std::chrono::system_clock::to_time_t(now);
-                std::tm tm{};
-#ifdef _WIN32
-                localtime_s(&tm, &t);
+                // Sequential index (max-existing + 1) plus build SHA.
+                const uint32_t seq = findNextSnapshotIndex(profilerDir);
+                const char* sha =
+#ifdef OPENRCT2_COMMIT_SHA1_SHORT
+                    OPENRCT2_COMMIT_SHA1_SHORT;
 #else
-                localtime_r(&t, &tm);
+                    "nogit";
 #endif
+
                 char nameBuf[64];
-                std::snprintf(
-                    nameBuf, sizeof(nameBuf), "snapshot-%04d%02d%02d-%02d%02d%02d.orctprof",
-                    tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-                    tm.tm_hour, tm.tm_min, tm.tm_sec);
+                std::snprintf(nameBuf, sizeof(nameBuf), "snapshot-%04u-%s.orctprof", seq, sha);
 
                 const std::string filepath = ::OpenRCT2::Path::Combine(profilerDir, std::string(nameBuf));
 
