@@ -178,6 +178,25 @@ namespace OpenRCT2::Ui
             registerShortcut(RegisteredShortcut(std::forward<Args>(args)...));
         }
         void registerDefaultShortcuts();
+
+        // OPENRCT2MINI gamepad-plan 1.4: append a "PAD ..." default
+        // binding to an already-registered shortcut. Populates BOTH
+        // `standard` (so reset-to-default in the rebind UI restores it)
+        // and `current` (so the binding is live without requiring the
+        // user to rebind on first run). On subsequent runs `current` is
+        // overwritten by loadUserBindings if a user file exists, so
+        // user customisations take precedence over our defaults — same
+        // semantics as keyboard defaults.
+        //
+        // Why a separate helper instead of extending the constructor:
+        // OPENRCT2MINI cut 44 strips keyboard chord defaults via
+        // [[maybe_unused]] in the constructors to prevent the device's
+        // faked-scancode collisions. We don't want to undo that — the
+        // collision is real on Mini. Gamepad PAD-tokens are a NEW
+        // channel that doesn't collide with the device's keyboard
+        // synthesis (vendor SDL2 emits keys, not joyButton events), so
+        // they can be populated unconditionally.
+        void registerPadDefault(std::string_view id, std::string_view padChord);
         RegisteredShortcut* getShortcut(std::string_view id);
         void removeShortcut(std::string_view id);
         bool isPendingShortcutChange() const;

@@ -129,6 +129,19 @@ void ShortcutManager::registerShortcut(RegisteredShortcut&& shortcut)
     }
 }
 
+void ShortcutManager::registerPadDefault(std::string_view id, std::string_view padChord)
+{
+    auto* sc = getShortcut(id);
+    if (sc == nullptr)
+        return;
+    ShortcutInput parsed{ padChord };
+    if (parsed.kind == InputDeviceKind::joyButton || parsed.kind == InputDeviceKind::joyAxis)
+    {
+        sc->standard.push_back(parsed);
+        sc->current.push_back(std::move(parsed));
+    }
+}
+
 RegisteredShortcut* ShortcutManager::getShortcut(std::string_view id)
 {
     auto result = shortcuts.find(id);

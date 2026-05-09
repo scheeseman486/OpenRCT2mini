@@ -927,4 +927,37 @@ void ShortcutManager::registerDefaultShortcuts()
         }
     });
     // clang-format on
+
+    // OPENRCT2MINI gamepad-plan 1.4: ship a conservative set of default
+    // gamepad bindings against existing shortcut IDs that have a
+    // straightforward action mapping. Cursor / click / cancel / shade /
+    // Z-lock / fast-cursor are deferred to 1.5 — those need new
+    // shortcut IDs because the existing _vKb*-driven behavior is not
+    // exposed via ShortcutManager today.
+    //
+    // Mini physical layout reminder: A is east face (cancel/back), B is
+    // south (click/confirm), Y is north (shade), X is west (swap).
+    // SDL_GameController normalises face buttons by physical position
+    // (A=south, B=east, X=west, Y=north), so the Mini's "A" maps to
+    // SDL_CONTROLLER_BUTTON_B, etc. Phase 2's vendor SDL2 mapping puts
+    // the Mini bits in the right SDL slots so the same defaults work
+    // there. For now (Phase 1) only host pads see these bindings since
+    // the device's joystick driver is still a stub.
+    //
+    // View transforms — these are the cleanest mappings since the
+    // existing shortcut IDs do exactly what we want:
+    registerPadDefault(ShortcutId::kViewGeneralRotateAnticlockwise, "PAD L1");
+    registerPadDefault(ShortcutId::kViewGeneralRotateClockwise,     "PAD R1");
+    registerPadDefault(ShortcutId::kViewGeneralZoomOut,             "PAD L2");
+    registerPadDefault(ShortcutId::kViewGeneralZoomIn,              "PAD R2");
+
+    // System buttons:
+    registerPadDefault(ShortcutId::kInterfacePause,        "PAD START");
+    registerPadDefault(ShortcutId::kDebugToggleConsole,    "PAD GUIDE");
+
+    // East face = cancel/back. The closest existing shortcut is "close
+    // top-most window" which is the broad-strokes "go back" action.
+    // Construction-mode cancel (kInterfaceCancelConstruction) is a
+    // narrower variant; user can rebind PAD A to that if they prefer.
+    registerPadDefault(ShortcutId::kInterfaceCloseTop, "PAD A");
 }
