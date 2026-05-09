@@ -541,7 +541,11 @@ private:
             // the open-window count.
             size_t sampleSize = static_cast<size_t>(_width) * _height;
             if (sampleSize > 65536) sampleSize = 65536;
-            size_t nonZero = 0;
+            // OPENRCT2MINI: nonZero is consumed only by MINI_DBG_LOG
+            // below; that macro compiles to nothing in release builds,
+            // so under GCC 16 the variable looks unused. [[maybe_unused]]
+            // silences -Werror=unused-but-set-variable.
+            [[maybe_unused]] size_t nonZero = 0;
             // _bits is PaletteIndex (a strong typedef); reinterpret as raw
             // bytes for the all-zero check.
             const auto* rawBits = reinterpret_cast<const uint8_t*>(_bits);

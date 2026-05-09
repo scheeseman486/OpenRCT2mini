@@ -233,7 +233,19 @@ static RenderTarget CreateRT(const Viewport& viewport)
     RenderTarget rt;
     rt.width = viewport.width;
     rt.height = viewport.height;
+    // OPENRCT2MINI: GCC 16 emits a spurious -Wduplicated-branches on the
+    // std::nothrow operator-new[] expression below (likely a false
+    // positive triggered by the two-path libstdc++ implementation of
+    // nothrow new). Suppress locally — the line itself contains no
+    // branch in source form.
+#if defined(__GNUC__) && !defined(__clang__) && (__GNUC__ >= 13)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wduplicated-branches"
+#endif
     rt.bits = new (std::nothrow) PaletteIndex[rt.width * rt.height];
+#if defined(__GNUC__) && !defined(__clang__) && (__GNUC__ >= 13)
+    #pragma GCC diagnostic pop
+#endif
     if (rt.bits == nullptr)
     {
         throw std::runtime_error("Giant screenshot failed, unable to allocate memory for image.");
