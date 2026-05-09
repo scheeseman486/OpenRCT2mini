@@ -45,12 +45,13 @@ std::string_view RegisteredShortcut::getGroup() const
     return {};
 }
 
-bool RegisteredShortcut::matches(const InputEvent& e) const
+bool RegisteredShortcut::matches(const InputEvent& e, const std::set<uint32_t>* heldGamepadButtons) const
 {
     if (isSuitableInputEvent(e))
     {
         auto result = std::find_if(
-            current.begin(), current.end(), [e](const ShortcutInput& _action) { return _action.matches(e); });
+            current.begin(), current.end(),
+            [&](const ShortcutInput& _action) { return _action.matches(e, heldGamepadButtons); });
         return result != current.end();
     }
     return false;
@@ -151,13 +152,13 @@ void ShortcutManager::setPendingShortcutChange(std::string_view id)
     _pendingShortcutChange = id;
 }
 
-void ShortcutManager::processEvent(const InputEvent& e)
+void ShortcutManager::processEvent(const InputEvent& e, const std::set<uint32_t>* heldGamepadButtons)
 {
     if (!isPendingShortcutChange())
     {
         for (const auto& shortcut : shortcuts)
         {
-            if (shortcut.second.matches(e))
+            if (shortcut.second.matches(e, heldGamepadButtons))
             {
                 shortcut.second.action();
             }
@@ -183,10 +184,11 @@ void ShortcutManager::processEvent(const InputEvent& e)
     }
 }
 
-bool ShortcutManager::processEventForSpecificShortcut(const InputEvent& e, std::string_view id)
+bool ShortcutManager::processEventForSpecificShortcut(
+    const InputEvent& e, std::string_view id, const std::set<uint32_t>* heldGamepadButtons)
 {
     auto shortcut = getShortcut(id);
-    if (shortcut != nullptr && shortcut->matches(e))
+    if (shortcut != nullptr && shortcut->matches(e, heldGamepadButtons))
     {
         shortcut->action();
         return true;

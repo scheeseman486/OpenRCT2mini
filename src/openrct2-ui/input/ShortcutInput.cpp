@@ -11,6 +11,7 @@
 #include "ShortcutManager.h"
 
 #include <SDL.h>
+#include <SDL_gamecontroller.h>
 #include <cstring>
 #include <openrct2/core/String.hpp>
 #include <openrct2/localisation/Formatting.h>
@@ -20,6 +21,148 @@
 
 using namespace OpenRCT2;
 using namespace OpenRCT2::Ui;
+
+// OPENRCT2MINI gamepad-plan 1.2: encoding for axis-as-button entries in
+// the held-set and as ShortcutInput::chordModifiers entries. SDL only
+// defines ~21 controller buttons (indices 0-20 inclusive in modern SDL2
+// headers); kPadAxisAsButtonBase = 64 is comfortably past that, leaves
+// room for future SDL additions, and is small enough that std::set
+// element values stay in single-byte hash territory. Encoding:
+//
+//   axis-as-button-index = kPadAxisAsButtonBase + (axis * 2) + (direction == +1 ? 0 : 1)
+//
+// where `axis` is the SDL_CONTROLLER_AXIS_* index (0-5) and `direction`
+// is +1 (positive) or -1 (negative). LEFTTRIGGER (axis 4, +1 dir only)
+// and RIGHTTRIGGER (axis 5, +1 dir only) take indices 72 and 74. Stick
+// directions use the negative-direction slot too: e.g. STICK_L UP is
+// (axis 1 LEFTY, direction -1) → 64 + 2 + 1 = 67.
+constexpr uint32_t kPadAxisAsButtonBase = 64;
+
+static uint32_t encodeAxisAsButton(int32_t axis, int8_t direction)
+{
+    return kPadAxisAsButtonBase + (static_cast<uint32_t>(axis) * 2) + (direction == 1 ? 0u : 1u);
+}
+
+// OPENRCT2MINI gamepad-plan 1.2: name<->index tables for SDL_GameController
+// buttons and axes, used by the PAD-token string parser/serializer.
+struct PadButtonEntry
+{
+    std::string_view name;
+    int32_t button; // SDL_CONTROLLER_BUTTON_*
+};
+
+static const PadButtonEntry kPadButtonTable[] = {
+    { "A",            SDL_CONTROLLER_BUTTON_A },
+    { "B",            SDL_CONTROLLER_BUTTON_B },
+    { "X",            SDL_CONTROLLER_BUTTON_X },
+    { "Y",            SDL_CONTROLLER_BUTTON_Y },
+    { "BACK",         SDL_CONTROLLER_BUTTON_BACK },
+    { "GUIDE",        SDL_CONTROLLER_BUTTON_GUIDE },
+    { "START",        SDL_CONTROLLER_BUTTON_START },
+    { "L3",           SDL_CONTROLLER_BUTTON_LEFTSTICK },
+    { "R3",           SDL_CONTROLLER_BUTTON_RIGHTSTICK },
+    { "L1",           SDL_CONTROLLER_BUTTON_LEFTSHOULDER },
+    { "R1",           SDL_CONTROLLER_BUTTON_RIGHTSHOULDER },
+    { "DPAD_UP",      SDL_CONTROLLER_BUTTON_DPAD_UP },
+    { "DPAD_DOWN",    SDL_CONTROLLER_BUTTON_DPAD_DOWN },
+    { "DPAD_LEFT",    SDL_CONTROLLER_BUTTON_DPAD_LEFT },
+    { "DPAD_RIGHT",   SDL_CONTROLLER_BUTTON_DPAD_RIGHT },
+};
+
+// Axis-as-button names. Tuple: (token, axis, direction). Triggers fire
+// only on the positive-direction crossing; stick directions cover both.
+struct PadAxisEntry
+{
+    std::string_view name;
+    int32_t axis;       // SDL_CONTROLLER_AXIS_*
+    int8_t direction;   // +1 or -1
+};
+
+static const PadAxisEntry kPadAxisTable[] = {
+    { "L2",          SDL_CONTROLLER_AXIS_TRIGGERLEFT,  +1 },
+    { "R2",          SDL_CONTROLLER_AXIS_TRIGGERRIGHT, +1 },
+    { "STICK_L UP",    SDL_CONTROLLER_AXIS_LEFTY,  -1 },
+    { "STICK_L DOWN",  SDL_CONTROLLER_AXIS_LEFTY,  +1 },
+    { "STICK_L LEFT",  SDL_CONTROLLER_AXIS_LEFTX,  -1 },
+    { "STICK_L RIGHT", SDL_CONTROLLER_AXIS_LEFTX,  +1 },
+    { "STICK_R UP",    SDL_CONTROLLER_AXIS_RIGHTY, -1 },
+    { "STICK_R DOWN",  SDL_CONTROLLER_AXIS_RIGHTY, +1 },
+    { "STICK_R LEFT",  SDL_CONTROLLER_AXIS_RIGHTX, -1 },
+    { "STICK_R RIGHT", SDL_CONTROLLER_AXIS_RIGHTX, +1 },
+};
+
+// 50% of full-scale axis range. Triggers and sticks both share this
+// press threshold for shortcut binding purposes; the trigger hysteresis
+// (50% press / 30% release) is applied in InputManager when computing
+// the joyAxis state-transition events that feed into matches.
+constexpr int32_t kPadAxisPressThreshold = 16384;
+
+// Try to parse a "PAD ..." token (without the leading "PAD " prefix
+// already stripped by the caller). Returns true on match and fills the
+// out-params with kind/button/threshold/direction. Returns false if the
+// token doesn't match any known PAD name — caller should treat as
+// invalid binding.
+static bool parsePadToken(std::string_view tok, InputDeviceKind& outKind,
+                          uint32_t& outButton, int32_t& outThreshold, int8_t& outDirection)
+{
+    for (const auto& e : kPadButtonTable)
+    {
+        if (String::iequals(tok, e.name))
+        {
+            outKind = InputDeviceKind::joyButton;
+            outButton = static_cast<uint32_t>(e.button);
+            outThreshold = 0;
+            outDirection = 0;
+            return true;
+        }
+    }
+    for (const auto& e : kPadAxisTable)
+    {
+        if (String::iequals(tok, e.name))
+        {
+            outKind = InputDeviceKind::joyAxis;
+            outButton = static_cast<uint32_t>(e.axis);
+            outThreshold = kPadAxisPressThreshold;
+            outDirection = e.direction;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Serialize a parsed PAD reference back to its canonical token name.
+// Used by toString to produce the "PAD ..." suffix. Returns empty if
+// no name matches (shouldn't happen for valid bindings).
+static std::string_view padButtonName(uint32_t button)
+{
+    for (const auto& e : kPadButtonTable)
+    {
+        if (static_cast<uint32_t>(e.button) == button)
+            return e.name;
+    }
+    return {};
+}
+
+static std::string_view padAxisName(int32_t axis, int8_t direction)
+{
+    for (const auto& e : kPadAxisTable)
+    {
+        if (e.axis == axis && e.direction == direction)
+            return e.name;
+    }
+    return {};
+}
+
+// Encode a chord-modifier ShortcutInput parse step: given a parsed
+// kind/button/axis-direction, emit the held-set encoded uint32 to
+// add to chordModifiers. Buttons go in directly; axis-as-button uses
+// the encoding helper.
+static uint32_t encodeChordModifier(InputDeviceKind kind, uint32_t button, int32_t axis, int8_t direction)
+{
+    if (kind == InputDeviceKind::joyAxis)
+        return encodeAxisAsButton(axis, direction);
+    return button;
+}
 
 constexpr uint32_t kUsefulModifiers = KMOD_SHIFT | KMOD_CTRL | KMOD_ALT | KMOD_GUI;
 
@@ -107,6 +250,66 @@ static size_t FindPlus(std::string_view s, size_t index)
 
 ShortcutInput::ShortcutInput(std::string_view value)
 {
+    // OPENRCT2MINI gamepad-plan 1.2: PAD-token branch. If the binding
+    // starts with "PAD ", treat the entire remainder as a gamepad
+    // chord — multiple `+`-joined PAD tokens, where the LAST one is the
+    // action (button or axis-as-button) and the prior ones are
+    // chord-modifier prerequisites that must be held.
+    //
+    // Parsed tokens are looked up via parsePadToken; each non-final
+    // token contributes to chordModifiers via encodeChordModifier; the
+    // final token sets kind/button/axisThreshold/axisDirection.
+    if (String::startsWith(value, "PAD ", true))
+    {
+        // Strip the "PAD " prefix, then split on `+` (using the existing
+        // FindPlus helper which already skips "+ " separators).
+        auto remainder = value.substr(4);
+        std::vector<std::string_view> tokens;
+        size_t tokIdx = 0;
+        size_t tokSep = FindPlus(remainder, tokIdx);
+        while (tokSep != std::string::npos)
+        {
+            tokens.push_back(remainder.substr(tokIdx, tokSep - tokIdx));
+            tokIdx = tokSep + 1;
+            tokSep = FindPlus(remainder, tokIdx);
+        }
+        tokens.push_back(remainder.substr(tokIdx));
+
+        if (tokens.empty())
+            return; // invalid; ShortcutInput stays default-constructed
+
+        // Modifiers: every token except the last.
+        for (size_t i = 0; i + 1 < tokens.size(); i++)
+        {
+            InputDeviceKind k{};
+            uint32_t b{};
+            int32_t t{};
+            int8_t d{};
+            if (parsePadToken(tokens[i], k, b, t, d))
+            {
+                chordModifiers.push_back(encodeChordModifier(k, b, static_cast<int32_t>(b), d));
+            }
+            // Unrecognised modifier token: silently skip (defensive — a
+            // future SDL version might add controller buttons we don't
+            // know yet, and we'd rather drop the chord-modifier than
+            // refuse to load the entire binding).
+        }
+
+        // Action: the last token.
+        InputDeviceKind k{};
+        uint32_t b{};
+        int32_t t{};
+        int8_t d{};
+        if (parsePadToken(tokens.back(), k, b, t, d))
+        {
+            kind = k;
+            button = b;
+            axisThreshold = t;
+            axisDirection = d;
+        }
+        return;
+    }
+
     uint32_t newModifiers = 0;
     size_t index = 0;
     auto sepIndex = FindPlus(value, index);
@@ -283,6 +486,59 @@ std::string ShortcutInput::toLocalisedString() const
 std::string ShortcutInput::toString(bool localised) const
 {
     std::string result;
+
+    // OPENRCT2MINI gamepad-plan 1.2: PAD bindings serialise to a single
+    // "PAD <chord>" string with chord modifiers `+`-joined before the
+    // action token. Sample outputs:
+    //   "PAD B"
+    //   "PAD L1+B"
+    //   "PAD L2"
+    //   "PAD L1+R1"  (modifier-only chord)
+    //   "PAD STICK_L UP"
+    if (kind == InputDeviceKind::joyButton || kind == InputDeviceKind::joyAxis)
+    {
+        // Heuristic: classify as PAD-encoded if the action button name
+        // is found in our PAD tables. Legacy "JOY n" bindings (numeric
+        // button indices) fall through to the existing joyButton path
+        // below for backward compatibility.
+        std::string_view actionName;
+        if (kind == InputDeviceKind::joyButton)
+            actionName = padButtonName(button);
+        else
+            actionName = padAxisName(static_cast<int32_t>(button), axisDirection);
+
+        if (!actionName.empty())
+        {
+            result += "PAD ";
+
+            // Decode each chord-modifier back to its name.
+            for (uint32_t modEncoded : chordModifiers)
+            {
+                std::string_view modName;
+                if (modEncoded < kPadAxisAsButtonBase)
+                {
+                    modName = padButtonName(modEncoded);
+                }
+                else
+                {
+                    uint32_t rel = modEncoded - kPadAxisAsButtonBase;
+                    int32_t axisIdx = static_cast<int32_t>(rel / 2);
+                    int8_t dir = (rel & 1u) == 0u ? +1 : -1;
+                    modName = padAxisName(axisIdx, dir);
+                }
+                if (!modName.empty())
+                {
+                    result += modName;
+                    result += "+";
+                }
+            }
+            result += actionName;
+            return result;
+        }
+        // Fall through to legacy JOY / hat formatting below if the
+        // action wasn't a recognised PAD entry.
+    }
+
     appendModifier(result, KMOD_LSHIFT, KMOD_RSHIFT, localised);
     appendModifier(result, KMOD_LCTRL, KMOD_RCTRL, localised);
     appendModifier(result, KMOD_LALT, KMOD_RALT, localised);
@@ -397,15 +653,84 @@ static bool CompareModifiers(uint32_t shortcut, uint32_t actual)
         && HasModifier(shortcut, actual, KMOD_LALT, KMOD_RALT) && HasModifier(shortcut, actual, KMOD_LGUI, KMOD_RGUI);
 }
 
-bool ShortcutInput::matches(const InputEvent& e) const
+bool ShortcutInput::matches(const InputEvent& e, const std::set<uint32_t>* heldGamepadButtons) const
 {
-    if (CompareModifiers(modifiers, e.modifiers))
+    // Existing keyboard / mouse / joyButton-without-chord / joyHat path:
+    // exact button match plus exact keyboard modifier match.
+    if (kind == InputDeviceKind::keyboard || kind == InputDeviceKind::mouse
+        || kind == InputDeviceKind::joyHat
+        || (kind == InputDeviceKind::joyButton && chordModifiers.empty()))
     {
-        if (e.deviceKind == kind && button == e.button)
+        if (CompareModifiers(modifiers, e.modifiers))
         {
-            return true;
+            if (e.deviceKind == kind && button == e.button)
+            {
+                return true;
+            }
         }
+        return false;
     }
+
+    // OPENRCT2MINI gamepad-plan 1.2: joyButton with chord modifiers OR
+    // joyAxis (with optional chord modifiers). The action-button match
+    // is the same — incoming event's deviceKind/button must agree —
+    // but we additionally require every chord-modifier in our binding
+    // to be present in the held-set.
+    if (kind == InputDeviceKind::joyButton && !chordModifiers.empty())
+    {
+        if (e.deviceKind != InputDeviceKind::joyButton || e.button != button)
+            return false;
+
+        // Chord-modifier prerequisite: every entry in chordModifiers
+        // must be in the held-set (or the event itself, which is the
+        // newly-pressed button — but a button can't be its own chord
+        // modifier, so we just consult heldGamepadButtons).
+        if (heldGamepadButtons == nullptr)
+            return false;
+        for (uint32_t mod : chordModifiers)
+        {
+            if (heldGamepadButtons->find(mod) == heldGamepadButtons->end())
+                return false;
+        }
+        return true;
+    }
+
+    if (kind == InputDeviceKind::joyAxis)
+    {
+        if (e.deviceKind != InputDeviceKind::joyAxis || e.button != button)
+            return false;
+
+        // axisDirection is +1 or -1; we match if the event's axisValue
+        // is past the threshold in that direction.
+        if (axisDirection > 0)
+        {
+            if (e.axisValue < axisThreshold)
+                return false;
+        }
+        else if (axisDirection < 0)
+        {
+            if (e.axisValue > -axisThreshold)
+                return false;
+        }
+        else
+        {
+            return false; // shouldn't happen — axis bindings always have a direction
+        }
+
+        // Chord prerequisites (if any).
+        if (!chordModifiers.empty())
+        {
+            if (heldGamepadButtons == nullptr)
+                return false;
+            for (uint32_t mod : chordModifiers)
+            {
+                if (heldGamepadButtons->find(mod) == heldGamepadButtons->end())
+                    return false;
+            }
+        }
+        return true;
+    }
+
     return false;
 }
 

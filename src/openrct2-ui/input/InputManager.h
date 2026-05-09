@@ -11,6 +11,7 @@
 
 #include <openrct2/world/Location.hpp>
 #include <queue>
+#include <set>
 #include <string_view>
 
 typedef struct _SDL_GameController SDL_GameController;
@@ -68,6 +69,21 @@ namespace OpenRCT2::Ui
         std::vector<uint8_t> _keyboardState;
         uint8_t _modifierKeyState;
 
+        // OPENRCT2MINI gamepad-plan 1.2: held gamepad-button set, used as
+        // the chord-modifier source when matching ShortcutInput against an
+        // incoming joyButton / joyAxis event. Updated in queueInputEvent
+        // before the InputEvent is enqueued, so by the time the event
+        // reaches process() the held-set already reflects this transition.
+        // Triggers (LEFTTRIGGER / RIGHTTRIGGER axes) participate in the
+        // held-set after their press-threshold crossing — see queueInputEvent.
+        // Stick-direction-as-button entries (PAD STICK_L UP etc.) likewise
+        // enter and leave the set on threshold crossings. Indices follow
+        // SDL_CONTROLLER_BUTTON_* for buttons; for axis-as-button entries
+        // we encode them in the high range (kAxisAsButtonBase + axis*4 +
+        // direction) to avoid collision with real button indices. See
+        // ShortcutInput.cpp for the encoding helpers.
+        std::set<uint32_t> _heldGamepadButtons;
+
         void checkJoysticks();
         void processAnalogueInput();
         void updateAnalogueScroll();
@@ -100,6 +116,14 @@ namespace OpenRCT2::Ui
         const std::vector<SDL_GameController*>& getGameControllers() const
         {
             return _gameControllers;
+        }
+
+        // OPENRCT2MINI gamepad-plan 1.2: read access for shortcut chord
+        // matching. ShortcutInput::matches consults this when checking
+        // whether a binding's chord-modifier prerequisites are satisfied.
+        const std::set<uint32_t>& getHeldGamepadButtons() const
+        {
+            return _heldGamepadButtons;
         }
     };
 } // namespace OpenRCT2::Ui

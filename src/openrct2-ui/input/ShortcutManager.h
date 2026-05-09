@@ -17,6 +17,7 @@
 #include <openrct2/core/FileSystem.hpp>
 #include <openrct2/localisation/StringIdType.h>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -37,12 +38,39 @@ namespace OpenRCT2::Ui
         uint32_t modifiers{};
         uint32_t button{};
 
+        // OPENRCT2MINI gamepad-plan 1.2: chord-modifier prerequisites for
+        // joyButton / joyAxis bindings. Empty for non-chord bindings (single
+        // button, single trigger, single keyboard chord). For chord bindings
+        // ("PAD L1+B"), this holds the held-modifier buttons (in this case
+        // {LEFTSHOULDER}); the `button` field carries the action button (B).
+        // Indices follow SDL_CONTROLLER_BUTTON_* for buttons, plus the
+        // axis-as-button encoding from ShortcutInput.cpp for trigger /
+        // stick-direction modifiers.
+        std::vector<uint32_t> chordModifiers;
+
+        // OPENRCT2MINI gamepad-plan 1.2: axis matching parameters for
+        // joyAxis kind (triggers + stick directions). axisDirection is
+        // -1 / +1 / 0; axisThreshold is the signed magnitude past which
+        // the axis is considered "pressed". For triggers (range 0-32767)
+        // direction is +1 and threshold is around 16384 (50%); for stick
+        // directions, direction is ±1 depending on which way the binding
+        // points. Both unused for non-axis kinds.
+        int32_t axisThreshold{};
+        int8_t axisDirection{};
+
         ShortcutInput() = default;
         ShortcutInput(std::string_view value);
         std::string toString() const;
         std::string toLocalisedString() const;
 
-        bool matches(const InputEvent& e) const;
+        // OPENRCT2MINI gamepad-plan 1.2: held-set parameter for chord
+        // matching. Pass nullptr (default) when calling from a context
+        // that doesn't have access to InputManager (e.g. from
+        // RegisteredShortcut::matches' fast path during keyboard event
+        // processing); chord bindings simply won't match in that case.
+        // Pass a real held-set when InputManager is dispatching a
+        // joyButton/joyAxis event so chord prerequisites can be checked.
+        bool matches(const InputEvent& e, const std::set<uint32_t>* heldGamepadButtons = nullptr) const;
 
         static std::optional<ShortcutInput> fromInputEvent(const InputEvent& e);
 
@@ -108,7 +136,12 @@ namespace OpenRCT2::Ui
 
         std::string_view getTopLevelGroup() const;
         std::string_view getGroup() const;
-        bool matches(const InputEvent& e) const;
+        // OPENRCT2MINI gamepad-plan 1.2: held-set parameter forwarded to
+        // ShortcutInput::matches for chord prerequisite checking. Pass
+        // nullptr from keyboard / mouse callers; pass the live
+        // _heldGamepadButtons from InputManager when dispatching joyButton
+        // / joyAxis events.
+        bool matches(const InputEvent& e, const std::set<uint32_t>* heldGamepadButtons = nullptr) const;
         bool isSuitableInputEvent(const InputEvent& e) const;
         std::string getDisplayString() const;
 
@@ -149,8 +182,16 @@ namespace OpenRCT2::Ui
         void removeShortcut(std::string_view id);
         bool isPendingShortcutChange() const;
         void setPendingShortcutChange(std::string_view id);
-        void processEvent(const InputEvent& e);
-        bool processEventForSpecificShortcut(const InputEvent& e, std::string_view id);
+        // OPENRCT2MINI gamepad-plan 1.2: held-set parameter for chord
+        // matching. InputManager passes its _heldGamepadButtons when
+        // dispatching joyButton / joyAxis events; nullptr from keyboard
+        // / mouse paths means chord-binding ShortcutInputs simply won't
+        // match (defensive — they shouldn't be checked at all from those
+        // paths since the deviceKind disagrees).
+        void processEvent(const InputEvent& e, const std::set<uint32_t>* heldGamepadButtons = nullptr);
+        bool processEventForSpecificShortcut(
+            const InputEvent& e, std::string_view id,
+            const std::set<uint32_t>* heldGamepadButtons = nullptr);
 
         static std::string_view getLegacyShortcutId(size_t index);
     };
