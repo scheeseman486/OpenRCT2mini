@@ -38,6 +38,7 @@
 #include <openrct2/Input.h>
 #include <openrct2/OpenRCT2.h>
 #include <openrct2/Version.h>
+#include <openrct2/profiling/Bench.h>
 #include <openrct2/network/Network.h>
 #include <openrct2/audio/AudioContext.h>
 #include <openrct2/audio/AudioMixer.h>
@@ -742,6 +743,24 @@ public:
         _cursorState.middle &= ~CURSOR_CHANGED;
         _cursorState.right &= ~CURSOR_CHANGED;
         _cursorState.old = 0;
+
+        // OPENRCT2MINI rev 95d: while the bench is running, drain SDL
+        // events without dispatching them so input can't perturb the
+        // deterministic title-sequence run. SDL_QUIT is still honored
+        // so the user can ctrl-C / close the window. Any presses that
+        // would normally land on a window, advance the cursor, scroll
+        // the console, or fire a keyboard shortcut are silently
+        // dropped — the bench is meant to run uninterrupted.
+        if (::OpenRCT2::Profiling::Bench::isActive())
+        {
+            SDL_Event ev;
+            while (SDL_PollEvent(&ev))
+            {
+                if (ev.type == SDL_QUIT)
+                    ContextQuit();
+            }
+            return;
+        }
 
         SDL_Event e;
         while (SDL_PollEvent(&e))

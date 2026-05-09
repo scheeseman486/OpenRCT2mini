@@ -30,6 +30,7 @@
 #include <openrct2/interface/Window.h>
 #include <openrct2/localisation/Language.h>
 #include <openrct2/localisation/LocalisationService.h>
+#include <openrct2/profiling/Bench.h>
 
 using namespace OpenRCT2;
 using namespace OpenRCT2::Drawing;
@@ -345,12 +346,45 @@ void InGameConsole::Update()
         _isCommandAwaitingCompletion = false;
     }
 
+    // OPENRCT2MINI rev 95b: bench finish handshake. The `bench` command
+    // hides the console at start; when the run completes, Bench latches
+    // _reportPending and we pop the console back open with the summary
+    // line + log path so the user sees the result immediately.
+    if (Profiling::Bench::hasPendingReport())
+    {
+        Open();
+        InteractiveConsole::WriteLine(Profiling::Bench::getLastReport());
+        const auto& logPath = Profiling::Bench::getLastLogPath();
+        if (!logPath.empty())
+        {
+            InteractiveConsole::WriteLine("Detailed log: " + logPath);
+        }
+        WritePrompt();
+        Profiling::Bench::markReportConsumed();
+    }
+
     // Flash the caret
     _consoleCaretTicks = (_consoleCaretTicks + 1) % 30;
 }
 
 void InGameConsole::Draw(RenderTarget& rt) const
 {
+    // OPENRCT2MINI rev 95d: render the "Benchmark running..." overlay
+    // even when the console is hidden. This is the only on-screen
+    // signal that the game is in bench mode (inputs are dropped and
+    // the user can't see the console). Drawn first so it falls under
+    // the console panel if the user re-opens it manually somehow.
+    if (Profiling::Bench::isActive())
+    {
+        ColourWithFlags benchColour = { OpenRCT2::Drawing::Colour::white, {} };
+        if (!LocalisationService_UseTrueTypeFont())
+        {
+            benchColour.flags.set(ColourFlag::withOutline, true);
+        }
+        const FontStyle benchStyle = FontStyle::medium;
+        drawText(rt, ScreenCoordsXY{ 4, 4 }, "Benchmark running...", { benchColour, benchStyle });
+    }
+
     if (!_isOpen)
         return;
 

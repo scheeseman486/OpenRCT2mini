@@ -67,6 +67,7 @@
 #include "park/ParkFile.h"
 #include "platform/Crash.h"
 #include "platform/Platform.h"
+#include "profiling/Bench.h"
 #include "profiling/Profiling.h"
 #ifdef ENABLE_PERFORMANCE_PROFILER
     #include "profiling/Sampler.h"
@@ -1448,6 +1449,13 @@ namespace OpenRCT2
         {
             if (!ShouldDraw())
                 return false;
+            // OPENRCT2MINI rev 95: bench always takes the fixed-frame
+            // path. The bench-specific branch in RunFixedFrame forces
+            // one Tick per frame for determinism. Letting RunVariableFrame
+            // run instead would re-introduce the variable ticks-per-frame
+            // coupling that bench is explicitly trying to remove.
+            if (::OpenRCT2::Profiling::Bench::isActive())
+                return false;
             if (!Config::Get().general.uncapFPS)
                 return false;
             if (gGameSpeed > 4)
@@ -1490,6 +1498,18 @@ namespace OpenRCT2
                 MINI_DBG_LOG("  frame %d: entered\n", s_kptFrameNo);
             }
             ++s_kptFrameNo;
+
+            // OPENRCT2MINI rev 95: timedemo-style benchmark. When active,
+            // capture the wall-clock at the very top of the frame and
+            // report the duration to Bench at the very bottom (after the
+            // profiler hook). Cost when inactive is one relaxed atomic
+            // load — no allocation, no syscall.
+            const bool benchActive = ::OpenRCT2::Profiling::Bench::isActive();
+            std::chrono::steady_clock::time_point benchFrameStart;
+            if (benchActive)
+            {
+                benchFrameStart = std::chrono::steady_clock::now();
+            }
 
             // OPENRCT2MINI: poll the poweroff flag at the top of every
             // frame. If a SIGTERM has arrived since the last frame, this
@@ -1547,6 +1567,18 @@ namespace OpenRCT2
 #ifdef ENABLE_PERFORMANCE_PROFILER
             ::OpenRCT2::Profiling::Sampler::onFrameEnd();
 #endif
+
+            // OPENRCT2MINI rev 95: bench frame-end hook. Records the
+            // wall-clock duration of this frame and, when the target
+            // count is reached, writes the result line and clears
+            // active. See profiling/Bench.cpp for the report logic.
+            if (benchActive)
+            {
+                const auto now = std::chrono::steady_clock::now();
+                const auto durUs = std::chrono::duration_cast<std::chrono::microseconds>(now - benchFrameStart)
+                                       .count();
+                ::OpenRCT2::Profiling::Bench::onFrameEnd(static_cast<uint32_t>(durUs));
+            }
         }
 
         void UpdateTimeAccumulators(float deltaTime)
@@ -1569,6 +1601,41 @@ namespace OpenRCT2
             PROFILED_FUNCTION();
 
             _uiContext->ProcessMessages();
+
+            // OPENRCT2MINI rev 95: timedemo-style benchmark.
+            //
+            // When bench is active we deliberately break the upstream
+            // framerate-pacing model:
+            //   1. Skip the accumulator-too-low Sleep — render as fast
+            //      as the device will go (uncapped framerate).
+            //   2. Force exactly one Tick per frame regardless of how
+            //      long the previous frame took. The default behaviour
+            //      runs as many ticks as fit in the elapsed wall time,
+            //      which means a slow frame (paint stall, GC, etc.)
+            //      catches up with multiple ticks on the next frame —
+            //      that variable ticks-per-frame coupling makes the
+            //      title sequence's peep behaviour run-to-run non-
+            //      deterministic. One tick per frame + RNG reset (in
+            //      Bench::start) gives identical game-state evolution
+            //      across runs.
+            //   3. Reset the accumulator afterwards so we don't drift.
+            //
+            // This is exactly the Quake/Doom timedemo model.
+            if (::OpenRCT2::Profiling::Bench::isActive())
+            {
+                Tick();
+                _ticksAccumulator = 0.0f;
+
+                _backgroundWorker.dispatchCompleted();
+                ContextHandleInput();
+                WindowUpdateAll();
+
+                if (ShouldDraw())
+                {
+                    Draw();
+                }
+                return;
+            }
 
             if (_ticksAccumulator < kGameUpdateTimeMS)
             {
