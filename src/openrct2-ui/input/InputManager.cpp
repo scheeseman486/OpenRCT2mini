@@ -54,11 +54,20 @@ void InputManager::queueInputEvent(const SDL_Event& e)
     {
         case SDL_CONTROLLERAXISMOTION:
         {
-            // Process all four stick axes + the two triggers. Sticks
-            // emit raw motion events for shortcut bindings (stick
-            // directions); triggers likewise. Press / release transitions
-            // for any axis-as-button update _heldGamepadButtons with
-            // hysteresis (50% press / 30% release).
+            // OPENRCT2MINI gamepad-plan 1.3: emit joyAxis InputEvents
+            // ONLY on threshold-crossing transitions (rising edge →
+            // state=down, falling edge → state=release). Every motion
+            // sample arriving here would otherwise become a fresh
+            // shortcut-fire opportunity, and a partially-held trigger
+            // (e.g. 60% pressure) would generate hundreds of events
+            // per second as the user's analog reading wobbles. Use
+            // _heldGamepadButtons membership before/after the update
+            // as the transition signal.
+            //
+            // Sticks emit two events on a strong push (one for the
+            // primary direction crossing, none for the orthogonal axis
+            // until it also crosses). Triggers emit one event per
+            // press and one per release.
             const int32_t axis = e.caxis.axis;
             const int32_t value = e.caxis.value;
             const bool isStick = (axis == SDL_CONTROLLER_AXIS_LEFTX || axis == SDL_CONTROLLER_AXIS_LEFTY
@@ -67,9 +76,7 @@ void InputManager::queueInputEvent(const SDL_Event& e)
                 = (axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT || axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
             if (isStick || isTrigger)
             {
-                // Held-set update: separately for +1 and -1 directions.
-                // Triggers are unipolar so we only update +1.
-                auto updateHeld = [&](int8_t direction) {
+                auto updateHeldAndEmit = [&](int8_t direction) {
                     const uint32_t encoded = encodeAxisAsButton(axis, direction);
                     const bool wasHeld = _heldGamepadButtons.find(encoded) != _heldGamepadButtons.end();
                     bool nowHeld = wasHeld;
@@ -87,25 +94,35 @@ void InputManager::queueInputEvent(const SDL_Event& e)
                         else if (wasHeld && value > -kPadAxisReleaseThreshold)
                             nowHeld = false;
                     }
-                    if (nowHeld != wasHeld)
-                    {
-                        if (nowHeld)
-                            _heldGamepadButtons.insert(encoded);
-                        else
-                            _heldGamepadButtons.erase(encoded);
-                    }
-                };
-                updateHeld(+1);
-                if (isStick)
-                    updateHeld(-1);
+                    if (nowHeld == wasHeld)
+                        return; // no transition; suppress event
 
-                InputEvent ie;
-                ie.deviceKind = InputDeviceKind::joyAxis;
-                ie.modifiers = SDL_GetModState();
-                ie.button = axis;
-                ie.state = InputEventState::down;
-                ie.axisValue = static_cast<int16_t>(value);
-                queueInputEvent(std::move(ie));
+                    if (nowHeld)
+                        _heldGamepadButtons.insert(encoded);
+                    else
+                        _heldGamepadButtons.erase(encoded);
+
+                    // Only press transitions trigger shortcut firing
+                    // (RegisteredShortcut::isSuitableInputEvent rejects
+                    // release events anyway, so the release-event path
+                    // here is mostly for symmetry with future hold-shortcut
+                    // bookkeeping).
+                    InputEvent ie;
+                    ie.deviceKind = InputDeviceKind::joyAxis;
+                    ie.modifiers = SDL_GetModState();
+                    ie.button = axis;
+                    ie.state = nowHeld ? InputEventState::down : InputEventState::release;
+                    // Synthesise axisValue at the threshold so the
+                    // matches() logic in ShortcutInput evaluates true on
+                    // press: positive direction → +threshold, negative
+                    // → -threshold. Real-time value is irrelevant once
+                    // we've committed to "press" / "release".
+                    ie.axisValue = static_cast<int16_t>(direction > 0 ? kPadAxisPressThreshold : -kPadAxisPressThreshold);
+                    queueInputEvent(std::move(ie));
+                };
+                updateHeldAndEmit(+1);
+                if (isStick)
+                    updateHeldAndEmit(-1);
             }
             break;
         }
@@ -572,6 +589,20 @@ bool InputManager::getState(const ShortcutInput& shortcut) const
 {
     constexpr uint32_t kUsefulModifiers = KMOD_SHIFT | KMOD_CTRL | KMOD_ALT | KMOD_GUI;
     auto modifiers = SDL_GetModState() & kUsefulModifiers;
+
+    // OPENRCT2MINI gamepad-plan 1.3: chord-modifier prerequisite check
+    // for held gamepad shortcuts. Every chord modifier must be in the
+    // held-set for the binding to be considered "currently held". For
+    // bindings with no chord modifiers this is a no-op pass.
+    auto chordSatisfied = [&]() {
+        for (uint32_t mod : shortcut.chordModifiers)
+        {
+            if (_heldGamepadButtons.find(mod) == _heldGamepadButtons.end())
+                return false;
+        }
+        return true;
+    };
+
     if ((shortcut.modifiers & kUsefulModifiers) == modifiers)
     {
         switch (shortcut.kind)
@@ -595,6 +626,8 @@ bool InputManager::getState(const ShortcutInput& shortcut) const
             }
             case InputDeviceKind::joyButton:
             {
+                if (!chordSatisfied())
+                    break;
                 for (auto* gameController : _gameControllers)
                 {
                     // Get the underlying joystick to maintain compatibility with raw button numbers
@@ -629,9 +662,22 @@ bool InputManager::getState(const ShortcutInput& shortcut) const
             }
             case InputDeviceKind::joyAxis:
             {
-                // analogue axes don't have a simple "pressed" state like buttons
-                // Return false for shortcuts on analogue axes as they're handled differently
-                return false;
+                // OPENRCT2MINI gamepad-plan 1.3: held-state for joyAxis
+                // bindings (triggers, stick-direction-as-button) consults
+                // _heldGamepadButtons via the axis-as-button encoding. The
+                // hysteresis already applied at queueInputEvent time
+                // means this is a clean digital read — set membership
+                // implies "currently held past press threshold".
+                if (!chordSatisfied())
+                    break;
+                constexpr uint32_t kPadAxisAsButtonBase = 64;
+                const uint32_t encoded = kPadAxisAsButtonBase
+                    + (shortcut.button * 2u) + (shortcut.axisDirection == 1 ? 0u : 1u);
+                if (_heldGamepadButtons.find(encoded) != _heldGamepadButtons.end())
+                {
+                    return true;
+                }
+                break;
             }
         }
     }
