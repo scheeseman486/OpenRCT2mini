@@ -58,6 +58,11 @@ namespace OpenRCT2::Platform
     static std::wstring WIN32_GetModuleFileNameW(HMODULE hModule);
     static u8string WIN32_GetModuleFileNameUTF8(HMODULE hModule);
 
+    // OPENRCT2MINI: forward-declare so GetFolderPath can call it.
+    // Definition lives further down (kept in its original location to
+    // minimise diff against upstream).
+    std::string GetCurrentExecutableDirectory();
+
     std::string GetEnvironmentVariable(std::string_view name)
     {
         std::wstring result;
@@ -94,11 +99,26 @@ namespace OpenRCT2::Platform
     {
         switch (folder)
         {
-            // We currently store everything under Documents/OpenRCT2
+            // OPENRCT2MINI: self-contained user data. Config / saves /
+            // cache live next to openrct2.exe in <exeDir>\save, matching
+            // the Mini's $APPDIR/save layout. No more files scattered
+            // under Documents\OpenRCT2 — the project tree is fully
+            // portable. PlatformEnvironment skips the "OpenRCT2"
+            // subdirectory append on host, so the result is exactly
+            // <exeDir>\save.
             case SpecialFolder::userCache:
             case SpecialFolder::userConfig:
             case SpecialFolder::userData:
             {
+                auto exeDir = GetCurrentExecutableDirectory();
+                if (!exeDir.empty())
+                {
+                    return Path::Combine(exeDir, u8"save");
+                }
+                // Fallback only if the executable directory can't be
+                // resolved (extremely unlikely on Win32) — preserve
+                // the historical Documents-based path so the binary
+                // still finds somewhere writable.
                 auto path = WIN32_GetKnownFolderPath(FOLDERID_Documents);
                 if (path.empty())
                 {

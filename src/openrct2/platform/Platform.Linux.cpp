@@ -89,26 +89,22 @@ namespace OpenRCT2::Platform
             case SpecialFolder::userConfig:
             case SpecialFolder::userData:
             {
-                // OPENRCT2MINI: self-contained user data. The device sets
-                // XDG_CONFIG_HOME=$APPDIR/save and Linux GetFolderPath picks
-                // it up — config/saves/cache all end up under
-                // $APPDIR/save/OpenRCT2/. The host build now mirrors that
-                // layout: user data lives next to the binary in <exeDir>/save,
-                // not in ~/.config. This makes the project tree fully
-                // self-contained for development (config persists across
-                // rebuilds since they only touch the binary, not save/) and
-                // makes host behavior predictable / matches the device.
+                // OPENRCT2MINI: self-contained user data. Config / saves /
+                // cache live next to the binary in <exeDir>/save and
+                // nowhere else — XDG_CONFIG_HOME is intentionally NOT
+                // honored on host so the project tree is fully portable.
+                // The Mini sets gCustomUserDataPath via launch.sh's
+                // --user-data-path arg which bypasses GetFolderPath
+                // entirely, so this path is host-only.
                 //
-                // XDG_CONFIG_HOME is still honored if explicitly set, so a
-                // dev who wants the standard FHS layout can opt in via the
-                // env var.
-                auto path = GetEnvironmentPath("XDG_CONFIG_HOME");
-                if (path.empty())
-                {
-                    auto exeDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
-                    path = Path::Combine(exeDir, u8"save");
-                }
-                return path;
+                // (Earlier revisions respected XDG_CONFIG_HOME as an
+                // opt-in for the FHS layout. That backfired — devs with
+                // XDG_CONFIG_HOME=~/.config in their shell rc had bench
+                // output, config, saves all leaking into ~/.config
+                // instead of staying with the binary. Hard requirement
+                // wins.)
+                auto exeDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
+                return Path::Combine(exeDir, u8"save");
             }
             case SpecialFolder::userHome:
                 return GetHomePath();

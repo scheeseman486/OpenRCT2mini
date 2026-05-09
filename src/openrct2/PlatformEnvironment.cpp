@@ -243,18 +243,33 @@ std::unique_ptr<IPlatformEnvironment> OpenRCT2::CreatePlatformEnvironment(DirBas
     return std::make_unique<PlatformEnvironment>(basePaths);
 }
 
+// OPENRCT2MINI: only Android still uses a per-user subdirectory under
+// the system app-data root (see CreatePlatformEnvironment). Other
+// platforms point user/config/cache straight at <exeDir>/save with no
+// subdirectory, so this helper compiles to no callers there.
+#if defined(__ANDROID__)
 static u8string GetOpenRCT2DirectoryName()
 {
-#if defined(__ANDROID__)
     return u8"openrct2-user";
-#else
-    return u8"OpenRCT2";
-#endif
 }
+#endif
 
 std::unique_ptr<IPlatformEnvironment> OpenRCT2::CreatePlatformEnvironment()
 {
+    // OPENRCT2MINI: host build matches the device layout — user data,
+    // config, and cache all live in <exeDir>/save (or whatever each
+    // platform's GetFolderPath returns). The historical "OpenRCT2"
+    // subdirectory append (kept on Android via GetOpenRCT2DirectoryName)
+    // is dropped on host so the project tree is fully self-contained:
+    // no files in ~/.config, ~/Documents, or ~/Library/Application
+    // Support; everything sits beside the binary just like the Mini's
+    // $APPDIR/save layout. Mini itself isn't affected — it overrides
+    // user/config/cache via gCustomUserDataPath below.
+#if defined(__ANDROID__)
     auto subDirectory = GetOpenRCT2DirectoryName();
+#else
+    const std::string subDirectory{};
+#endif
 
     // Set default paths
     std::string basePaths[kDirBaseCount];
