@@ -77,6 +77,12 @@ namespace OpenRCT2::Ui::Windows
             gDropdown.highlightedIndex = -1;
             gDropdown.hasTooltips = false;
             gDropdown.defaultIndex = -1;
+            // OPENRCT2MINI focus-mode-plan §F.14: every new
+            // dropdown starts in cursor-driven mode. The mouse-
+            // hover indicator wins by default; the first focus.up/
+            // down press flips this to focus until the next real
+            // SDL_MOUSEMOTION arrives.
+            gDropdown.navigationSource = Dropdown::NavigationSource::cursor;
             InputSetState(InputState::DropdownActive);
         }
 
@@ -495,6 +501,102 @@ namespace OpenRCT2::Ui::Windows
     {
         auto* windowMgr = GetWindowManager();
         windowMgr->CloseByClass(WindowClass::dropdown);
+    }
+
+    // OPENRCT2MINI focus-mode-plan §F.10: walk gDropdown.highlightedIndex.
+    // Skips separators and disabled items. Wraps at both ends. Called
+    // from the widget-focus strategy when focus.up/down fires while
+    // the dropdown is the focused window. The dropdown's own onDraw
+    // re-reads highlightedIndex each frame; invalidating the window
+    // here makes the new selection re-render next frame.
+    void WindowDropdownMoveHighlight(int32_t direction)
+    {
+        const int32_t n = gDropdown.numItems;
+        if (n <= 0)
+            return;
+        if (direction == 0)
+            return;
+        // OPENRCT2MINI focus-mode-plan §F.14: declare this update
+        // as focus-driven. ProcessMouseOver checks navigationSource
+        // and leaves highlightedIndex alone when it's `focus`, so
+        // the value we set below survives across frames even with
+        // the cursor parked off the dropdown. SDL_MOUSEMOTION (real
+        // mouse motion) flips the source back to `cursor`.
+        gDropdown.navigationSource = Dropdown::NavigationSource::focus;
+        // Initial state (no item highlighted yet): jump straight to
+        // the first or last item depending on direction. The
+        // skip-disabled-and-separator loop below picks the right
+        // landing index even when the first/last item is one we'd
+        // skip.
+        int32_t idx = gDropdown.highlightedIndex;
+        if (idx < 0 || idx >= n)
+            idx = (direction > 0) ? -1 : n;
+        // Step at least once, then keep stepping if we land on a
+        // skipped item. Cap the loop at n iterations so a fully-
+        // disabled dropdown can't infinite-loop us.
+        for (int32_t steps = 0; steps < n; steps++)
+        {
+            idx = ((idx + direction) % n + n) % n;
+            const auto& item = gDropdown.items[idx];
+            if (!item.isSeparator() && !item.isDisabled())
+            {
+                gDropdown.highlightedIndex = idx;
+                auto* windowMgr = GetWindowManager();
+                if (windowMgr != nullptr)
+                    windowMgr->InvalidateByClass(WindowClass::dropdown);
+                return;
+            }
+        }
+        // No selectable items — leave highlightedIndex untouched.
+    }
+
+    // OPENRCT2MINI focus-mode-plan §F.10: commit a dropdown selection
+    // and dispatch to the parent. Mirrors MouseInput.cpp's rightPress
+    // / DropdownActive handler — the path real mouse clicks take to
+    // close the dropdown and call parent->onDropdown.
+    //
+    // The parent is captured from gPressedWidget, which the
+    // onMouseDown chain populated when the user activated the
+    // dropdown trigger. For mouse clicks that happens automatically
+    // via the mouse-input pump; for focus-mode activations
+    // WidgetFocus::pressWidgetByIndex now mirrors the same writes
+    // (see its comment), so by the time the dropdown is open and we
+    // arrive here, gPressedWidget already points at the trigger
+    // widget on the parent window.
+    void WindowDropdownSelectIndex(int32_t index)
+    {
+        if (index < 0 || index >= gDropdown.numItems)
+            return;
+        if (gDropdown.items[index].isDisabled() || gDropdown.items[index].isSeparator())
+            return;
+
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return;
+
+        // Snapshot the parent ref BEFORE closing the dropdown, since
+        // gPressedWidget may be touched during the close (defensive
+        // — currently it isn't, but the safe copy costs nothing).
+        const auto parentCls = gPressedWidget.windowClassification;
+        const auto parentNum = gPressedWidget.windowNumber;
+        const auto parentWidget = gPressedWidget.widgetIndex;
+
+        windowMgr->CloseByClass(WindowClass::dropdown);
+
+        auto* parent = windowMgr->FindByNumber(parentCls, parentNum);
+        if (parent != nullptr)
+            parent->onDropdown(parentWidget, index);
+
+        // Reset the click state machine. The original mouse-input
+        // rightPress block sets _inputState = Normal and clears
+        // widgetPressed; replicate that here so the next click
+        // starts from a clean slate.
+        _inputState = InputState::Normal;
+        if (gInputFlags.has(InputFlag::widgetPressed))
+        {
+            gInputFlags.unset(InputFlag::widgetPressed);
+            windowMgr->InvalidateWidgetByNumber(parentCls, parentNum, parentWidget);
+        }
     }
 
     /**

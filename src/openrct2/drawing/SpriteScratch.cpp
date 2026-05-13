@@ -1,8 +1,19 @@
 /*****************************************************************************
  * OpenRCT2mini Sprite Scratch — implementation.
+ *
+ * host-restoration-plan §1c: the entire active body is gated on
+ * OPENRCT2MINI. On host the four exported entry points compile to stubs
+ * that return nullptr / 0 / false — `ImageTable::Read` and
+ * `ImageTable::ReadJson` see the null return and fall back to the
+ * pre-existing `_heapFallback` path (which is the upstream-equivalent
+ * behaviour). No SpriteScratch artefact is created on disk, and the
+ * Linux-only mmap / madvise / unlink / mkstemp calls don't need to
+ * compile on Windows.
  *****************************************************************************/
 
 #include "SpriteScratch.h"
+
+#ifdef OPENRCT2MINI
 
 #include "../Diagnostic.h"
 
@@ -236,3 +247,16 @@ namespace OpenRCT2::Drawing
         return true;
     }
 }
+
+#else // !OPENRCT2MINI
+
+// Host stubs. Always return "no scratch" so ImageTable falls back to heap.
+namespace OpenRCT2::Drawing
+{
+    uint8_t* SpriteScratchAppend(const void* /*bytes*/, size_t /*size*/) { return nullptr; }
+    size_t SpriteScratchTotalSize() { return 0; }
+    void SpriteScratchEvict() {}
+    bool SpriteScratchEvictIfIdle(uint32_t /*minAppendsToTrigger*/) { return false; }
+}
+
+#endif // OPENRCT2MINI

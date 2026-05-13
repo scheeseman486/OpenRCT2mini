@@ -78,6 +78,15 @@ public:
             case WindowClass::performanceProfiler:
                 return PerformanceProfilerOpen();
 #endif
+            // OPENRCT2MINI gamepad-plan 1.11: haptics control window.
+            case WindowClass::haptics:
+                return HapticsOpen();
+            // OPENRCT2MINI gamepad-plan 1.11b: rumble editor.
+            case WindowClass::rumbleEditor:
+                return RumbleEditorOpen();
+            // OPENRCT2MINI input-plan Track 2 §4.2: LED Options panel.
+            case WindowClass::led:
+                return LedOpen();
             case WindowClass::clearScenery:
                 return ClearSceneryOpen();
             case WindowClass::customCurrencyConfig:

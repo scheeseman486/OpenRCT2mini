@@ -120,6 +120,17 @@ namespace OpenRCT2::Profiling::Sampler
     void onFrameStart();
     void onFrameEnd();
 
+    // OPENRCT2MINI: Discard the in-flight frame that onFrameStart began —
+    // do not write a slot in the ring on this call's onFrameEnd. Used by
+    // Context::RunFixedFrame's framerate-pacing early-return path: when
+    // the tick accumulator hasn't filled, RunFixedFrame Sleeps and
+    // returns without ticking, drawing, or hitting any PROFILED_FUNCTION
+    // callsite. Recording such a frame would pollute the ring with a
+    // sub-millisecond duration (giving absurd FPS readings: 600-500000)
+    // and zero CPU phase deltas. Slow polls in onFrameStart still ran
+    // and stay in the slow ring — those are time-based, not frame-based.
+    void cancelFrame();
+
     // ----- Audio callback hook ------------------------------------------
     //
     // Called from AudioMixer::GetNextAudioChunk. Records the duration of

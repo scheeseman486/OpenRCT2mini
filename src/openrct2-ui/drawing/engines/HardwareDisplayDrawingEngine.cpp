@@ -30,6 +30,8 @@
 #include <openrct2/paint/Paint.h>
 #include <openrct2/ui/UiContext.h>
 #include <openrct2/ui/WindowManager.h>       // OPENRCT2MINI: cursor-during-loading suppression
+#include <openrct2-ui/UiContext.h>           // OPENRCT2MINI cursor-selector-modal-plan §3.3
+#include <openrct2-ui/input/InputManager.h>  // OPENRCT2MINI cursor-selector-modal-plan §3.3
 #include <vector>
 
 // OPENRCT2MINI: cut 38. Software cursor — for platforms with no compositor /
@@ -392,7 +394,17 @@ private:
         const bool loadingWindowVisible
             = (wm != nullptr && wm->FindByClass(WindowClass::progressWindow) != nullptr);
 
-        if (_swCursor != nullptr && !loadingWindowVisible)
+        // OPENRCT2MINI cursor-selector-modal-plan §3.3 / CS-R4: hide
+        // the software cursor when the focus selector owns input. The
+        // ring is the user's visual target; drawing the mouse cursor
+        // on top of it would be noise. Real mouse motion transitions
+        // the state machine back to `mixed`, which re-enables the
+        // draw path.
+        const bool selectorOwnsScreen
+            = OpenRCT2::Ui::GetInputManager().getSelectorMode()
+                == OpenRCT2::Ui::InputManager::SelectorMode::active;
+
+        if (_swCursor != nullptr && !loadingWindowVisible && !selectorOwnsScreen)
         {
             // Invalidate the previous cursor rect for next frame's repaint.
             if (_lastCursorRectValid)

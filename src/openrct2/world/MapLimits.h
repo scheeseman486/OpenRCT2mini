@@ -17,7 +17,16 @@ constexpr int32_t kCoordsZStep = 8;
 constexpr int32_t kCoordsZPerTinyZ = 16;
 
 constexpr uint8_t kMinimumMapSizeTechnical = 5;
-constexpr uint16_t kMaximumMapSizeTechnical = 257;  // OPENRCT2MINI: was 1001 (RCT2's original limit + 1 boundary)
+// OPENRCT2MINI host-restoration-plan §1a: 257 on Mini (cut L1 — keeps the
+// TilePointerIndex small for the 128 MB device), 1001 on host (upstream
+// OpenRCT2 v0.5.0 value, allows community parks up to 999×999). Runtime
+// override Config::General::mapSizeOverride takes precedence when non-zero;
+// it's read by ParkFile's saved-size check and the editor's resize UI.
+#ifdef OPENRCT2MINI
+constexpr uint16_t kMaximumMapSizeTechnical = 257;
+#else
+constexpr uint16_t kMaximumMapSizeTechnical = 1001;
+#endif
 constexpr int16_t kMinimumMapSizePractical = (kMinimumMapSizeTechnical - 2);
 constexpr int16_t kMaximumMapSizePractical = (kMaximumMapSizeTechnical - 2);
 constexpr int32_t kMaximumMapSizeBig = kCoordsXYStep * kMaximumMapSizeTechnical;

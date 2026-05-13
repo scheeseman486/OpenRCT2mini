@@ -108,4 +108,15 @@ namespace OpenRCT2::Ui::Windows
     void WindowZoomIn(WindowBase& w, bool atCursor);
     void WindowZoomOut(WindowBase& w, bool atCursor);
     void MainWindowZoom(bool zoomIn, bool atCursor);
+
+    // OPENRCT2MINI mouse-input refactor: context-sensitive wheel
+    // action. Used by the kViewZoomScrollUp / kViewZoomScrollDown
+    // shortcut lambdas. Zoom the main viewport ONLY if the cursor is
+    // over a mainWindow / viewport-class window — otherwise no-op,
+    // letting the existing _cursorState.wheel → WindowAllWheelInput
+    // path handle widget-local scroll / spinner / other-wheel paths.
+    // This is the fix for the "wheel over a scroll widget zooms AND
+    // scrolls" double-fire that came with making the wheel a
+    // bindable input.
+    void FireZoomOrScrollWheel(bool zoomIn);
 } // namespace OpenRCT2::Ui::Windows

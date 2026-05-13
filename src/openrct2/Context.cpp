@@ -1641,6 +1641,16 @@ namespace OpenRCT2
             {
                 const auto sleepTimeSec = std::min(kNetworkUpdateTimeMS, kGameUpdateTimeMS - _ticksAccumulator);
                 Platform::Sleep(static_cast<uint32_t>(sleepTimeSec * 1000.f));
+                // OPENRCT2MINI: this branch is upstream's framerate-pacing
+                // sleep — no Tick, no Draw, no PROFILED_FUNCTION callsite
+                // fires. Tell the profiler to discard the in-flight frame
+                // so the ring isn't polluted with sub-millisecond phantom
+                // samples (which produce FPS readings of 600-500000 and
+                // zero CPU phase deltas). The matching onFrameEnd at the
+                // bottom of RunFrame becomes a no-op for this iteration.
+#ifdef ENABLE_PERFORMANCE_PROFILER
+                ::OpenRCT2::Profiling::Sampler::cancelFrame();
+#endif
                 return;
             }
 

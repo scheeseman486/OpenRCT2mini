@@ -9,46 +9,1272 @@
 
 #include "InputManager.h"
 
+#include "InputContextStrategy.h"
 #include "ShortcutIds.h"
 
 #include <SDL.h>
 #include <SDL_gamecontroller.h>
+#include <array>
 #include <cmath>
+#include <optional>
 #include <openrct2-ui/UiContext.h>
 #include <openrct2-ui/input/MouseInput.h>
 #include <openrct2-ui/input/ShortcutManager.h>
+#include <openrct2-ui/interface/Dropdown.h>
 #include <openrct2-ui/interface/InGameConsole.h>
 #include <openrct2-ui/interface/Window.h>
 #include <openrct2-ui/windows/Windows.h>
 #include <openrct2/Input.h>
 #include <openrct2/OpenRCT2.h>
+#include <openrct2/haptic/HapticEvent.h>
+#include <openrct2/haptic/LedEvent.h>
 #include <openrct2/config/Config.h>
 #include <openrct2/interface/Chat.h>
 #include <openrct2/interface/Viewport.h>
+#include <openrct2/interface/Widget.h>
 #include <openrct2/interface/Window.h>
+#include <openrct2/interface/WindowBase.h>
+#include <openrct2/interface/WindowClasses.h>
 #include <openrct2/paint/VirtualFloor.h>
 #include <openrct2/ui/UiContext.h>
 #include <openrct2/ui/WindowManager.h>
+#include "WidgetFocus.h"
 
 using namespace OpenRCT2::Ui;
+
+// OPENRCT2MINI input-plan Track 3 / Phase 3.B: concrete strategy
+// classes for the six existing modal InputContext enum entries. Each
+// owns the per-context keyboard routing that used to live as a
+// switch-on-window-class in InputManager::process(InputEvent). The
+// strategies return Passthrough from onShortcut for now — the per-
+// context allow-list filter (isShortcutAllowedInActiveContext) still
+// owns the "which shortcuts are allowed in this modal" gate; Phase
+// 3.E and later layer Consumed semantics on top for the tool
+// contexts that need to override world-mode shortcut handling.
+//
+// The strategies live in an anonymous namespace because they're only
+// instantiated by InputManager's constructor. The public interface
+// (InputContextStrategy.h) declares only the abstract types.
+namespace
+{
+    class OskContextImpl final : public IInputContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::osk;
+        }
+        // OSK navigation is currently driven by UiContext::Process-
+        // OskCursor via the cursor.* shortcut lambdas — Phase 3.B
+        // doesn't migrate that. OSK has no special keyboard routing
+        // today (key handling happens via SDL_TEXTINPUT in the OSK
+        // window directly), so onKeyEvent stays the base no-op.
+    };
+
+    class TextInputContextImpl final : public IInputContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::textInput;
+        }
+        void onKeyEvent(const InputEvent& e) override
+        {
+            // Mirrors the original keyboard branch in process(InputEvent)
+            // verbatim — only fires on release, only when the textinput
+            // window still exists.
+            if (e.state != InputEventState::release)
+                return;
+            auto* windowMgr = GetWindowManager();
+            if (windowMgr == nullptr)
+                return;
+            auto* w = windowMgr->FindByClass(WindowClass::textinput);
+            if (w != nullptr)
+                Windows::WindowTextInputKey(w, e.button);
+        }
+    };
+
+    class LoadSaveOverwritePromptContextImpl final : public IInputContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::loadSaveOverwritePrompt;
+        }
+        void onKeyEvent(const InputEvent& e) override
+        {
+            if (e.state != InputEventState::release)
+                return;
+            auto* windowMgr = GetWindowManager();
+            if (windowMgr == nullptr)
+                return;
+            auto* w = windowMgr->FindByClass(WindowClass::loadsaveOverwritePrompt);
+            if (w != nullptr)
+                Windows::WindowLoadSaveOverwritePromptInputKey(w, e.button);
+        }
+    };
+
+    class LoadSaveContextImpl final : public IInputContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::loadSave;
+        }
+        void onKeyEvent(const InputEvent& e) override
+        {
+            if (e.state != InputEventState::release)
+                return;
+            auto* windowMgr = GetWindowManager();
+            if (windowMgr == nullptr)
+                return;
+            auto* w = windowMgr->FindByClass(WindowClass::loadsave);
+            if (w != nullptr)
+                Windows::WindowLoadSaveInputKey(w, e.button);
+        }
+    };
+
+    class ConsoleContextImpl final : public IInputContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::console;
+        }
+        void onKeyEvent(const InputEvent& e) override
+        {
+            // Inlined version of InputManager::processInGameConsole —
+            // moves the per-key console scroll routing into the
+            // strategy. UP/DOWN step through history; PAGEUP/PAGEDOWN
+            // scroll the buffer. Only fires on keyboard release.
+            if (e.deviceKind != InputDeviceKind::keyboard)
+                return;
+            if (e.state != InputEventState::release)
+                return;
+            auto& console = GetInGameConsole();
+            if (!console.IsOpen())
+                return;
+            auto input = ConsoleInput::None;
+            switch (e.button)
+            {
+                case SDLK_UP:
+                    input = ConsoleInput::HistoryPrevious;
+                    break;
+                case SDLK_DOWN:
+                    input = ConsoleInput::HistoryNext;
+                    break;
+                case SDLK_PAGEUP:
+                    input = ConsoleInput::ScrollPrevious;
+                    break;
+                case SDLK_PAGEDOWN:
+                    input = ConsoleInput::ScrollNext;
+                    break;
+            }
+            if (input != ConsoleInput::None)
+                console.Input(input);
+        }
+    };
+
+    class WidgetTextBoxContextImpl final : public IInputContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::widgetTextBox;
+        }
+        // No special keyboard routing — text flows through SDL_TEXT-
+        // INPUT and TextComposition, neither of which uses this
+        // InputEvent path. The per-context allow-list suppresses
+        // every non-dismiss/confirm shortcut while a textbox is
+        // being edited. Phase 3.B preserves that — the strategy
+        // doesn't need to do anything extra.
+    };
+
+    // OPENRCT2MINI focus-mode-plan / Phase F.4: widget-focus strategy.
+    // Activated when InputManager::resolveActiveContext() observes a
+    // live focused window (the per-frame bootstrap in process() is
+    // what populates `_focusedWindowClass`). Routes cursor.* /
+    // cursor.click / cursor.cancel / kInterfaceDismiss through the
+    // WidgetFocus helpers and the InputManager focus-state accessors.
+    //
+    // Routing decisions:
+    //   cursor.up/down/left/right → findNearestInDirection +
+    //       setFocus; window->invalidate() so the focus ring (Phase
+    //       F.5) repaints.
+    //   cursor.click              → pressWidgetByIndex on the focused
+    //       widget. Side-effects fire from WindowBase::onMouseDown,
+    //       which is what a real mouse-click at the widget centre
+    //       would have triggered.
+    //   cursor.cancel             → close the focused window. This
+    //       mirrors the console-style "B = back-out" UX. The user is
+    //       inside a window's focus ring, B leaves it.
+    //   kInterfaceDismiss         → exit focus mode without closing
+    //       the window. `clearFocus` + `clearFocusMode` resets every
+    //       state field; resolveActiveContext on the next frame
+    //       returns world (or whichever modal is on top).
+    //
+    // Every cursor.* path returns Consumed so the world-cursor
+    // virtual-mouse motion doesn't fire alongside (would move both
+    // the focus ring AND the cursor pixel). The actions registered
+    // against the shortcuts in Shortcuts.cpp are empty lambdas, so
+    // Consumed-vs-Passthrough is functionally a no-op there — but
+    // Consumed is semantically correct and matches the strategy
+    // contract.
+    //
+    // Press-only filtering happens upstream in
+    // ShortcutManager::processEvent (line 393) — release events
+    // never reach onShortcut. No need to gate on e.state here.
+    //
+    // See focus-mode-plan.md §F.4 for the full design.
+    class WidgetFocusContextImpl final : public IInputContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::widgetFocus;
+        }
+
+        Disposition onShortcut(std::string_view id, const InputEvent& e) override
+        {
+            // Critical gate: every cursor.* / cursor.click /
+            // cursor.cancel binding has a MOUSE default too
+            // (LMB → cursor.click, RMB → cursor.cancel,
+            // wheel-bound directions on some setups). When the
+            // mouse pump fires those events, the OpenRCT2 mouse-
+            // input layer in MouseInput.cpp ALREADY handles the
+            // click — finds the widget under the cursor, fires
+            // onMouseDown/Up on it. If this strategy ALSO acts on
+            // the same event, the user's single LMB click ends
+            // up pressing TWO widgets: the one under the cursor
+            // AND the focused widget. That bug surfaced on the
+            // title scene as "clicking anywhere opens About"
+            // because the title logo had latched focus and the
+            // strategy's pressWidgetByIndex fired its onMouseUp
+            // on top of the normal mouse pump's click handling.
+            //
+            // Focus-mode activation is only meaningful for
+            // keyboard / gamepad input — those device paths have
+            // no concept of "the widget under the cursor". Mouse
+            // already has that concept via screen coords; the
+            // shortcut layer is just a passthrough alias for it.
+            // So short-circuit early when the input came from a
+            // mouse: let the mouse pump own the click, return
+            // Passthrough so the action lambda (typically empty)
+            // doesn't double-fire.
+            if (e.deviceKind == InputDeviceKind::mouse)
+                return Disposition::Passthrough;
+
+            auto& mgr = OpenRCT2::Ui::GetInputManager();
+            // OPENRCT2MINI cursor-selector-modal-plan v2: when the
+            // state machine has the selector OFF (hidden), this
+            // strategy is dormant. focus.* shouldn't navigate
+            // (state machine wakes via the modal switch's
+            // enterFocusModeRequested path on unshared press, or
+            // via the per-frame bootstrap's new-window auto-wake);
+            // cursor.click shouldn't synthesise a virtual press
+            // through pressWidgetByIndex either — the
+            // ProcessWorldCursor synthetic-mouse path already
+            // dispatches the click to whichever widget the cursor
+            // is over. Pass through everything until the selector
+            // is reactivated.
+            if (mgr.getSelectorMode() != OpenRCT2::Ui::InputManager::SelectorMode::active)
+                return Disposition::Passthrough;
+
+            // OPENRCT2MINI focus-mode-plan §F.10: dropdown
+            // specialisation. The dropdown window has exactly one
+            // widget (a 1×1 placeholder imgBtn — see Dropdown.cpp:57)
+            // so the generic findNearestInDirection / pressWidget-
+            // ByIndex paths can't navigate or select its items. The
+            // items live in gDropdown.items[] and the highlighted
+            // one in gDropdown.highlightedIndex. We hand-route
+            // focus.* / cursor.click / cursor.cancel to those rails
+            // when the focused window is the dropdown.
+            //
+            // Focus-ring drawing is suppressed for dropdowns by the
+            // bridge (see WidgetFocus.cpp drawFocusOutlineIfActive)
+            // — the dropdown's own per-item highlight is the visual
+            // cue, the yellow rectangle around the whole dropdown
+            // box would just be noise.
+            if (mgr.getFocusedWindowClass() == WindowClass::dropdown)
+            {
+                const auto dir = directionForShortcut(id);
+                if (dir.has_value())
+                {
+                    // Up/Left → step back, Down/Right → step
+                    // forward. The dropdown's NumColumns/NumRows is
+                    // private to the window object so we can't map
+                    // left/right precisely to a column delta — pick
+                    // the simpler "all four directions are ±1"
+                    // semantics until per-direction column delta is
+                    // exposed. Matches how most console-style
+                    // dropdown navigation works anyway.
+                    const int direction = (*dir == OpenRCT2::Ui::WidgetFocus::Direction::up
+                                           || *dir == OpenRCT2::Ui::WidgetFocus::Direction::left)
+                        ? -1 : +1;
+                    OpenRCT2::Ui::Windows::WindowDropdownMoveHighlight(direction);
+                    return Disposition::Consumed;
+                }
+                if (id == ShortcutId::kCursorClick)
+                {
+                    // Commit the highlighted item. If nothing's
+                    // highlighted yet (initial state), nudge to the
+                    // first selectable item and commit it — feels
+                    // less surprising than "first press does
+                    // nothing".
+                    if (OpenRCT2::Ui::Windows::gDropdown.highlightedIndex < 0)
+                        OpenRCT2::Ui::Windows::WindowDropdownMoveHighlight(+1);
+                    if (OpenRCT2::Ui::Windows::gDropdown.highlightedIndex >= 0)
+                        OpenRCT2::Ui::Windows::WindowDropdownSelectIndex(
+                            OpenRCT2::Ui::Windows::gDropdown.highlightedIndex);
+                    // OPENRCT2MINI focus-mode-plan §F.15: the
+                    // dropdown's onDropdown handler typically opens
+                    // a new window (Options, About, …). Snap to
+                    // whatever is now topmost so the selector
+                    // follows the user's choice, same-frame.
+                    mgr.snapFocusToTopmostFocusable();
+                    return Disposition::Consumed;
+                }
+                if (id == ShortcutId::kCursorCancel || id == ShortcutId::kInterfaceDismiss)
+                {
+                    // Close without selecting. _inputState is reset
+                    // to Normal so the next click starts clean.
+                    OpenRCT2::Ui::Windows::WindowDropdownClose();
+                    OpenRCT2::_inputState = OpenRCT2::InputState::Normal;
+                    if (OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::widgetPressed))
+                    {
+                        OpenRCT2::gInputFlags.unset(OpenRCT2::InputFlag::widgetPressed);
+                    }
+                    // OPENRCT2MINI focus-mode-plan §F.16: pop back to
+                    // the parent widget that opened the dropdown.
+                    if (!mgr.restoreFocus())
+                        mgr.snapFocusToTopmostFocusable();
+                    return Disposition::Consumed;
+                }
+                // Other shortcuts pass through while a dropdown is
+                // up — the user can still e.g. cycle windows away.
+                return Disposition::Passthrough;
+            }
+
+            // Translate cursor.* to a direction. The four directional
+            // bindings are the only ones that drive directional
+            // navigation; anything else falls through.
+            const auto direction = directionForShortcut(id);
+            if (direction.has_value())
+            {
+                // OPENRCT2MINI cursor-selector-modal-plan §2.1 / CS.3:
+                // a focus.* direction confirms selector use. Wake the
+                // selector from `mixed`/`hidden` back to `active`.
+                // No-op when already `active`.
+                mgr.onTransitionEvent(InputManager::SelectorTransitionSource::virtualUserInput);
+                auto* w = mgr.getFocusedWindow();
+                if (w != nullptr)
+                {
+                    const auto from = mgr.getFocusedWidget();
+                    // OPENRCT2MINI window-set-plan §3.2: use the
+                    // set-aware walker so a step across a set
+                    // boundary (e.g. top toolbar → bottom toolbar)
+                    // works without an explicit cycle. For windows
+                    // not in any set, the walker internally falls
+                    // back to the single-window cost-minimiser.
+                    WindowClass nextCls = w->classification;
+                    const auto next = OpenRCT2::Ui::WidgetFocus::findNearestInSetDirection(
+                        w->classification, from, *direction, &nextCls);
+                    if (next != OpenRCT2::kWidgetIndexNull
+                        && (nextCls != w->classification || next != from))
+                    {
+                        mgr.setFocus(nextCls, next);
+                        // Mark both the source and destination
+                        // windows dirty so the focus ring is
+                        // repainted on both sides of a set-boundary
+                        // hop (the leaving window needs to clear its
+                        // ring, the arriving window needs to draw a
+                        // new one).
+                        w->invalidate();
+                        if (nextCls != w->classification)
+                        {
+                            auto* windowMgr = GetWindowManager();
+                            if (windowMgr != nullptr)
+                                windowMgr->InvalidateByClass(nextCls);
+                        }
+                    }
+                }
+                return Disposition::Consumed;
+            }
+
+            if (id == ShortcutId::kCursorClick)
+            {
+                auto* w = mgr.getFocusedWindow();
+                if (w != nullptr)
+                {
+                    // pressWidgetByIndex is a safe no-op for null /
+                    // out-of-range indices; the strategy doesn't need
+                    // to second-guess.
+                    OpenRCT2::Ui::WidgetFocus::pressWidgetByIndex(*w, mgr.getFocusedWidget());
+                    // OPENRCT2MINI focus-mode-plan §F.15: if that
+                    // press opened a new window on top, hand the
+                    // selector to it immediately. snapFocusToTopmost-
+                    // Focusable is a no-op when the topmost
+                    // focusable already matches _focusedWindowClass,
+                    // so this is free for buttons that don't open
+                    // anything (toggles, in-place actions).
+                    mgr.snapFocusToTopmostFocusable();
+                }
+                return Disposition::Consumed;
+            }
+
+            // cursor.cancel: if the focused window has a close
+            // box, click it (the standard "close this window"
+            // action). Otherwise just exit focus mode. This
+            // gives the user a way out of any modal-style window
+            // they D-padded into — About, Options, Save/Load,
+            // etc. all have close boxes — without destroying
+            // permanent-fixture windows like the title logo
+            // (which has no close box).
+            //
+            // kInterfaceDismiss stays as a pure "exit focus
+            // mode" — the user-facing ESC key shouldn't double
+            // as a window close.
+            if (id == ShortcutId::kCursorCancel)
+            {
+                auto* w = mgr.getFocusedWindow();
+                if (w != nullptr)
+                {
+                    // OPENRCT2MINI cursor-selector-modal-plan §2.2 /
+                    // CS-R7: cancel inside a bottom-of-stack set
+                    // (in-game toolbar/statusbar) exits the selector
+                    // to cursor mode unconditionally — the user is
+                    // signalling "I'm done driving with the
+                    // selector, give me back the mouse." Skips the
+                    // close-box click that follows; chrome windows
+                    // shouldn't be closable that way anyway.
+                    if (const auto* set = OpenRCT2::Ui::WidgetFocus::findSetFor(w->classification);
+                        set != nullptr && set->isBottomOfStack)
+                    {
+                        mgr.onTransitionEvent(
+                            InputManager::SelectorTransitionSource::cursorCancelInBottomSet);
+                        return Disposition::Consumed;
+                    }
+                    const auto closeIdx = findCloseBox(*w);
+                    if (closeIdx != OpenRCT2::kWidgetIndexNull)
+                    {
+                        OpenRCT2::Ui::WidgetFocus::pressWidgetByIndex(*w, closeIdx);
+                        // OPENRCT2MINI focus-mode-plan §F.16: prefer
+                        // restoreFocus over a fresh snap so the
+                        // selector lands on the exact widget the
+                        // user was on before opening this window.
+                        // Falls back to snap when the stack is empty
+                        // or fully stale (e.g. the parent was
+                        // closed between push and pop).
+                        if (!mgr.restoreFocus())
+                            mgr.snapFocusToTopmostFocusable();
+                        return Disposition::Consumed;
+                    }
+                }
+                // No close box → exit focus mode instead. Same
+                // graceful fallback as dismiss.
+                mgr.clearFocus();
+                mgr.clearFocusMode();
+                return Disposition::Consumed;
+            }
+
+            if (id == ShortcutId::kInterfaceDismiss)
+            {
+                mgr.clearFocus();
+                mgr.clearFocusMode();
+                return Disposition::Consumed;
+            }
+            return Disposition::Passthrough;
+        }
+
+        ICursorModel* getCursorModel() override
+        {
+            return &_cursor;
+        }
+
+    private:
+        // Map focus.up/down/left/right shortcut ids to the
+        // WidgetFocus::Direction enum. Returns nullopt for non-
+        // directional ids. std::optional keeps the caller's two-
+        // case structure (directional path vs everything else)
+        // clean — switch-on-enum would force a default branch that
+        // does nothing useful.
+        //
+        // OPENRCT2MINI focus-mode-plan §F.9: matches focus.* now,
+        // not cursor.*, so the user can rebind the focus ring and
+        // mouse cursor independently — see ShortcutIds.h kFocusUp
+        // comment.
+        static std::optional<OpenRCT2::Ui::WidgetFocus::Direction> directionForShortcut(std::string_view id)
+        {
+            if (id == ShortcutId::kFocusUp)
+                return OpenRCT2::Ui::WidgetFocus::Direction::up;
+            if (id == ShortcutId::kFocusDown)
+                return OpenRCT2::Ui::WidgetFocus::Direction::down;
+            if (id == ShortcutId::kFocusLeft)
+                return OpenRCT2::Ui::WidgetFocus::Direction::left;
+            if (id == ShortcutId::kFocusRight)
+                return OpenRCT2::Ui::WidgetFocus::Direction::right;
+            return std::nullopt;
+        }
+
+        // Locate the closeBox widget on a window. closeBox is the
+        // OpenRCT2 widget type for the X-shaped close button in
+        // a window's top-right corner — every modal-style window
+        // (About, Options, Save/Load, the ride/park windows, …)
+        // has one; permanent-fixture windows like the title logo
+        // and toolbar don't. Returns kWidgetIndexNull when the
+        // window has no close box, letting the caller fall back
+        // to "just exit focus mode" instead of trying to close
+        // something the user can't close anyway.
+        static OpenRCT2::WidgetIndex findCloseBox(const OpenRCT2::WindowBase& window)
+        {
+            const auto count = window.widgets.size();
+            for (size_t i = 0; i < count; i++)
+            {
+                if (window.widgets[i].type == OpenRCT2::WidgetType::closeBox)
+                    return static_cast<OpenRCT2::WidgetIndex>(i);
+            }
+            return OpenRCT2::kWidgetIndexNull;
+        }
+
+        // Cursor model kept from the F.1 skeleton — focus-mode
+        // doesn't have a useful state on it (focus index lives on
+        // InputManager). A no-op stub is fine.
+        TextCaretModel _cursor;
+    };
+
+    // OPENRCT2MINI input-plan Track 3 / Phase 3.E: FootpathContext.
+    // First concrete ToolContext. Verbs (onPlace / onCancel / onRotate /
+    // onRaise / onLower) are stubs at Phase 3.E's first cut — the
+    // routing exists, the strategy is registered, the active-context
+    // resolver activates it when the Footpath window is up with a
+    // tool active. Wiring the verbs to FootpathPlaceAction is the
+    // next iteration; for now they Consume the shortcut so it doesn't
+    // double-fire as a world-cursor click while the user is in tool
+    // mode. The Phase-H pre-decision in input-plan.md §5.2 Phase 3.E
+    // confirmed this class fits under 200 lines, so action-map
+    // indirection (Phase 3.H) is skipped — the polymorphic-context
+    // design carries the rest of the tool-context work.
+    class FootpathContextImpl final : public ToolContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolFootpath;
+        }
+        // Verb overrides remain default (Consumed no-op) until the
+        // GameAction-wiring follow-up lands FootpathPlaceAction etc.
+    };
+
+    // OPENRCT2MINI input-plan Track 3 / Phase 3.F: edge-tile tool
+    // base. Terrain edits tile corners (NE/NW/SE/SW); water edits
+    // tile edges (N/S/E/W). Both share the same model — D-pad cycles
+    // through sub-tile orientations within a tile before advancing to
+    // the neighbour tile. EdgeCursorModel is a stub at Phase 3.F; the
+    // body lands when the verbs need it to compute the affected tile
+    // corner / edge.
+    class EdgeToolBase : public ToolContext
+    {
+        EdgeCursorModel _edge;
+
+    public:
+        ICursorModel* getCursorModel() override
+        {
+            return &_edge;
+        }
+    };
+
+    class TerrainContextImpl final : public EdgeToolBase
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolTerrain;
+        }
+        // Verb wiring deferred — see Phase 3.E follow-up notes in the
+        // plan. onRaise / onLower will dispatch LandRaiseLandAction /
+        // LandLowerLandAction at the EdgeCursor's focused corner.
+    };
+
+    class WaterContextImpl final : public EdgeToolBase
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolWater;
+        }
+        // Verb wiring deferred — onRaise / onLower will dispatch the
+        // canonical WaterRaise / WaterLower actions at the EdgeCursor's
+        // focused edge.
+    };
+
+    // OPENRCT2MINI input-plan Track 3 / Phase 3.G: remaining tool
+    // contexts. Scenery + LandRights are tile-aligned (GridCursorModel
+    // inherited from ToolContext); TileInspector likewise selects a
+    // cell. RideConstruction (covers Track + Maze + custom track) has
+    // its own placement grammar — previous-segment-constrained
+    // orientation, piece-type catalog navigation — which lives in the
+    // verb-wiring follow-up. The skeleton ships the strategy slots so
+    // the active-context resolver routes correctly; bodies are TODO.
+    class SceneryContextImpl final : public ToolContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolScenery;
+        }
+        // Scenery's quirk: non-full-tile scenery sits on a tile
+        // quadrant (NE / NW / SE / SW). The verb-wiring follow-up adds
+        // a sub-quadrant rotation on long-press or shoulder buttons.
+    };
+
+    class LandRightsContextImpl final : public ToolContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolLandRights;
+        }
+        // Owns the cheaper variant of GridCursor — LandRights paints
+        // larger areas without per-tile precision, so a discrete D-pad
+        // step that jumps several tiles at once will probably feel
+        // better than the single-tile step Footpath uses. Tuning is
+        // for the verb-wiring follow-up.
+    };
+
+    class TileInspectorContextImpl final : public ToolContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolTileInspector;
+        }
+        // Debug tool; lower priority. Verbs select tile element slots
+        // within the inspector window — a follow-up wires onPlace /
+        // onCancel to the existing tile-inspector "select previous /
+        // next element" affordances.
+    };
+
+    class RideConstructionContextImpl final : public ToolContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolRideConstruction;
+        }
+        // Most complex tool. Track placement is constrained by the
+        // previous segment's exit direction; the verb set is bigger
+        // than for footpath (forward-step / back-step through the
+        // segment-type catalog, banking left / right, slope up / down,
+        // station / brake placement). Open question Q4 in input-plan.md
+        // §9: pick the gamepad gesture set during the verb-wiring
+        // follow-up.
+    };
+} // namespace
 
 InputManager::InputManager()
 {
     _modifierKeyState = EnumValue(ModifierKey::none);
+
+    // OPENRCT2MINI input-plan Track 3 / Phase 3.A: instantiate the
+    // world-context stub as the universal fallback strategy. It
+    // returns Passthrough for every shortcut so behaviour is
+    // byte-identical to the pre-routing state. Phase 3.C lifts the
+    // real cursor logic into this slot via a PixelCursorModel-backed
+    // implementation. Phase 3.B fills the remaining slots
+    // (osk / loadSave / etc.) with their real strategy classes.
+    _worldContext = std::make_unique<WorldContextStub>();
+    _worldContext->onActivate();
+
+    // OPENRCT2MINI input-plan Track 3 / Phase 3.B: populate the
+    // strategy registry for the six existing modal InputContext enum
+    // entries. Registry slot index matches the enum's underlying
+    // value. Strategies are owned by the registry array (unique_ptr);
+    // when getActiveContextStrategy() looks up by enum, an empty slot
+    // falls back to _worldContext. Phase 3.B fills every slot so the
+    // fallback is only used for genuinely unknown values.
+    _contextRegistry[static_cast<size_t>(InputContext::world)] = std::make_unique<WorldContextStub>();
+    _contextRegistry[static_cast<size_t>(InputContext::osk)] = std::make_unique<OskContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::textInput)] = std::make_unique<TextInputContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::loadSaveOverwritePrompt)]
+        = std::make_unique<LoadSaveOverwritePromptContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::loadSave)] = std::make_unique<LoadSaveContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::console)] = std::make_unique<ConsoleContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::widgetTextBox)] = std::make_unique<WidgetTextBoxContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::widgetFocus)] = std::make_unique<WidgetFocusContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolFootpath)] = std::make_unique<FootpathContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolTerrain)] = std::make_unique<TerrainContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolWater)] = std::make_unique<WaterContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolScenery)] = std::make_unique<SceneryContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolLandRights)] = std::make_unique<LandRightsContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolTileInspector)] = std::make_unique<TileInspectorContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolRideConstruction)] = std::make_unique<RideConstructionContextImpl>();
+
+    // OPENRCT2MINI cursor-selector-modal-plan §3.1: seed selector
+    // mode from config. widgetFocusAlwaysOn defaulted true today,
+    // so most users boot into `active` (selector ring on, cursor
+    // hidden until first input wakes it). Users who opt out via
+    // Options boot into `hidden` (cursor visible, ring dormant).
+    _selectorMode = Config::Get().general.widgetFocusAlwaysOn
+        ? SelectorMode::active
+        : SelectorMode::hidden;
+}
+
+// OPENRCT2MINI input-plan Track 3 / Phase 3.A: out-of-line dtor so
+// the unique_ptr<IInputContext> members destruct in this TU where
+// IInputContext is complete (InputContextStrategy.h is included
+// above). The header only forward-declares IInputContext.
+InputManager::~InputManager() = default;
+
+// OPENRCT2MINI focus-mode-plan / Phase F.3: focus-state accessors.
+// Out-of-line because the header forward-declares the types they
+// touch (the global `WindowClass` enum, OpenRCT2's WindowBase
+// struct). The default values chosen in the header are spelled as
+// raw integers to dodge the forward-decl restriction; these
+// static_asserts pin them to the real sentinel constants so
+// accidental drift would fail the build.
+static_assert(static_cast<uint8_t>(WindowClass::null) == 255, "WindowClass::null must equal 255 for InputManager focus default");
+static_assert(OpenRCT2::kWidgetIndexNull == 0xFFFF, "kWidgetIndexNull must equal 0xFFFF for InputManager focus default");
+
+OpenRCT2::WindowBase* InputManager::getFocusedWindow() const
+{
+    // Per-frame re-lookup; never store the raw pointer. If the user
+    // closed the focused window between frames, FindByClass returns
+    // null and the caller treats focus as cleared (process() then
+    // resets the sentinels via clearFocus on the next tick).
+    if (_focusedWindowClass == WindowClass::null)
+        return nullptr;
+    auto* windowMgr = GetWindowManager();
+    if (windowMgr == nullptr)
+        return nullptr;
+    return windowMgr->FindByClass(_focusedWindowClass);
+}
+
+void InputManager::setFocus(WindowClass cls, OpenRCT2::WidgetIndex widget)
+{
+    _focusedWindowClass = cls;
+    _focusedWidget = widget;
+}
+
+void InputManager::snapFocusToTopmostFocusable()
+{
+    // OPENRCT2MINI focus-mode-plan §F.15: same reverse-walk +
+    // skip rules as the per-frame bootstrap, with one extra
+    // preference: pick a non-stickToFront window if any exist.
+    // Rationale: stickToFront windows are always-on-top chrome
+    // (game-bottom-toolbar, top-toolbar) that the user didn't
+    // explicitly summon, so a click that opens a normal modal
+    // (Options, About, Save/Load, …) should focus the modal —
+    // not the toolbar that happens to be drawn over it.
+    //
+    // Two-pass walk:
+    //   pass 1: reverse-iterate, skipping stickToFront. The
+    //           topmost qualifying NORMAL or stickToBack window
+    //           wins (e.g. the just-opened Options window, or
+    //           on the title scene, the title menu).
+    //   pass 2: only runs if pass 1 found nothing. Reverse-
+    //           iterate including stickToFront, picking the
+    //           topmost focusable. This is the fallback for
+    //           scenes where the only focusable windows ARE
+    //           chrome — e.g. world view with no modals open;
+    //           focus the toolbar so the user has something
+    //           to navigate.
+    //
+    // _lastTopmostFocusable is updated to the snapped class so
+    // the next bootstrap pass doesn't treat this as a fresh
+    // "topmost changed" event and re-snap to itself.
+    const auto findTopmost = [](bool includeStickToFront) -> WindowClass {
+        for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
+        {
+            auto& wPtr = *it;
+            if (wPtr == nullptr)
+                continue;
+            if (wPtr->flags.has(WindowFlag::dead))
+                continue;
+            if (wPtr->classification == WindowClass::mainWindow)
+                continue;
+            // Dropdowns are stickToFront so they draw over the
+            // modal that summoned them, but they're also the
+            // active interaction target — never skip them.
+            if (!includeStickToFront && wPtr->flags.has(WindowFlag::stickToFront)
+                && wPtr->classification != WindowClass::dropdown)
+                continue;
+            if (WidgetFocus::firstFocusable(*wPtr) == kWidgetIndexNull)
+                continue;
+            return wPtr->classification;
+        }
+        return WindowClass::null;
+    };
+
+    WindowClass topmost = findTopmost(/*includeStickToFront=*/ false);
+    if (topmost == WindowClass::null)
+        topmost = findTopmost(/*includeStickToFront=*/ true);
+
+    // OPENRCT2MINI window-set-plan §3.3: don't re-snap when the
+    // new topmost is in the same set as the current focus — that's
+    // a set-internal navigation, handled by the directional walker
+    // setting focus to a sibling directly.
+    if (topmost != WindowClass::null && !WidgetFocus::sameSetOrClass(topmost, _focusedWindowClass))
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr != nullptr)
+        {
+            // Pick the set's defaultClass+defaultWidget if applicable,
+            // else firstFocusable on the topmost member.
+            WindowClass landingCls = topmost;
+            WidgetIndex landingWidget = kWidgetIndexNull;
+            const auto* set = WidgetFocus::findSetFor(topmost);
+            if (set != nullptr && set->defaultClass != WindowClass::null)
+            {
+                auto* dfltW = windowMgr->FindByClass(set->defaultClass);
+                if (dfltW != nullptr && !dfltW->flags.has(WindowFlag::dead))
+                {
+                    landingCls = set->defaultClass;
+                    if (set->defaultWidget != kWidgetIndexNull
+                        && set->defaultWidget < dfltW->widgets.size()
+                        && WidgetFocus::isFocusable(dfltW->widgets[set->defaultWidget]))
+                    {
+                        landingWidget = set->defaultWidget;
+                    }
+                    else
+                    {
+                        landingWidget = WidgetFocus::firstFocusable(*dfltW);
+                    }
+                }
+            }
+            if (landingWidget == kWidgetIndexNull)
+            {
+                auto* w = windowMgr->FindByClass(landingCls);
+                if (w != nullptr)
+                    landingWidget = WidgetFocus::firstFocusable(*w);
+            }
+            if (landingWidget != kWidgetIndexNull)
+            {
+                // OPENRCT2MINI focus-mode-plan §F.16: push the old
+                // focus onto the history stack before reassigning,
+                // so cursor.cancel can later restoreFocus back to
+                // it. Only push when we actually have a non-null
+                // class to restore — initial snaps from null
+                // (fresh activation, post-clearFocus) shouldn't
+                // pollute the stack.
+                if (_focusedWindowClass != WindowClass::null
+                    && _focusedWidget != OpenRCT2::kWidgetIndexNull)
+                {
+                    constexpr size_t kFocusStackCap = 32;
+                    if (_focusStack.empty()
+                        || _focusStack.back().first != _focusedWindowClass
+                        || _focusStack.back().second != _focusedWidget)
+                    {
+                        _focusStack.emplace_back(_focusedWindowClass, _focusedWidget);
+                        while (_focusStack.size() > kFocusStackCap)
+                            _focusStack.erase(_focusStack.begin());
+                    }
+                }
+                setFocus(landingCls, landingWidget);
+            }
+        }
+    }
+    _lastTopmostFocusable = topmost;
+}
+
+bool InputManager::restoreFocus()
+{
+    // OPENRCT2MINI focus-mode-plan §F.16: pop until we find a
+    // live frame. Stale entries (closed windows) get discarded
+    // automatically — that's what lets a chain like
+    // titleMenu → dropdown → About land back on titleMenu's
+    // Game Tools widget after closing About: the dropdown entry
+    // in the middle is dead by the time we pop, so we skip past
+    // it and keep popping until we hit titleMenu, which is still
+    // alive.
+    auto* windowMgr = GetWindowManager();
+    if (windowMgr == nullptr)
+        return false;
+    while (!_focusStack.empty())
+    {
+        auto entry = _focusStack.back();
+        _focusStack.pop_back();
+        auto* w = windowMgr->FindByClass(entry.first);
+        if (w == nullptr)
+            continue;
+        if (w->flags.has(WindowFlag::dead))
+            continue;
+        // Validate the saved widget index against the current
+        // widget list (the window might have re-laid-out its
+        // widgets between the push and pop). Fall back to
+        // firstFocusable when the saved index no longer points
+        // at a focusable target.
+        WidgetIndex widget = entry.second;
+        if (widget == OpenRCT2::kWidgetIndexNull
+            || widget >= w->widgets.size()
+            || !WidgetFocus::isFocusable(w->widgets[widget]))
+        {
+            widget = WidgetFocus::firstFocusable(*w);
+        }
+        if (widget == OpenRCT2::kWidgetIndexNull)
+            continue;
+        setFocus(entry.first, widget);
+        // Sync the bootstrap's "last topmost" tracker so the
+        // next per-frame pass doesn't immediately undo this
+        // restore by thinking the topmost changed.
+        _lastTopmostFocusable = entry.first;
+        return true;
+    }
+    return false;
+}
+
+void InputManager::clearFocus()
+{
+    _focusedWindowClass = WindowClass::null;
+    _focusedWidget = OpenRCT2::kWidgetIndexNull;
+    // OPENRCT2MINI focus-mode-plan §F.16: clearing focus mode
+    // ends the navigation session — drop the history stack so a
+    // future re-activation starts clean. Without this, a stale
+    // entry from a previous focus session could fire on the
+    // first cancel of the new one and dump the user on some
+    // arbitrary widget that hasn't been visible for minutes.
+    _focusStack.clear();
+    // OPENRCT2MINI focus-mode-plan §F.12: reset the topmost
+    // tracking so the next bootstrap pass treats whatever's on top
+    // as a fresh topmost arrival. Without this, after focus is
+    // cleared the bootstrap's "topmost changed?" check would
+    // compare the new topmost against the stale class from the
+    // previous focused session, occasionally skipping a snap.
+    _lastTopmostFocusable = WindowClass::null;
+}
+
+// OPENRCT2MINI cursor-selector-modal-plan §3.1 / CS.1: state setter.
+// Single mutation point so future hooks (logging, dirty-rect, OS
+// cursor-visibility update) can live here. The mode dictates the
+// software-cursor compositor's draw-skip and is consulted by
+// resolveActiveContext for widgetFocus eligibility.
+void InputManager::setSelectorMode(SelectorMode mode)
+{
+    if (_selectorMode == mode)
+        return;
+    _selectorMode = mode;
+    // Invalidate the focused window so the focus ring repaints when
+    // hidden→active or active→hidden flips happen.
+    if (_focusedWindowClass != WindowClass::null)
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr != nullptr)
+            windowMgr->InvalidateByClass(_focusedWindowClass);
+    }
+}
+
+// OPENRCT2MINI cursor-selector-modal-plan v2: simplified state-
+// machine transition pump. Two states: active (ring on, cursor
+// off) and hidden (cursor on, ring off). The auto-transition
+// `hidden → active when a new window opens` lives in the per-
+// frame bootstrap, not here — by the time onTransitionEvent
+// would fire, the bootstrap has already updated focus.
+//
+// _lastInputWasRealMouse is updated alongside the state changes
+// here so the bootstrap can ignore new-window snaps that came
+// from a real-mouse-driven flow.
+void InputManager::onTransitionEvent(SelectorTransitionSource src)
+{
+    switch (src)
+    {
+        case SelectorTransitionSource::realMouseMotion:
+            // Real mouse motion: user is mousing. Cursor mode.
+            _lastInputWasRealMouse = true;
+            if (_selectorMode != SelectorMode::hidden)
+                setSelectorMode(SelectorMode::hidden);
+            break;
+        case SelectorTransitionSource::realMouseClick:
+            // A real-mouse click. Mark the input source so the
+            // post-click bootstrap doesn't auto-wake the selector
+            // for whichever window the click summoned.
+            _lastInputWasRealMouse = true;
+            // Mode doesn't change here — if the user was already
+            // in hidden (typical real-mouse flow), they stay
+            // there. If they were somehow in active (clicked from
+            // selector mode via mouse), we leave them; the active
+            // session continues.
+            break;
+        case SelectorTransitionSource::virtualUserInput:
+            // Any non-mouse user input — D-pad, keyboard, gamepad
+            // button. Records that the most recent input was
+            // virtual so the new-window auto-wake fires.
+            _lastInputWasRealMouse = false;
+            break;
+        case SelectorTransitionSource::cursorCancelInBottomSet:
+            // Cancel from the bottom-of-stack chrome (toolbar/
+            // status bar). Drop to cursor mode. Focus is cleared
+            // so the per-frame bootstrap doesn't immediately re-
+            // snap to the toolbar (the cursor will pick up via
+            // either virtual-cursor polling or real-mouse motion
+            // depending on the user's last input source).
+            setSelectorMode(SelectorMode::hidden);
+            clearFocus();
+            break;
+        case SelectorTransitionSource::wakeCursorRequested:
+            // Explicit "give me the cursor" shortcut.
+            if (_selectorMode != SelectorMode::hidden)
+                setSelectorMode(SelectorMode::hidden);
+            break;
+        case SelectorTransitionSource::enterFocusModeRequested:
+            // Explicit "give me the selector" shortcut. Also
+            // marks input as virtual so any newly-opened windows
+            // after this stay in selector mode.
+            _lastInputWasRealMouse = false;
+            if (_selectorMode != SelectorMode::active)
+                setSelectorMode(SelectorMode::active);
+            break;
+    }
+}
+
+void InputManager::cycleFocusedWindow(int direction)
+{
+    // Build the focusable-window list in z-order (front-of-list =
+    // bottom of stack, back = top). Same skip rules as the bootstrap:
+    // dead windows and the world viewport (mainWindow) are out;
+    // windows with zero focusable widgets are out (nothing to land on).
+    //
+    // Walking the list once into a flat vector keeps the cycle step
+    // O(n) and lets us cleanly wrap. Reusing gWindowList iterators
+    // here would be fragile — windows can be added / removed mid-
+    // game, but this lambda runs from a shortcut action lambda so
+    // the focus state is checked AGAINST the list snapshot we
+    // capture, not against pointers that might dangle.
+    std::vector<WindowClass> focusable;
+    focusable.reserve(gWindowList.size());
+    // OPENRCT2MINI window-set-plan §3.5: collapse set members into a
+    // single cycle stop. For each window in z-order, if it's part of
+    // a set we record the set's first member that's already been
+    // seen; otherwise we record its own class. De-duplication keeps
+    // each set / standalone window as one entry — cycle-next/prev
+    // moves between logical surfaces, not individual stickToFront /
+    // stickToBack siblings.
+    const auto alreadyInList = [&](WindowClass c) {
+        for (auto x : focusable)
+            if (x == c)
+                return true;
+        return false;
+    };
+    for (auto& w : gWindowList)
+    {
+        if (w == nullptr)
+            continue;
+        if (w->flags.has(WindowFlag::dead))
+            continue;
+        if (w->classification == WindowClass::mainWindow)
+            continue;
+        if (WidgetFocus::firstFocusable(*w) == kWidgetIndexNull)
+            continue;
+        WindowClass cycleCls = w->classification;
+        const auto* set = WidgetFocus::findSetFor(cycleCls);
+        if (set != nullptr)
+        {
+            // Skip if any earlier-seen entry is a sibling of this
+            // set — the set has already been added as a stop.
+            bool dup = false;
+            for (auto x : focusable)
+            {
+                if (WidgetFocus::sameSetOrClass(x, cycleCls))
+                {
+                    dup = true;
+                    break;
+                }
+            }
+            if (dup)
+                continue;
+            // Use the set's defaultClass as the canonical entry
+            // when present; the cycle-set focus picks it explicitly.
+            if (set->defaultClass != WindowClass::null)
+                cycleCls = set->defaultClass;
+        }
+        if (alreadyInList(cycleCls))
+            continue;
+        focusable.push_back(cycleCls);
+    }
+    if (focusable.empty())
+        return;
+    if (focusable.size() == 1)
+    {
+        // Single qualifying window — snap to it if we weren't already
+        // focused there, no-op otherwise.
+        if (_focusedWindowClass != focusable[0])
+        {
+            auto* windowMgr = GetWindowManager();
+            if (windowMgr != nullptr)
+            {
+                auto* w = windowMgr->FindByClass(focusable[0]);
+                if (w != nullptr)
+                    setFocus(focusable[0], WidgetFocus::firstFocusable(*w));
+            }
+        }
+        return;
+    }
+
+    // Locate the current focus in the snapshot. If we're not
+    // currently focused on any qualifying window (focus cleared,
+    // or focused on a non-focusable window like loadSave) start
+    // from "just before the front" for forward, "just after the
+    // back" for backward — that way the first step lands on
+    // index 0 / index size-1. Set-aware: a member of a set
+    // matches the set's entry in the cycle.
+    int currentIdx = -1;
+    for (size_t i = 0; i < focusable.size(); i++)
+    {
+        if (WidgetFocus::sameSetOrClass(focusable[i], _focusedWindowClass))
+        {
+            currentIdx = static_cast<int>(i);
+            break;
+        }
+    }
+    int nextIdx;
+    if (currentIdx < 0)
+    {
+        nextIdx = (direction > 0) ? 0 : static_cast<int>(focusable.size()) - 1;
+    }
+    else
+    {
+        const int n = static_cast<int>(focusable.size());
+        nextIdx = ((currentIdx + direction) % n + n) % n; // safe mod for negative direction
+    }
+
+    const auto nextCls = focusable[nextIdx];
+    auto* windowMgr = GetWindowManager();
+    if (windowMgr == nullptr)
+        return;
+    // OPENRCT2MINI window-set-plan §3.5: if the target is in a set,
+    // land on the set's defaultClass + defaultWidget when defined,
+    // else firstFocusable of the canonical entry's window.
+    WindowClass landingCls = nextCls;
+    WidgetIndex landingWidget = kWidgetIndexNull;
+    if (const auto* set = WidgetFocus::findSetFor(nextCls); set != nullptr)
+    {
+        if (set->defaultClass != WindowClass::null)
+            landingCls = set->defaultClass;
+        if (set->defaultWidget != kWidgetIndexNull)
+            landingWidget = set->defaultWidget;
+    }
+    auto* w = windowMgr->FindByClass(landingCls);
+    if (w == nullptr)
+        return;
+    if (landingWidget == kWidgetIndexNull
+        || landingWidget >= w->widgets.size()
+        || !WidgetFocus::isFocusable(w->widgets[landingWidget]))
+    {
+        landingWidget = WidgetFocus::firstFocusable(*w);
+    }
+    if (landingWidget == kWidgetIndexNull)
+        return;
+    setFocus(landingCls, landingWidget);
+    // BringToFront so the focused window becomes the topmost — the
+    // user's mental model is "I'm cycling to this window, it's now
+    // the active one." Without this the focus ring would jump to a
+    // back-layered window while the topmost still draws over it.
+    windowMgr->BringToFrontByClass(landingCls);
+    w->invalidate();
+}
+
+bool InputManager::enterFocusModeOnTopmost()
+{
+    // OPENRCT2MINI cursor-selector-modal-plan v2 follow-up: the TAB
+    // (kInterfaceEnterFocusMode) action. Behaviour the user specified:
+    // "when tab is pressed and a window is open, the selector enables
+    // on the first widget in that window." So we always land on
+    // firstFocusable of the topmost focusable window — no sameSetOrClass
+    // short-circuit (snapFocusToTopmostFocusable's guard would otherwise
+    // make a re-press of TAB a no-op when focus is already in the
+    // topmost's set; that contradicts the "first widget" wording).
+    //
+    // Same two-pass walk as snapFocusToTopmostFocusable: prefer non-
+    // stickToFront windows so a newly-opened modal beats always-on-top
+    // chrome; fall back to including stickToFront for scenes where the
+    // only focusable windows ARE chrome (e.g. world view with no
+    // modals open — focus the toolbar so the user has something to
+    // navigate).
+    const auto findTopmost = [](bool includeStickToFront) -> WindowClass {
+        for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
+        {
+            auto& wPtr = *it;
+            if (wPtr == nullptr)
+                continue;
+            if (wPtr->flags.has(WindowFlag::dead))
+                continue;
+            if (wPtr->classification == WindowClass::mainWindow)
+                continue;
+            if (!includeStickToFront && wPtr->flags.has(WindowFlag::stickToFront)
+                && wPtr->classification != WindowClass::dropdown)
+                continue;
+            if (WidgetFocus::firstFocusable(*wPtr) == kWidgetIndexNull)
+                continue;
+            return wPtr->classification;
+        }
+        return WindowClass::null;
+    };
+    WindowClass topmost = findTopmost(/*includeStickToFront=*/ false);
+    if (topmost == WindowClass::null)
+        topmost = findTopmost(/*includeStickToFront=*/ true);
+    if (topmost == WindowClass::null)
+        return false; // No focusable window — no-op per spec.
+
+    auto* windowMgr = GetWindowManager();
+    if (windowMgr == nullptr)
+        return false;
+
+    // OPENRCT2MINI window-set-plan §3.5: if the topmost is in a set,
+    // honour its defaultClass+defaultWidget when present, else fall
+    // through to firstFocusable on the canonical entry.
+    WindowClass landingCls = topmost;
+    WidgetIndex landingWidget = kWidgetIndexNull;
+    if (const auto* set = WidgetFocus::findSetFor(topmost); set != nullptr
+        && set->defaultClass != WindowClass::null)
+    {
+        if (auto* dfltW = windowMgr->FindByClass(set->defaultClass);
+            dfltW != nullptr && !dfltW->flags.has(WindowFlag::dead))
+        {
+            landingCls = set->defaultClass;
+            if (set->defaultWidget != kWidgetIndexNull
+                && set->defaultWidget < dfltW->widgets.size()
+                && WidgetFocus::isFocusable(dfltW->widgets[set->defaultWidget]))
+            {
+                landingWidget = set->defaultWidget;
+            }
+            else
+            {
+                landingWidget = WidgetFocus::firstFocusable(*dfltW);
+            }
+        }
+    }
+    if (landingWidget == kWidgetIndexNull)
+    {
+        if (auto* w = windowMgr->FindByClass(landingCls); w != nullptr)
+            landingWidget = WidgetFocus::firstFocusable(*w);
+    }
+    if (landingWidget == kWidgetIndexNull)
+        return false;
+
+    setFocus(landingCls, landingWidget);
+    // Sync the bootstrap's "last topmost" tracker so the next per-
+    // frame pass doesn't treat this snap as a stale "topmost changed"
+    // event and re-snap on top of us.
+    _lastTopmostFocusable = landingCls;
+
+    // Mark this as virtual input + flip into selector active. The
+    // requestFocusMode latch is what lets users without
+    // widgetFocusAlwaysOn get widgetFocus promoted in resolveActive-
+    // Context; the transition event handles the SelectorMode flip
+    // and clears _lastInputWasRealMouse so subsequent new windows
+    // stay in selector mode.
+    requestFocusMode();
+    onTransitionEvent(SelectorTransitionSource::enterFocusModeRequested);
+    return true;
 }
 
 void InputManager::queueInputEvent(const SDL_Event& e)
 {
     // OPENRCT2MINI gamepad-plan 1.2: encoding for axis-as-button entries
-    // in _heldGamepadButtons (mirrors the encoding in ShortcutInput.cpp).
-    // Triggers and stick directions enter / leave the held-set on
-    // press-threshold crossings.
-    constexpr uint32_t kPadAxisAsButtonBase = 64;
+    // in _heldGamepadButtons uses the kPadAxisAsButtonBase + encodeAxisAs-
+    // Button helpers exported from ShortcutManager.h (single source of
+    // truth). Triggers and stick directions enter / leave the held-set
+    // on press-threshold crossings.
     constexpr int32_t kPadAxisPressThreshold = 16384;
     constexpr int32_t kPadAxisReleaseThreshold = 9830; // ~30%, hysteresis
-    auto encodeAxisAsButton = [](int32_t axis, int8_t direction) -> uint32_t {
-        return kPadAxisAsButtonBase + (static_cast<uint32_t>(axis) * 2) + (direction == 1 ? 0u : 1u);
-    };
 
     switch (e.type)
     {
@@ -141,7 +1367,6 @@ void InputManager::queueInputEvent(const SDL_Event& e)
             break;
         }
         case SDL_CONTROLLERBUTTONDOWN:
-        case SDL_JOYBUTTONDOWN:
         {
             // OPENRCT2MINI gamepad-plan 1.2: update held-set BEFORE
             // queueing so by the time the event reaches process() the
@@ -162,7 +1387,6 @@ void InputManager::queueInputEvent(const SDL_Event& e)
             break;
         }
         case SDL_CONTROLLERBUTTONUP:
-        case SDL_JOYBUTTONUP:
         {
             _heldGamepadButtons.erase(e.cbutton.button);
 
@@ -175,6 +1399,24 @@ void InputManager::queueInputEvent(const SDL_Event& e)
             queueInputEvent(std::move(ie));
             break;
         }
+        // OPENRCT2MINI: SDL_JOYBUTTONDOWN / SDL_JOYBUTTONUP intentionally
+        // dropped from the dispatch. checkJoysticks() above only opens
+        // devices via SDL_GameControllerOpen — when SDL recognises a
+        // device as a game controller it opens it BOTH as a controller
+        // (firing SDL_CONTROLLERBUTTON* events with canonicalised
+        // SDL_CONTROLLER_BUTTON_* enum values) AND as a raw joystick
+        // (firing SDL_JOYBUTTON* events with the device's hardware
+        // button index). The two events share `e.cbutton.button` /
+        // `e.jbutton.button` storage but the values are unrelated:
+        // controller "LEFTSHOULDER" is enum 9, the DS4's raw L1 joy-
+        // button index also happens to be 9 — so handling both arms
+        // through a fall-through case fired the same shortcut twice
+        // for one physical press (manifested as L1/R1 double-rotating
+        // the view). Since every binding token in the shortcut system
+        // (`PAD L1`, `PAD A`, etc.) decodes to a controller-button
+        // enum value, the joybutton events would only ever match by
+        // collision and never by intent. Dropping the arm eliminates
+        // the collision without losing any legitimate binding match.
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:
         case SDL_JOYDEVICEADDED:
@@ -222,52 +1464,65 @@ void InputManager::processAnalogueInput()
     _analogueScroll.x = 0;
     _analogueScroll.y = 0;
 
-    const int32_t deadzone = Config::Get().general.gamepadDeadzone;
-    const float sensitivity = Config::Get().general.gamepadSensitivity;
+    // OPENRCT2MINI gamepad-plan 1.9 follow-on: route camera scroll
+    // through the bindable kViewScrollUp/Down/Left/Right shortcuts
+    // instead of polling SDL_CONTROLLER_AXIS_RIGHTX/Y directly. This
+    // makes the right-stick → camera mapping a default that the user
+    // can rebind via the Shortcut Keys window, just like any other
+    // input.
+    //
+    // For each of the four directions we ask InputManager::
+    // getAnalogState which returns 0.0..1.0 — analog magnitude for
+    // joyAxis bindings (live stick deflection past the 8000 / 24%
+    // analog deadzone) or 1.0 for digital bindings that are held
+    // (keyboard arrow keys etc.). Net X / Y velocity is the
+    // difference of opposite directions; the existing accumulator
+    // and pixel-extraction logic stays unchanged.
+    auto& shortcutMgr = GetShortcutManager();
+    const auto* scrollUp = shortcutMgr.getShortcut(ShortcutId::kViewScrollUp);
+    const auto* scrollDown = shortcutMgr.getShortcut(ShortcutId::kViewScrollDown);
+    const auto* scrollLeft = shortcutMgr.getShortcut(ShortcutId::kViewScrollLeft);
+    const auto* scrollRight = shortcutMgr.getShortcut(ShortcutId::kViewScrollRight);
 
-    for (auto* gameController : _gameControllers)
+    const float upMag = (scrollUp != nullptr) ? getAnalogState(*scrollUp) : 0.0f;
+    const float downMag = (scrollDown != nullptr) ? getAnalogState(*scrollDown) : 0.0f;
+    const float leftMag = (scrollLeft != nullptr) ? getAnalogState(*scrollLeft) : 0.0f;
+    const float rightMag = (scrollRight != nullptr) ? getAnalogState(*scrollRight) : 0.0f;
+
+    // Net velocity (signed). Right stick conventions: positive Y =
+    // scroll down, positive X = scroll right (matches SDL axis sign).
+    float rawX = rightMag - leftMag;
+    float rawY = downMag - upMag;
+
+    if (Config::Get().general.gamepadInvertCameraY)
+        rawY = -rawY;
+
+    if (rawX != 0.0f || rawY != 0.0f)
     {
-        if (gameController != nullptr)
-        {
-            int32_t stickX = SDL_GameControllerGetAxis(gameController, SDL_CONTROLLER_AXIS_LEFTX);
-            int32_t stickY = SDL_GameControllerGetAxis(gameController, SDL_CONTROLLER_AXIS_LEFTY);
+        const float sensitivity = Config::Get().general.gamepadCameraSensitivity;
+        const float sensitivityCurve = sensitivity * sensitivity;
+        const float moveX = rawX * sensitivityCurve * 8.0f; // base scale
+        const float moveY = rawY * sensitivityCurve * 8.0f;
 
-            // Calculate the magnitude of the stick input vector
-            float magnitude = std::sqrt(static_cast<float>(stickX * stickX + stickY * stickY));
+        _analogueScrollAccumX += moveX;
+        _analogueScrollAccumY += moveY;
 
-            if (magnitude > deadzone)
-            {
-                // Apply deadzone to the magnitude, creating a more linear response
-                float adjustedMagnitude = (magnitude - deadzone) / (32767.0f - deadzone);
-                adjustedMagnitude = std::min(adjustedMagnitude, 1.0f);
+        float intPartX, intPartY;
+        const float fracX = std::modf(_analogueScrollAccumX, &intPartX);
+        const float fracY = std::modf(_analogueScrollAccumY, &intPartY);
 
-                float rawX = (stickX / 32767.0f) * adjustedMagnitude;
-                float rawY = (stickY / 32767.0f) * adjustedMagnitude;
+        _analogueScrollAccumX = fracX;
+        _analogueScrollAccumY = fracY;
 
-                // Use a quadratic curve for better fine control at low sensitivities
-                float sensitivityCurve = sensitivity * sensitivity;
-                float moveX = rawX * sensitivityCurve * 8.0f; // Reasonable base scale
-                float moveY = rawY * sensitivityCurve * 8.0f;
-
-                // Accumulate the movement with fractional precision
-                _analogueScrollAccumX += moveX;
-                _analogueScrollAccumY += moveY;
-
-                // Extract integer movement for this frame
-                float intPartX, intPartY;
-                float fracX = std::modf(_analogueScrollAccumX, &intPartX);
-                float fracY = std::modf(_analogueScrollAccumY, &intPartY);
-
-                int pixelsX = static_cast<int>(intPartX);
-                int pixelsY = static_cast<int>(intPartY);
-
-                _analogueScrollAccumX = fracX;
-                _analogueScrollAccumY = fracY;
-
-                _analogueScroll.x += pixelsX;
-                _analogueScroll.y += pixelsY;
-            }
-        }
+        _analogueScroll.x += static_cast<int>(intPartX);
+        _analogueScroll.y += static_cast<int>(intPartY);
+    }
+    else
+    {
+        // Centred — bleed off any residual fractional accumulator so
+        // a tiny sub-pixel offset doesn't sit forever.
+        _analogueScrollAccumX = 0.0f;
+        _analogueScrollAccumY = 0.0f;
     }
 }
 
@@ -279,12 +1534,546 @@ void InputManager::updateAnalogueScroll()
 
 void InputManager::process()
 {
+    // OPENRCT2MINI gamepad-plan 1.6b step 1: resolve the active input
+    // context once per frame. Cached on _activeContext so every
+    // consumer within this frame sees the same value (a window
+    // opening / closing later in the frame won't surprise downstream
+    // consumers). resolveActiveContext is the single source of truth
+    // — every "what mode is the user in?" check in the input
+    // pipeline asks the manager via getActiveContext().
+    //
+    // OPENRCT2MINI focus-mode-plan / Phase F.3: per-frame focus
+    // lifecycle. Three duties:
+    //
+    //   (1) Staleness — if the focused window class no longer
+    //       resolves to a live window (user closed it between
+    //       frames), reset the focus sentinels. Without this the
+    //       widgetFocus context would latch on a dead class id
+    //       forever.
+    //
+    //   (2) Bootstrap — if focus mode is wanted (either because
+    //       widgetFocusAlwaysOn is on or the user pressed the
+    //       explicit shortcut) AND nothing is currently focused,
+    //       walk the window list from top to bottom and snap to the
+    //       first focusable widget of the topmost qualifying
+    //       window. This is what makes focus mode "always on" feel
+    //       seamless: the moment a focusable window appears, focus
+    //       latches onto it.
+    //
+    //   (3) _focusModeRequested auto-clear — if the user pressed
+    //       the explicit toggle but nothing focusable exists,
+    //       drop the request so a stray press in the world view
+    //       doesn't leave the flag dangling.
+    //
+    // Order matters: stale-check first (so the bootstrap doesn't
+    // think a dead window is still focused), then bootstrap,
+    // then auto-clear the request flag if it failed to latch.
+    if (_focusedWindowClass != WindowClass::null && getFocusedWindow() == nullptr)
+        clearFocus();
+
+    {
+        const bool shouldBeFocused = Config::Get().general.widgetFocusAlwaysOn || _focusModeRequested;
+        // OPENRCT2MINI focus-mode-plan §F.12: topmost-tracking
+        // bootstrap. The bootstrap needs to fire in three cases:
+        //
+        //   (1) Fresh start — _focusedWindowClass is null.
+        //   (2) Stale latch — the focused window class no longer
+        //       resolves to a live window (handled by the staleness
+        //       reset above; this loop then catches the resulting
+        //       null and bootstraps).
+        //   (3) New window appeared on top — e.g. user opens a
+        //       dropdown from a focused menu button. Detect this by
+        //       comparing the current topmost focusable class to the
+        //       one we recorded last frame; only snap when the
+        //       topmost actually CHANGED. This is the load-bearing
+        //       distinction vs. "force focus = topmost every frame":
+        //       cycle-next/prev shortcuts can land focus on a
+        //       window that BringToFront couldn't actually raise
+        //       (stickToBack rivals like the title menu vs. logo),
+        //       and an unconditional snap-to-topmost would
+        //       immediately undo the cycle.
+        // Two-pass walk: prefer non-stickToFront windows so a newly-
+        // opened modal beats always-on-top chrome (game bottom
+        // toolbar, etc.). Mirrors snapFocusToTopmostFocusable. The
+        // fallback pass (includeStickToFront=true) handles scenes
+        // where the only focusable windows ARE chrome.
+        const auto findTopmost = [](bool includeStickToFront) -> WindowClass {
+            for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
+            {
+                auto& wPtr = *it;
+                if (wPtr == nullptr)
+                    continue;
+                if (wPtr->flags.has(WindowFlag::dead))
+                    continue;
+                if (wPtr->classification == WindowClass::mainWindow)
+                    continue;
+                if (!includeStickToFront && wPtr->flags.has(WindowFlag::stickToFront))
+                    continue;
+                if (WidgetFocus::firstFocusable(*wPtr) == kWidgetIndexNull)
+                    continue;
+                return wPtr->classification;
+            }
+            return WindowClass::null;
+        };
+        WindowClass topmostFocusableCls = findTopmost(/*includeStickToFront=*/ false);
+        if (topmostFocusableCls == WindowClass::null)
+            topmostFocusableCls = findTopmost(/*includeStickToFront=*/ true);
+        // OPENRCT2MINI window-set-plan §3.3: count set-siblings as
+        // "same logical surface" — hopping from topToolbar to game-
+        // BottomToolbar (both in the in-game chrome set) should NOT
+        // re-snap the focus, because the user navigated there
+        // explicitly via the directional walker.
+        const bool topmostChanged = (topmostFocusableCls != WindowClass::null
+                                     && topmostFocusableCls != _lastTopmostFocusable
+                                     && !WidgetFocus::sameSetOrClass(topmostFocusableCls, _focusedWindowClass));
+
+        // OPENRCT2MINI cursor-selector-modal-plan v2: auto-wake the
+        // selector when a non-chrome window appears AND the user
+        // was last using virtual input. Real-mouse-driven flows
+        // never trigger the wake (user stays in cursor mode). The
+        // bottom-of-stack chrome itself doesn't qualify — the user
+        // is presumably backing INTO the toolbar set when state is
+        // hidden, and we don't want to fight them.
+        if (_selectorMode == SelectorMode::hidden && topmostChanged
+            && !_lastInputWasRealMouse)
+        {
+            const auto* set = WidgetFocus::findSetFor(topmostFocusableCls);
+            const bool topmostIsBottomChrome = (set != nullptr && set->isBottomOfStack);
+            if (!topmostIsBottomChrome)
+            {
+                setSelectorMode(SelectorMode::active);
+            }
+        }
+
+        _lastTopmostFocusable = topmostFocusableCls;
+        if (shouldBeFocused && (_focusedWindowClass == WindowClass::null || topmostChanged))
+        {
+            // Strict-z-order rule: focus the TOPMOST window with at
+            // least one focusable widget. Nothing more. gWindowList's
+            // back element is the topmost in OpenRCT2's draw order
+            // (front-of-list = bottom of stack, back-of-list = top),
+            // so reverse iteration picks topmost first and the loop
+            // exits on the first qualifying window.
+            //
+            // Skips:
+            //   - dead windows (closed but not yet GC'd)
+            //   - mainWindow (the world viewport — no user-
+            //     interactive widgets; moving focus into it would
+            //     just steal cursor control from the viewport).
+            //
+            // What this DOESN'T do:
+            //   - prefer non-stickToBack over stickToBack
+            //   - pick the window with the most focusable widgets
+            //   - second-guess what the user "probably wants"
+            //
+            // Earlier revisions tried both of those heuristics to
+            // work around "wrong window focused on the title
+            // scene" — title logo + title menu are both
+            // stickToBack and the topmost was the logo, whose
+            // single button only opens About. Those heuristics
+            // produced their own surprises in other scenes (toolbar
+            // grabbed focus over Options, etc.). User direction
+            // (focus-mode-plan §F.8 follow-up): keep the rule
+            // strict, surface a way for the user to SWITCH the
+            // focused window if topmost is wrong. That switch UX
+            // is unbuilt — title menu currently isn't reachable
+            // from focus mode when the logo is on top, the user
+            // can still click it with the mouse.
+            // OPENRCT2MINI window-set-plan §3.3: delegate to the
+            // shared snapper. It applies the non-stickToFront
+            // preference, the WindowClass::dropdown exemption, and
+            // any set-defined defaultClass/defaultWidget — the same
+            // rules used by selector-triggered same-frame snaps.
+            // The _lastTopmostFocusable assignment a few lines
+            // above is still authoritative for the next-frame
+            // edge-trigger; snapFocusToTopmostFocusable updates it
+            // again to the actual landing class.
+            snapFocusToTopmostFocusable();
+        }
+    }
+
+    if (_focusModeRequested && _focusedWindowClass == WindowClass::null)
+        _focusModeRequested = false;
+
+    _activeContext = resolveActiveContext();
+
+    // OPENRCT2MINI input-plan Track 3 / Phase 3.A: activation
+    // lifecycle. When the active context flips between frames, the
+    // outgoing strategy's onDeactivate runs and the incoming
+    // strategy's onActivate fires. Phase 3.A's stubs both do nothing;
+    // Phase 3.B uses these hooks to synthesise release events for
+    // any presses the outgoing context had open (mid-press context
+    // swap correctness — see input-plan-review.md §F5).
+    if (_activeContext != _previousActiveContext)
+    {
+        const auto prevIdx = static_cast<size_t>(_previousActiveContext);
+        const auto newIdx = static_cast<size_t>(_activeContext);
+        IInputContext* outgoing = (prevIdx < kInputContextCount && _contextRegistry[prevIdx] != nullptr)
+            ? _contextRegistry[prevIdx].get()
+            : _worldContext.get();
+        IInputContext* incoming = (newIdx < kInputContextCount && _contextRegistry[newIdx] != nullptr)
+            ? _contextRegistry[newIdx].get()
+            : _worldContext.get();
+        if (outgoing != nullptr)
+            outgoing->onDeactivate();
+        if (incoming != nullptr)
+            incoming->onActivate();
+        _previousActiveContext = _activeContext;
+    }
+
     checkJoysticks();
+    // OPENRCT2MINI input-plan Track 1 §3.1: refresh _keyboardState
+    // and _mouseState here, BEFORE handleModifiers. Previously the
+    // refresh lived in processHoldEvents (called later in this same
+    // frame), which produced a 1-frame lag for keyboard-bound
+    // modifiers — press Shift in frame N, the shift bit on
+    // _modifierKeyState didn't flip until frame N+1, so vertical
+    // placement indicators trailed press by a frame. Gamepad-bound
+    // modifiers were already current because _heldGamepadButtons is
+    // updated synchronously inside queueInputEvent during the SDL
+    // pump. Same fix applies to _mouseState for the (rarer) case of
+    // a modifier shortcut bound to a side-mouse button.
+    refreshDeviceState();
     processAnalogueInput();
     handleModifiers();
+    // OPENRCT2MINI input-plan Track 3 / Phase 3.A: per-frame tick
+    // for the active strategy. Runs after handleModifiers (so the
+    // strategy sees up-to-date modifier state) and before
+    // processEvents (so any held-state edges the strategy wants to
+    // synthesise enter the event flow alongside SDL events).
+    // Phase 3.A's WorldContextStub::processFrame is a no-op.
+    getActiveContextStrategy().processFrame(SDL_GetTicks());
     processEvents();
     processHoldEvents();
     handleViewScrolling();
+
+    // OPENRCT2MINI gamepad-plan 1.7c: per-frame tick for the chord
+    // capture countdown. Runs after processEvents so any DOWN/UP
+    // events from this frame have already updated _heldGamepadButtons
+    // and _captureLastDownMs. If a 2-button chord has been holding
+    // for 5 seconds without further DOWN, the chord auto-commits.
+    const auto nowMs = SDL_GetTicks();
+    GetShortcutManager().updatePendingCapture(nowMs, &_heldGamepadButtons);
+
+    // OPENRCT2MINI hold-binding refactor: per-frame tick for hold-
+    // shortcut threshold. Fires hold actions when their _holdPending
+    // entry has been held for >= holdMs and the action hasn't fired
+    // yet. Tap firing for the same input is owned by the release-
+    // event branch of processEvent; this tick does not fire taps.
+    GetShortcutManager().tickHoldShortcuts(nowMs);
+
+    // OPENRCT2MINI gamepad-plan 1.11b: per-frame tick for the rumble
+    // engine's active-playhead queue. Walks the queue, evaluates the
+    // envelope at the current playhead, mixes one-shot + continuous
+    // contributions, and pushes deltas to UiContext::RumbleControllers.
+    // Retires expired entries (one-shot finished, continuous
+    // lastSeenMs older than this frame).
+    Haptic::tickEngine(nowMs);
+
+    // OPENRCT2MINI gamepad-plan 1.13: per-frame tick for the LED
+    // flash engine. Walks the single-slot active flash, evaluates
+    // the fade ramp at the current playhead, and pushes deltas
+    // (with internal hysteresis) to UiContext::SetControllerLED.
+    // Submits one trailing (0,0,0) sweep on flash expiry, then
+    // idles silently until the next News::AddItemToQueue call.
+    Led::tickEngine(nowMs);
+}
+
+InputContext InputManager::resolveActiveContext() const
+{
+    // Priority order, first match wins. Add new contexts above world
+    // in the order users expect them to take precedence over the
+    // free-cursor world view.
+    //
+    // OPENRCT2MINI gamepad-plan 1.10: OSK still wins because it can
+    // sit on top of any of the typing modals (TextInput → spawn OSK).
+    // After OSK, the order goes most-specific to most-general so the
+    // overwrite-confirm dialog beats the parent loadsave; loadsave /
+    // textinput / console / widgetTextBox are otherwise mutually
+    // exclusive in normal use, but the order is fixed for stability.
+    // chat is omitted — multiplayer not shipped.
+    if (Windows::OskIsActive())
+        return InputContext::osk;
+
+    auto* windowMgr = GetWindowManager();
+
+    // OPENRCT2MINI focus-mode-plan / Phase F.3: text-entry modals
+    // win over widgetFocus. These contexts route raw key events
+    // straight into the modal's keyboard handler (typing letters,
+    // commit, cancel) and must not be intercepted by the focus
+    // strategy. Phase F.6 will migrate the OSK to widgetFocus and
+    // (eventually) the rest of these modals to share the focus
+    // ring; until then they keep their dedicated strategies.
+    if (windowMgr != nullptr)
+    {
+        if (windowMgr->FindByClass(WindowClass::loadsaveOverwritePrompt) != nullptr)
+            return InputContext::loadSaveOverwritePrompt;
+        if (windowMgr->FindByClass(WindowClass::loadsave) != nullptr)
+            return InputContext::loadSave;
+        if (windowMgr->FindByClass(WindowClass::textinput) != nullptr)
+            return InputContext::textInput;
+    }
+
+    auto& console = GetInGameConsole();
+    if (console.IsOpen())
+        return InputContext::console;
+
+    if (Windows::IsUsingWidgetTextBox())
+        return InputContext::widgetTextBox;
+
+    // OPENRCT2MINI focus-mode-plan / Phase F.3: widget-focus is
+    // active whenever a focused window is live AND no text-entry
+    // modal is on top. The bootstrap + staleness pass in process()
+    // — run earlier this same frame — is what populates / clears
+    // `_focusedWindowClass`, so by the time we get here the field
+    // already mirrors the user's intent for this frame. We
+    // re-call `getFocusedWindow()` here rather than just checking
+    // the sentinel because a window could in theory die between
+    // the bootstrap pass and now (the pass holds no lock); the
+    // extra FindByClass is cheap and keeps the precondition
+    // strict.
+    if (getFocusedWindow() != nullptr)
+        return InputContext::widgetFocus;
+
+    // OPENRCT2MINI input-plan Track 3 / Phase 3.E: tool contexts.
+    // Activate the matching tool strategy when (a) the tool's window
+    // is open and (b) gInputFlags.toolActive is set. The Footpath
+    // window for example exists in two states: just-opened-but-not-
+    // armed (the user is choosing a path type, no placement active)
+    // vs armed-for-placement (the toolActive flag is set, hovering
+    // shows the build-cost ghost). Phase 3.E only routes gamepad
+    // input in the second state — the first state behaves like the
+    // world context so the user can still pan / scroll the camera
+    // while picking a path type. 3.F / 3.G add the remaining tool
+    // mappings here.
+    if (windowMgr != nullptr && gInputFlags.has(InputFlag::toolActive))
+    {
+        // Order roughly by frequency-of-use; Footpath / Terrain / Water
+        // / Scenery are the most common construction operations. Ride
+        // construction comes next; LandRights and TileInspector are
+        // rarer (and TileInspector is debug-only).
+        if (windowMgr->FindByClass(WindowClass::footpath) != nullptr)
+            return InputContext::toolFootpath;
+        if (windowMgr->FindByClass(WindowClass::land) != nullptr)
+            return InputContext::toolTerrain;
+        if (windowMgr->FindByClass(WindowClass::water) != nullptr)
+            return InputContext::toolWater;
+        if (windowMgr->FindByClass(WindowClass::scenery) != nullptr)
+            return InputContext::toolScenery;
+        if (windowMgr->FindByClass(WindowClass::rideConstruction) != nullptr)
+            return InputContext::toolRideConstruction;
+        if (windowMgr->FindByClass(WindowClass::landRights) != nullptr)
+            return InputContext::toolLandRights;
+        if (windowMgr->FindByClass(WindowClass::tileInspector) != nullptr)
+            return InputContext::toolTileInspector;
+    }
+
+    return InputContext::world;
+}
+
+bool InputManager::isShortcutAllowedInActiveContext(const InputEvent& e, std::string_view shortcutId) const
+{
+    (void)e; // reserved — current allow-lists are context-only
+    return isShortcutMeaningfulInContext(shortcutId, _activeContext);
+}
+
+// OPENRCT2MINI input-plan Track 3 / Phase 3.I.a: programmatic version
+// of the per-context allow-list. The active-context variant
+// (`isShortcutAllowedInActiveContext`) just delegates here passing
+// `_activeContext`; future UI code can iterate the InputContext enum
+// to compute "this shortcut is meaningful in N contexts: world,
+// toolFootpath, toolTerrain" without duplicating the switch.
+bool InputManager::isShortcutMeaningfulInContext(std::string_view shortcutId, InputContext context) const
+{
+    // OPENRCT2MINI gamepad-plan 1.10: per-context shortcut allow-list.
+    // World allows everything (default). Every modal context allows
+    // the dismiss / confirm pair (so PAD BACK / PAD START always
+    // close or commit) plus any context-specific extras the plan
+    // calls out. Anything not on the list is blocked — the gate is
+    // intentionally narrow so future shortcut additions can't
+    // accidentally fire through a typing modal.
+    //
+    // Allow-list table per gamepad-plan 1.10.2:
+    //   world                    → all
+    //   osk                      → dismiss, confirm, cursor.* (+ click/cancel)
+    //   console                  → dismiss, confirm, kDebugToggleConsole
+    //   loadSave                 → dismiss, confirm, cursor.up/down/left/right
+    //   loadSaveOverwritePrompt  → dismiss, confirm
+    //   textInput                → dismiss, confirm
+    //   widgetTextBox            → dismiss, confirm
+    switch (context)
+    {
+        case InputContext::world:
+            return true;
+
+        case InputContext::osk:
+        {
+            constexpr std::array kAllowed = {
+                ShortcutId::kInterfaceDismiss,
+                ShortcutId::kInterfaceConfirm,
+                ShortcutId::kCursorUp,
+                ShortcutId::kCursorDown,
+                ShortcutId::kCursorLeft,
+                ShortcutId::kCursorRight,
+                ShortcutId::kCursorClick,
+                ShortcutId::kCursorCancel,
+            };
+            for (auto id : kAllowed)
+                if (id == shortcutId)
+                    return true;
+            return false;
+        }
+
+        case InputContext::console:
+        {
+            constexpr std::array kAllowed = {
+                ShortcutId::kInterfaceDismiss,
+                ShortcutId::kInterfaceConfirm,
+                ShortcutId::kDebugToggleConsole,
+            };
+            for (auto id : kAllowed)
+                if (id == shortcutId)
+                    return true;
+            return false;
+        }
+
+        case InputContext::loadSave:
+        {
+            constexpr std::array kAllowed = {
+                ShortcutId::kInterfaceDismiss,
+                ShortcutId::kInterfaceConfirm,
+                ShortcutId::kCursorUp,
+                ShortcutId::kCursorDown,
+                ShortcutId::kCursorLeft,
+                ShortcutId::kCursorRight,
+            };
+            for (auto id : kAllowed)
+                if (id == shortcutId)
+                    return true;
+            return false;
+        }
+
+        case InputContext::loadSaveOverwritePrompt:
+        case InputContext::textInput:
+        case InputContext::widgetTextBox:
+        {
+            constexpr std::array kAllowed = {
+                ShortcutId::kInterfaceDismiss,
+                ShortcutId::kInterfaceConfirm,
+                // OPENRCT2MINI focus-mode-plan / Phase F.1: allow the
+                // focus-mode activator through every textbox context.
+                // The shortcut's lambda flips _focusModeRequested, and
+                // resolveActiveContext promotes the next frame to
+                // widgetFocus. Without this entry the activation
+                // gesture would be suppressed by the textbox
+                // allow-list itself.
+                ShortcutId::kInterfaceEnterFocusMode,
+            };
+            for (auto id : kAllowed)
+                if (id == shortcutId)
+                    return true;
+            return false;
+        }
+
+        // OPENRCT2MINI input-plan Track 3 / Phase 3.E: tool contexts.
+        // Each tool context lets the user navigate (cursor.up/down/
+        // left/right step the grid cursor), confirm (cursor.click →
+        // onPlace), cancel (cursor.cancel → onCancel), rotate (kInter-
+        // faceRotateConstruction → onRotate), and the dismiss /
+        // confirm pair for the surrounding tool window. Everything
+        // else is suppressed so a stray world-mode shortcut can't
+        // fire mid-placement. 3.F/3.G add cases here for the other
+        // tool enum values; allow-list is intentionally narrow.
+        // Tool contexts share an allow-list: navigation + verbs +
+        // dismiss/confirm. Terrain and water additionally allow the
+        // construction Z-lock chord because their natural mapping is
+        // raise/lower-by-shoulder (Phase 3.E follow-up wires the
+        // verbs); the chord is harmless here and routed-Consumed by
+        // the tool strategy if the user has it bound to a verb.
+        case InputContext::toolFootpath:
+        case InputContext::toolTerrain:
+        case InputContext::toolWater:
+        case InputContext::toolScenery:
+        case InputContext::toolLandRights:
+        case InputContext::toolTileInspector:
+        case InputContext::toolRideConstruction:
+        {
+            constexpr std::array kAllowed = {
+                ShortcutId::kInterfaceDismiss,
+                ShortcutId::kInterfaceConfirm,
+                ShortcutId::kCursorUp,
+                ShortcutId::kCursorDown,
+                ShortcutId::kCursorLeft,
+                ShortcutId::kCursorRight,
+                ShortcutId::kCursorClick,
+                ShortcutId::kCursorCancel,
+                ShortcutId::kInterfaceRotateConstruction,
+                ShortcutId::kInterfaceCancelConstruction,
+                ShortcutId::kInterfaceConstructionZLock,
+            };
+            for (auto id : kAllowed)
+                if (id == shortcutId)
+                    return true;
+            return false;
+        }
+
+        // OPENRCT2MINI focus-mode-plan / Phase F.1: widget-focus mode.
+        // Unlike the modal text-entry contexts (loadSave, textInput,
+        // …) which gate shortcut dispatch to a tight allow-list,
+        // widgetFocus is OVERLAID on top of an otherwise-normal
+        // game window — the title scene, the Park window, an
+        // Options pane. The user expects normal gameplay /
+        // navigation shortcuts to keep firing AROUND focus mode.
+        // A bug report on the title scene caught the v1 allow-list
+        // suppressing every non-cursor.* binding the user pressed,
+        // making the title menu unusable (focus-mode-plan.md §F.7
+        // follow-up).
+        //
+        // Strategy's onShortcut already returns Consumed for the
+        // cursor.* / dismiss / cancel paths it owns, so those
+        // shortcuts STILL won't double-fire their action lambdas.
+        // Anything else this filter lets through reaches the
+        // strategy's default Passthrough → action lambda fires
+        // normally. Net effect: focus mode adds D-pad navigation
+        // without subtracting other shortcuts.
+        case InputContext::widgetFocus:
+            return true;
+    }
+    // Unknown context → safe default of allow-everything; the table
+    // above must be updated when InputContext is extended.
+    return true;
+}
+
+// OPENRCT2MINI input-plan Track 3 / Phase 3.A: strategy registry
+// accessor. Returns the strategy registered for the currently-active
+// InputContext enum value. Falls back to the world stub when no
+// strategy is registered for that slot — the world stub serves both
+// as the default fallback and as the world-mode handler.
+IInputContext& InputManager::getActiveContextStrategy() const
+{
+    const auto idx = static_cast<size_t>(_activeContext);
+    if (idx < kInputContextCount)
+    {
+        if (auto& slot = _contextRegistry[idx]; slot != nullptr)
+            return *slot;
+    }
+    // World stub is created at construction; this is always non-null.
+    return *_worldContext;
+}
+
+// OPENRCT2MINI input-plan Track 3 / Phase 3.A: routing entry point.
+// Returns true if the active strategy consumed the shortcut and the
+// caller (ShortcutManager::processEvent) should suppress the action
+// lambda fire. Phase 3.A's WorldContextStub returns Passthrough for
+// everything, so this always returns false — behaviour is preserved.
+//
+// Phase 3.B fills in real modal strategies that may return Consumed
+// for specific (context, id) pairs. The lambda layer continues to
+// own the action backbone; routing only interposes.
+bool InputManager::shouldSuppressAction(std::string_view shortcutId, const InputEvent& e) const
+{
+    auto& strategy = getActiveContextStrategy();
+    return strategy.onShortcut(shortcutId, e) == Disposition::Consumed;
 }
 
 void InputManager::handleViewScrolling()
@@ -359,15 +2148,22 @@ void InputManager::handleModifiers()
 {
     _modifierKeyState = EnumValue(ModifierKey::none);
 
+    // OPENRCT2MINI shift/ctrl-modifier refactor: ALT and GUI/Cmd still
+    // come from SDL's real mod state (they don't have bindable shortcut
+    // analogues yet). SHIFT and CTRL no longer do — those are now driven
+    // exclusively by the kInterfaceShiftModifier and
+    // kInterfaceConstructionZLock shortcuts below, so the user can
+    // remap them to any input through the rebind UI. Default bindings
+    // include the real Shift / Ctrl keys (LSHIFT/RSHIFT and LCTRL/RCTRL),
+    // so out-of-the-box behaviour matches the legacy hardcoded path.
+    //
+    // Why split the source: SDL's mod state also feeds the chord-shortcut
+    // matcher (CTRL+L load, SHIFT+RETURN rotate, etc.), and we still want
+    // chords with real Shift/Ctrl to work without forcing the user to
+    // also bind those keys to the modifier shortcuts. Removing the SDL
+    // hardcoding from THIS path doesn't affect chord matching — chords
+    // still consult SDL_GetModState directly.
     auto modifiers = SDL_GetModState();
-    if (modifiers & KMOD_SHIFT)
-    {
-        _modifierKeyState |= EnumValue(ModifierKey::shift);
-    }
-    if (modifiers & KMOD_CTRL)
-    {
-        _modifierKeyState |= EnumValue(ModifierKey::ctrl);
-    }
     if (modifiers & KMOD_ALT)
     {
         _modifierKeyState |= EnumValue(ModifierKey::alt);
@@ -378,6 +2174,27 @@ void InputManager::handleModifiers()
         _modifierKeyState |= EnumValue(ModifierKey::cmd);
     }
 #endif
+
+    // OPENRCT2MINI gamepad-plan 1.5d-ext / 1.5g + shift/ctrl-modifier
+    // refactor: SHIFT and CTRL behaviours come ONLY from these two
+    // bindable shortcuts now. Every construction caller (Scenery,
+    // Footpath, TrackDesignPlace, RideConstruction, Land, TileInspector)
+    // consults isModifierKeyPressed(ModifierKey::ctrl); shift-modifier
+    // behaviours (vertical track stack, scenery vertical-step) consult
+    // ModifierKey::shift. With the SDL_GetModState hardcoded path
+    // removed above, these shortcut queries are the sole source of
+    // truth for the ctrl/shift bits in _modifierKeyState.
+    auto& shortcutMgr = GetShortcutManager();
+    if (auto* zLock = shortcutMgr.getShortcut(ShortcutId::kInterfaceConstructionZLock))
+    {
+        if (getState(*zLock))
+            _modifierKeyState |= EnumValue(ModifierKey::ctrl);
+    }
+    if (auto* shiftMod = shortcutMgr.getShortcut(ShortcutId::kInterfaceShiftModifier))
+    {
+        if (getState(*shiftMod))
+            _modifierKeyState |= EnumValue(ModifierKey::shift);
+    }
 
     if (Config::Get().general.virtualFloorStyle != VirtualFloorStyles::Off)
     {
@@ -403,145 +2220,196 @@ void InputManager::processEvents()
     }
 }
 
+InputManager::ModalHooksToken InputManager::pushModalHooks(ModalHooks hooks)
+{
+    const auto token = _nextModalHooksToken++;
+    _modalHooksStack.push_back({ std::move(hooks), token });
+    return token;
+}
+
+void InputManager::popModalHooks(ModalHooksToken token)
+{
+    // Defensive: pop only the slot whose token matches. Out-of-order
+    // pop (e.g. parent closes before child for some reason) erases
+    // the right slot rather than the top-of-stack. No-op if token
+    // not found (already popped, never pushed, etc.).
+    for (auto it = _modalHooksStack.begin(); it != _modalHooksStack.end(); ++it)
+    {
+        if (it->token == token)
+        {
+            _modalHooksStack.erase(it);
+            return;
+        }
+    }
+}
+
 void InputManager::process(const InputEvent& e)
 {
     auto& shortcutManager = GetShortcutManager();
-    if (e.deviceKind == InputDeviceKind::keyboard)
+
+    // OPENRCT2MINI gamepad-plan 1.6c.2: dismiss / confirm hook dispatch.
+    // Runs ahead of every other gate so a modal-active context (OSK,
+    // LoadSave, console, chat, etc.) can push a callback pair via
+    // pushModalHooks() and route both keyboard ESC/RETURN AND gamepad
+    // PAD BACK / PAD START through it uniformly. Top of stack wins —
+    // when a child modal (OSK over TextInput) pushes its own pair, it
+    // takes priority; pop on close exposes the parent's pair again.
+    //
+    // shortcut->matches() short-circuits release events
+    // (RegisteredShortcut::isSuitableInputEvent), so the callback fires
+    // on the press transition only — same convention as every other
+    // ShortcutManager-bound action. The matching key-release event
+    // continues through the pipeline; matches() filters it from
+    // ShortcutManager too, so no spurious downstream side effect.
+    if (!_modalHooksStack.empty())
     {
-        auto& console = GetInGameConsole();
-        if (console.IsOpen())
+        // Copy the top handlers before invoking. The callback usually
+        // closes its own window, which calls popModalHooks() — that
+        // erases the slot we'd otherwise be holding a reference to.
+        // Copy (not reference) means we own a stable std::function
+        // object for the duration of the call.
+        auto dismiss = _modalHooksStack.back().hooks.dismiss;
+        auto confirm = _modalHooksStack.back().hooks.confirm;
+        if (dismiss)
         {
-            if (!shortcutManager.processEventForSpecificShortcut(
-                    e, ShortcutId::kDebugToggleConsole, &_heldGamepadButtons))
+            const auto* sc = shortcutManager.getShortcut(ShortcutId::kInterfaceDismiss);
+            if (sc != nullptr && sc->matches(e, &_heldGamepadButtons))
             {
-                processInGameConsole(e);
+                if (dismiss(e))
+                    return;
             }
-            return;
         }
-
-        if (gChatOpen)
+        if (confirm)
         {
-            processChat(e);
-            return;
-        }
-
-        if (e.deviceKind == InputDeviceKind::keyboard)
-        {
-            auto* windowMgr = GetWindowManager();
-
-            // TODO: replace with event
-            auto w = windowMgr->FindByClass(WindowClass::textinput);
-            if (w != nullptr)
+            const auto* sc = shortcutManager.getShortcut(ShortcutId::kInterfaceConfirm);
+            if (sc != nullptr && sc->matches(e, &_heldGamepadButtons))
             {
-                if (e.state == InputEventState::release)
-                {
-                    Windows::WindowTextInputKey(w, e.button);
-                }
-                return;
-            }
-
-            // TODO: replace with event
-            w = windowMgr->FindByClass(WindowClass::loadsaveOverwritePrompt);
-            if (w != nullptr)
-            {
-                if (e.state == InputEventState::release)
-                {
-                    Windows::WindowLoadSaveOverwritePromptInputKey(w, e.button);
-                }
-                return;
-            }
-
-            // TODO: replace with event
-            w = windowMgr->FindByClass(WindowClass::loadsave);
-            if (w != nullptr)
-            {
-                if (e.state == InputEventState::release)
-                {
-                    Windows::WindowLoadSaveInputKey(w, e.button);
-                }
-                return;
-            }
-
-            if (Windows::IsUsingWidgetTextBox())
-            {
-                return;
+                if (confirm(e))
+                    return;
             }
         }
     }
+
+    // OPENRCT2MINI gamepad-plan 1.6c.5: chat dismiss / confirm dispatch.
+    // Chat lives in libopenrct2 and can't directly use the ModalHooks
+    // push/pop pattern (cross-library boundary). Handle inline here so
+    // both keyboard ESC/RETURN and gamepad PAD BACK / PAD START fire
+    // ChatInput::Close / Send while chat is open. Runs ahead of the
+    // keyboard-only branch below so gamepad events reach it too.
+    if (gChatOpen)
+    {
+        if (auto* sc = shortcutManager.getShortcut(ShortcutId::kInterfaceDismiss);
+            sc != nullptr && sc->matches(e, &_heldGamepadButtons))
+        {
+            ChatInput(ChatInput::Close);
+            return;
+        }
+        if (auto* sc = shortcutManager.getShortcut(ShortcutId::kInterfaceConfirm);
+            sc != nullptr && sc->matches(e, &_heldGamepadButtons))
+        {
+            ChatInput(ChatInput::Send);
+            return;
+        }
+        // Other keys flow through SDL_TEXTINPUT (typing) — chat doesn't
+        // have additional non-text bindings today. processChat() is
+        // retained as a no-op placeholder.
+        if (e.deviceKind == InputDeviceKind::keyboard)
+            processChat(e);
+        return;
+    }
+
+    // OPENRCT2MINI input-plan Track 3 / Phase 3.B: keyboard-side
+    // modal routings delegated to the active context strategy. The
+    // previous switch-on-window-class block (TextInput / LoadSave-
+    // OverwritePrompt / LoadSave / in-game console) lived inline
+    // here; each branch now lives in its respective strategy class
+    // at the top of this file and is invoked uniformly.
+    //
+    // Gamepad / mouse events flow through to shortcut dispatch
+    // below — the strategy's onKeyEvent is gated to keyboard events
+    // by each impl. Side-effect only — the event continues through
+    // the dispatch regardless; the per-context allow-list filter
+    // (isShortcutAllowedInActiveContext) suppresses every shortcut
+    // except dismiss / confirm in modal contexts, so there's no
+    // double-fire risk.
+    //
+    // The widgetTextBox case has no keyboard routing here — text
+    // input flows through SDL_TEXTINPUT and the editing keys go
+    // through TextComposition, neither of which uses this Input-
+    // Event path. WidgetTextBoxContextImpl reflects this with a
+    // no-op onKeyEvent (inherits the base).
+    if (e.deviceKind == InputDeviceKind::keyboard)
+    {
+        getActiveContextStrategy().onKeyEvent(e);
+    }
+
     // OPENRCT2MINI gamepad-plan 1.2: pass the held-set to ShortcutManager
     // so chord bindings can match. For keyboard / mouse / hat events the
     // held-set is irrelevant (matches() short-circuits), but it's cheap
     // to pass and keeps the call site uniform.
-    shortcutManager.processEvent(e, &_heldGamepadButtons);
+    //
+    // OPENRCT2MINI gamepad-plan 1.10: pass the per-context filter so
+    // the same allow-list applies regardless of device kind. The
+    // filter defers to InputManager::isShortcutAllowedInActiveContext
+    // which reads the cached _activeContext (resolved once per frame
+    // at the top of process()).
+    shortcutManager.processEvent(
+        e, &_heldGamepadButtons,
+        [this](const InputEvent& ev, std::string_view id) {
+            return isShortcutAllowedInActiveContext(ev, id);
+        },
+        // OPENRCT2MINI input-plan Track 3 / Phase 3.A: routing filter.
+        // The active context strategy gets the first look at every
+        // matched shortcut. WorldContextStub returns Passthrough so
+        // this is currently a no-op (every shortcut fires its lambda
+        // as today); Phase 3.B's real modal strategies will return
+        // Consumed for shortcuts they own.
+        [this](const InputEvent& ev, std::string_view id) {
+            return shouldSuppressAction(id, ev);
+        });
 }
 
-void InputManager::processInGameConsole(const InputEvent& e)
-{
-    if (e.deviceKind == InputDeviceKind::keyboard && e.state == InputEventState::release)
-    {
-        auto input = ConsoleInput::None;
-        switch (e.button)
-        {
-            case SDLK_ESCAPE:
-                input = ConsoleInput::LineClear;
-                break;
-            case SDLK_RETURN:
-            case SDLK_KP_ENTER:
-                input = ConsoleInput::LineExecute;
-                break;
-            case SDLK_UP:
-                input = ConsoleInput::HistoryPrevious;
-                break;
-            case SDLK_DOWN:
-                input = ConsoleInput::HistoryNext;
-                break;
-            case SDLK_PAGEUP:
-                input = ConsoleInput::ScrollPrevious;
-                break;
-            case SDLK_PAGEDOWN:
-                input = ConsoleInput::ScrollNext;
-                break;
-        }
-        if (input != ConsoleInput::None)
-        {
-            auto& console = GetInGameConsole();
-            console.Input(input);
-        }
-    }
-}
+// OPENRCT2MINI input-plan Track 3 / Phase 3.B: InputManager::process-
+// InGameConsole was moved into ConsoleContextImpl::onKeyEvent at the
+// top of this file. The strategy class owns the per-key console
+// scroll routing — UP/DOWN history, PAGEUP/PAGEDOWN scroll. Dismiss
+// and Confirm (ESC / RETURN / PAD BACK / PAD START) continue to
+// route through ModalHooks, the same as before.
 
 void InputManager::processChat(const InputEvent& e)
 {
-    if (e.deviceKind == InputDeviceKind::keyboard && e.state == InputEventState::down)
-    {
-        auto input = ChatInput::None;
-        switch (e.button)
-        {
-            case SDLK_ESCAPE:
-                input = ChatInput::Close;
-                break;
-            case SDLK_RETURN:
-            case SDLK_KP_ENTER:
-                input = ChatInput::Send;
-                break;
-        }
-        if (input != ChatInput::None)
-        {
-            ChatInput(input);
-        }
-    }
+    // OPENRCT2MINI gamepad-plan 1.6c.5: SDLK_ESCAPE / SDLK_RETURN /
+    // SDLK_KP_ENTER cases removed. Chat lives in libopenrct2 (cross-
+    // library boundary prevents the simple ModalHooks pattern), so
+    // confirm / dismiss are handled inline at the chat gate in
+    // process(InputEvent) — see the chat branch there. This function
+    // remains as a placeholder for future chat-specific routing
+    // (typing letters etc., currently handled by SDL_TEXTINPUT).
+    (void)e;
 }
 
-void InputManager::processHoldEvents()
+void InputManager::refreshDeviceState()
 {
-    // Get mouse state
+    // OPENRCT2MINI input-plan Track 1 §3.1: see InputManager.h
+    // declaration for full rationale. Refreshes the per-frame
+    // keyboard and mouse state caches that getState(ShortcutInput)
+    // reads. Called from process() before handleModifiers so the
+    // modifier shortcuts' held-state polls see this frame's input.
     _mouseState = SDL_GetMouseState(nullptr, nullptr);
 
-    // Get keyboard state
     int numkeys;
     auto keys = SDL_GetKeyboardState(&numkeys);
     _keyboardState.resize(numkeys);
     std::memcpy(_keyboardState.data(), keys, numkeys);
+}
+
+void InputManager::processHoldEvents()
+{
+    // OPENRCT2MINI input-plan Track 1 §3.1: _keyboardState and
+    // _mouseState are now refreshed up-front in refreshDeviceState()
+    // (called early in process(), before handleModifiers). The view-
+    // scroll polls below still read both caches via getState — same
+    // data, just refreshed at a friendlier point in the frame.
 
     // Check view scroll shortcuts
     _viewScroll.x = 0;
@@ -585,6 +2453,101 @@ bool InputManager::getState(const RegisteredShortcut& shortcut) const
     return false;
 }
 
+float InputManager::getAnalogStateAxis(const ShortcutInput& input) const
+{
+    if (input.kind != InputDeviceKind::joyAxis)
+        return 0.0f;
+    // Analog deadzone is intentionally LOOSER than the binding's
+    // axisThreshold (16384 / 50%) — 8000 / ~24% gives users fine
+    // control near the centre. The binding's axisThreshold still
+    // gates the digital threshold-cross logic in getState (and the
+    // shortcut-firing dispatch) so a binding "held" semantic doesn't
+    // change.
+    constexpr int32_t kAnalogDeadzone = 8000;
+
+    // Pick the controller with the largest deflection in the bound
+    // direction. Summing across multiple controllers would let two
+    // half-pushed sticks combine into a full push, which is weird;
+    // single-controller-wins matches the digital path where any
+    // controller hitting threshold is enough.
+    int32_t signedMax = 0;
+    for (auto* gc : _gameControllers)
+    {
+        if (gc == nullptr)
+            continue;
+        const int16_t v = SDL_GameControllerGetAxis(
+            gc, static_cast<SDL_GameControllerAxis>(input.button));
+        if (input.axisDirection > 0)
+        {
+            if (v > signedMax)
+                signedMax = v;
+        }
+        else if (input.axisDirection < 0)
+        {
+            if (v < signedMax)
+                signedMax = v;
+        }
+    }
+
+    const float deadzoneF = static_cast<float>(kAnalogDeadzone);
+    if (input.axisDirection > 0)
+    {
+        if (signedMax <= kAnalogDeadzone)
+            return 0.0f;
+        return std::min(1.0f, (signedMax - deadzoneF) / (32767.0f - deadzoneF));
+    }
+    if (input.axisDirection < 0)
+    {
+        if (-signedMax <= kAnalogDeadzone)
+            return 0.0f;
+        return std::min(1.0f, (-signedMax - deadzoneF) / (32767.0f - deadzoneF));
+    }
+    return 0.0f;
+}
+
+float InputManager::getAnalogState(const RegisteredShortcut& shortcut) const
+{
+    // Only joyAxis bindings contribute analog magnitude. Digital
+    // bindings (keyboard, joyButton) report via getState — and
+    // mixing the two here would cause keyboard arrow keys to feed
+    // both the smooth camera path (via _analogueScroll) AND the
+    // discrete keyboard path (via _viewScroll → processViewScroll-
+    // Event), which then cancel via the keyboardScroll subtraction
+    // in handleViewScrolling. Caller decides how to combine analog
+    // and digital input — typically: digital → discrete pixel ticks,
+    // analog → smooth velocity.
+    float maxMagnitude = 0.0f;
+    for (const auto& binding : shortcut.current)
+    {
+        if (binding.kind == InputDeviceKind::joyAxis)
+        {
+            const float mag = getAnalogStateAxis(binding);
+            if (mag > maxMagnitude)
+                maxMagnitude = mag;
+        }
+    }
+    return maxMagnitude;
+}
+
+// OPENRCT2MINI chord-shadow refactor (task #400):
+// Compute the cardinality of a binding the same way ShortcutManager's
+// dispatch path does (chord-modifier count + keyboard-modifier-group
+// count + 1 for the action). Held-state polling needs the same number
+// so the shadow check below has a directly comparable rank.
+static size_t bindingCardinality(const ShortcutInput& binding) noexcept
+{
+    size_t card = binding.chordModifiers.size() + 1;
+    if (binding.modifiers & (KMOD_LCTRL | KMOD_RCTRL))
+        card++;
+    if (binding.modifiers & (KMOD_LSHIFT | KMOD_RSHIFT))
+        card++;
+    if (binding.modifiers & (KMOD_LALT | KMOD_RALT))
+        card++;
+    if (binding.modifiers & (KMOD_LGUI | KMOD_RGUI))
+        card++;
+    return card;
+}
+
 bool InputManager::getState(const ShortcutInput& shortcut) const
 {
     constexpr uint32_t kUsefulModifiers = KMOD_SHIFT | KMOD_CTRL | KMOD_ALT | KMOD_GUI;
@@ -603,7 +2566,134 @@ bool InputManager::getState(const ShortcutInput& shortcut) const
         return true;
     };
 
-    if ((shortcut.modifiers & kUsefulModifiers) == modifiers)
+    // OPENRCT2MINI chord-shadow (task #400): when held-state polling
+    // for this binding, check whether any OTHER binding (in any
+    // shortcut) sharing the same action button has strictly higher
+    // cardinality AND is currently fully satisfied. If so, this lower-
+    // cardinality binding is "shadowed" by the chord — the held-state
+    // poll should report false even though the action button is held.
+    //
+    // Mirror of ShortcutManager::processEvent's cardinality-largest-
+    // match-wins dispatch behaviour. Without this, binding `kInterface-
+    // ConstructionZLock` to `R1+L1` chord while `kInterfaceShift-
+    // Modifier` is bound to `L1` bare causes BOTH to report held when
+    // R1+L1 are pressed — dispatch correctly suppresses shift's action,
+    // but `_modifierKeyState` ends up with both ctrl AND shift bits,
+    // so the construction tool engages both effects when the user
+    // expected only the chord (ctrl/Z-lock) to win.
+    //
+    // Scoped to physical-input bindings only (keyboard / mouse /
+    // joyButton). joyHat and joyAxis pass through unchanged — they
+    // don't participate in chord matching the same way.
+    const auto thisCard = bindingCardinality(shortcut);
+    auto isShadowed = [&]() {
+        if (shortcut.kind != InputDeviceKind::keyboard
+            && shortcut.kind != InputDeviceKind::mouse
+            && shortcut.kind != InputDeviceKind::joyButton)
+            return false;
+        const auto& mgr = GetShortcutManager();
+        for (const auto& kv : mgr.shortcuts)
+        {
+            for (const auto& other : kv.second.current)
+            {
+                if (&other == &shortcut)
+                    continue;
+                if (other.kind != shortcut.kind)
+                    continue;
+                if (other.button != shortcut.button)
+                    continue;
+                const auto otherCard = bindingCardinality(other);
+                if (otherCard <= thisCard)
+                    continue;
+
+                // `other` shares the action button and outranks us.
+                // Check its prerequisites are all currently met.
+                bool prereqsOk = true;
+                for (uint32_t mod : other.chordModifiers)
+                {
+                    if (_heldGamepadButtons.find(mod) == _heldGamepadButtons.end())
+                    {
+                        prereqsOk = false;
+                        break;
+                    }
+                }
+                if (!prereqsOk)
+                    continue;
+                const uint32_t requiredKbdMods = other.modifiers & kUsefulModifiers;
+                if (requiredKbdMods != 0)
+                {
+                    // Check each side-pair (LCTRL/RCTRL etc.) — at least
+                    // one side of each required group must be in actual.
+                    auto sideOk = [&](uint32_t left, uint32_t right) {
+                        const uint32_t needed = requiredKbdMods & (left | right);
+                        if (needed == 0)
+                            return true;
+                        return (modifiers & needed) != 0;
+                    };
+                    if (!sideOk(KMOD_LCTRL, KMOD_RCTRL)
+                        || !sideOk(KMOD_LSHIFT, KMOD_RSHIFT)
+                        || !sideOk(KMOD_LALT, KMOD_RALT)
+                        || !sideOk(KMOD_LGUI, KMOD_RGUI))
+                    {
+                        continue;
+                    }
+                }
+                // `other` outranks us and is satisfied — we're shadowed.
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // OPENRCT2MINI shift/ctrl-modifier refactor: bare-modifier keyboard
+    // bindings (LSHIFT / RSHIFT / LCTRL / RCTRL / LALT / RALT with no
+    // chord prefix) bypass the modifier gate below. The modifier-state
+    // comparison would always mismatch — the modifier we're trying to
+    // detect IS the one currently pressed, so SDL's mod state has
+    // exactly that bit set while shortcut.modifiers is 0. Read the
+    // keyboard scancode bitmap directly instead.
+    if (shortcut.kind == InputDeviceKind::keyboard && shortcut.modifiers == 0)
+    {
+        const auto b = shortcut.button;
+        const bool isBareModifierKey
+            = (b == SDLK_LSHIFT || b == SDLK_RSHIFT || b == SDLK_LCTRL || b == SDLK_RCTRL
+               || b == SDLK_LALT || b == SDLK_RALT);
+        if (isBareModifierKey)
+        {
+            auto scanCode = static_cast<size_t>(SDL_GetScancodeFromKey(b));
+            if (scanCode >= _keyboardState.size() || !_keyboardState[scanCode])
+                return false;
+            // Even a held bare modifier key can be shadowed by a chord-
+            // style binding that uses the same scancode as a regular
+            // chord member. Rare for SHIFT/CTRL keys but kept symmetric
+            // with the non-fast-path cases below.
+            return !isShadowed();
+        }
+    }
+
+    // OPENRCT2MINI shift/ctrl-modifier refactor + chord-click fix:
+    // Held-state poll uses a one-sided modifier comparison — the
+    // shortcut's required modifiers must all be present in actual,
+    // but actual is allowed to have extra modifiers the shortcut
+    // doesn't ask for. This mirrors the dispatch-time HasModifier
+    // relaxation in ShortcutInput.cpp: holding kInterfaceShift-
+    // Modifier's keyboard default (LSHIFT) puts KMOD_SHIFT into
+    // SDL_GetModState, and that mustn't block bare-button bindings
+    // (cursor.click on PAD A, etc.) from polling as "held". The
+    // held-state poll has no cardinality scoring — it's just "is
+    // this input active right now?" — so accepting extra mods is
+    // the correct relaxation here.
+    auto modifierSatisfied = [&]() {
+        auto matchGroup = [&](uint32_t left, uint32_t right) {
+            const uint32_t shortcutBits = shortcut.modifiers & (left | right);
+            if (shortcutBits == 0)
+                return true;
+            return (modifiers & shortcutBits) != 0;
+        };
+        return matchGroup(KMOD_LCTRL, KMOD_RCTRL) && matchGroup(KMOD_LSHIFT, KMOD_RSHIFT)
+            && matchGroup(KMOD_LALT, KMOD_RALT) && matchGroup(KMOD_LGUI, KMOD_RGUI);
+    };
+    if (modifierSatisfied())
     {
         switch (shortcut.kind)
         {
@@ -611,6 +2701,8 @@ bool InputManager::getState(const ShortcutInput& shortcut) const
             {
                 if (_mouseState & (1 << shortcut.button))
                 {
+                    if (isShadowed())
+                        break;
                     return true;
                 }
                 break;
@@ -620,6 +2712,8 @@ bool InputManager::getState(const ShortcutInput& shortcut) const
                 auto scanCode = static_cast<size_t>(SDL_GetScancodeFromKey(shortcut.button));
                 if (scanCode < _keyboardState.size() && _keyboardState[scanCode])
                 {
+                    if (isShadowed())
+                        break;
                     return true;
                 }
                 break;
@@ -628,14 +2722,26 @@ bool InputManager::getState(const ShortcutInput& shortcut) const
             {
                 if (!chordSatisfied())
                     break;
-                for (auto* gameController : _gameControllers)
+                // OPENRCT2MINI gamepad-plan: shortcut.button holds an
+                // SDL_CONTROLLER_BUTTON_* enum value (set in queueInputEvent
+                // from e.cbutton.button); _heldGamepadButtons is keyed on
+                // the same enum so it's the canonical "is this controller
+                // button currently held" query.
+                //
+                // The previous SDL_JoystickGetButton(joystick, shortcut.button)
+                // path was broken for any controller whose raw joystick
+                // button indices don't 1:1 match the GameController enum
+                // — which is virtually every modern controller (DS4, Xbox,
+                // Switch Pro, etc.). For DPAD_UP (enum 11) the raw query
+                // returned the state of joystick button 11, which on a DS4
+                // is L3 stick-click, not DPAD_UP. The held-state poll for
+                // any cursor.* / OSK-routed binding always read false on
+                // host gamepads as a result.
+                if (_heldGamepadButtons.find(shortcut.button) != _heldGamepadButtons.end())
                 {
-                    // Get the underlying joystick to maintain compatibility with raw button numbers
-                    auto* joystick = SDL_GameControllerGetJoystick(gameController);
-                    if (joystick && SDL_JoystickGetButton(joystick, shortcut.button))
-                    {
-                        return true;
-                    }
+                    if (isShadowed())
+                        break;
+                    return true;
                 }
                 break;
             }
@@ -670,9 +2776,7 @@ bool InputManager::getState(const ShortcutInput& shortcut) const
                 // implies "currently held past press threshold".
                 if (!chordSatisfied())
                     break;
-                constexpr uint32_t kPadAxisAsButtonBase = 64;
-                const uint32_t encoded = kPadAxisAsButtonBase
-                    + (shortcut.button * 2u) + (shortcut.axisDirection == 1 ? 0u : 1u);
+                const uint32_t encoded = encodeAxisAsButton(shortcut.button, shortcut.axisDirection);
                 if (_heldGamepadButtons.find(encoded) != _heldGamepadButtons.end())
                 {
                     return true;

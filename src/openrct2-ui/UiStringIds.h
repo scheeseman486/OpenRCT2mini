@@ -273,6 +273,150 @@ namespace OpenRCT2
         STR_SHORTCUT_WINDOWED_MODE_TOGGLE = 5806,
         STR_SHORTCUT_ZOOM_VIEW_IN = 2498,
         STR_SHORTCUT_ZOOM_VIEW_OUT = 2497,
+        // OPENRCT2MINI gamepad-plan 1.5a: cursor + chord shortcut IDs
+        // migrated out of the _vKb*-driven UiContext block. Allocated
+        // a contiguous block at the end of the user range.
+        STR_SHORTCUT_CURSOR_UP = 7056,
+        STR_SHORTCUT_CURSOR_DOWN = 7057,
+        STR_SHORTCUT_CURSOR_LEFT = 7058,
+        STR_SHORTCUT_CURSOR_RIGHT = 7059,
+        STR_SHORTCUT_CURSOR_CLICK = 7060,
+        STR_SHORTCUT_CURSOR_CANCEL = 7061,
+        STR_SHORTCUT_CURSOR_FAST_MODIFIER = 7062,
+        STR_SHORTCUT_CONSTRUCTION_Z_LOCK = 7063,
+        STR_SHORTCUT_SHADE_WINDOW_UNDER_CURSOR = 7064,
+        STR_SHORTCUT_TOGGLE_SHADE_ALL_WINDOWS = 7065,
+        STR_SHORTCUT_CLOSE_WINDOW_UNDER_CURSOR = 7066,
+        // OPENRCT2MINI gamepad-plan 1.5g: shift modifier shortcut.
+        STR_SHORTCUT_SHIFT_MODIFIER = 7067,
+        // OPENRCT2MINI gamepad-plan 1.6c: dismiss / confirm shortcuts.
+        STR_SHORTCUT_DISMISS = 7068,
+        STR_SHORTCUT_CONFIRM = 7069,
+        // OPENRCT2MINI gamepad-plan 1.7c: live capture preview text in
+        // the rebind modal. CAPTURED_CHORD wraps a "PAD L1+R1"-style
+        // string; LOCKING_IN_COUNTDOWN wraps a "Locking in 4s..."
+        // countdown string. Both prepend {WINDOW_COLOUR_2} so the text
+        // inherits the modal's colour scheme — matching the existing
+        // STR_SHORTCUT_CHANGE_PROMPT styling instead of rendering in
+        // a hard-to-read default colour.
+        STR_SHORTCUT_CAPTURED_CHORD = 7070,
+        STR_SHORTCUT_LOCKING_IN_COUNTDOWN = 7071,
+        // OPENRCT2MINI gamepad-plan 1.7e: append-mode checkbox label
+        // and tooltip. Default unchecked (replace existing); checking
+        // makes the next captured binding stack alongside existing
+        // bindings of the same kind instead of replacing them.
+        STR_SHORTCUT_APPEND_TO_EXISTING = 7072,
+        STR_SHORTCUT_APPEND_TO_EXISTING_TIP = 7073,
+        // OPENRCT2MINI gamepad-plan 1.7g: rejected-conflict message
+        // shown in the rebind modal when the proposed binding would
+        // collide with another shortcut. Wraps the offending shortcut
+        // name with a "Already bound to: " prefix.
+        STR_SHORTCUT_CONFLICT_REJECTED = 7074,
+        // OPENRCT2MINI mouse-column refactor: column header labels
+        // drawn above the scroll area in the Shortcut Keys window.
+        // Each header sits over its respective binding column so the
+        // user knows which column to click to rebind which device.
+        STR_SHORTCUT_COL_KEYBOARD = 7075,
+        STR_SHORTCUT_COL_GAMEPAD = 7076,
+        STR_SHORTCUT_COL_MOUSE = 7077,
+        // OPENRCT2MINI mouse-input refactor: context-sensitive wheel
+        // shortcuts. "Zoom or scroll up / down" — the action zooms
+        // the viewport when the cursor is over a viewport, and
+        // no-ops over scroll widgets so the existing wheel feed
+        // handles widget scroll without double-firing zoom.
+        STR_SHORTCUT_ZOOM_OR_SCROLL_UP = 7078,
+        STR_SHORTCUT_ZOOM_OR_SCROLL_DOWN = 7079,
+        // OPENRCT2MINI mouse-input refactor: camera drag shortcut.
+        // Held over main viewport → camera pans with cursor motion.
+        STR_SHORTCUT_CAMERA_DRAG = 7080,
+        // OPENRCT2MINI overlap-warn: yellow-prefixed colour wrapper used
+        // to render shortcut binding strings in the Shortcut Keys list
+        // when one or more bindings in that column collide with another
+        // shortcut's bindings. Mirrors STR_BLACK_STRING (1191) but tints
+        // the wrapped {STRINGID} yellow as a soft "warning" indicator.
+        STR_SHORTCUT_BINDING_OVERLAP_WARN = 7081,
+        // OPENRCT2MINI gamepad-plan 1.11: Haptics window strings.
+        // Window lives in the Cheats / Debug dropdown beneath the
+        // Performance Profiler entry (gated on debuggingTools just
+        // like the profiler).
+        STR_HAPTICS = 7082,
+        STR_HAPTICS_ENABLE = 7083,
+        STR_HAPTICS_INTENSITY = 7084,
+        STR_HAPTICS_INTENSITY_VALUE = 7085,
+        STR_HAPTICS_TEST_RUMBLE = 7086,
+        STR_HAPTICS_NO_CONTROLLER = 7087,
+        STR_HAPTICS_CONTROLLERS_DETECTED = 7088,
+        // OPENRCT2MINI gamepad-plan 1.11b: Rumble Editor strings.
+        STR_RUMBLE_EDITOR_TITLE = 7089,
+        STR_RUMBLE_EDITOR_MODE = 7090,
+        STR_RUMBLE_EDITOR_MODE_ONESHOT = 7091,
+        STR_RUMBLE_EDITOR_MODE_CONTINUOUS = 7092,
+        STR_RUMBLE_EDITOR_MOTOR = 7093,
+        STR_RUMBLE_EDITOR_MOTOR_LOW = 7094,
+        STR_RUMBLE_EDITOR_MOTOR_HIGH = 7095,
+        STR_RUMBLE_EDITOR_PLAY = 7096,
+        STR_RUMBLE_EDITOR_STOP = 7097,
+        STR_RUMBLE_EDITOR_MOVE_TO_START = 7098,
+        STR_RUMBLE_EDITOR_MOVE_TO_END = 7099,
+        STR_RUMBLE_EDITOR_DELETE_POINT = 7100,
+        STR_RUMBLE_EDITOR_ZOOM_IN = 7101,
+        STR_RUMBLE_EDITOR_ZOOM_OUT = 7102,
+        STR_RUMBLE_EDITOR_PAUSE = 7103,
+        STR_RUMBLE_EDITOR_TAIL = 7104,
+        STR_RUMBLE_EDITOR_TAIL_DECREASE = 7105,
+        STR_RUMBLE_EDITOR_TAIL_INCREASE = 7106,
+        STR_RUMBLE_EDITOR_DISABLED = 7107,
+        STR_RUMBLE_EDITOR_DISABLED_TIP = 7108,
+        STR_RUMBLE_EDITOR_SCALE_WITH_SPEED = 7109,
+        STR_RUMBLE_EDITOR_SCALE_WITH_SPEED_TIP = 7110,
+        STR_RUMBLE_EDITOR_REDUCTION = 7111,
+        STR_RUMBLE_EDITOR_REDUCTION_DECREASE = 7112,
+        STR_RUMBLE_EDITOR_REDUCTION_INCREASE = 7113,
+        // OPENRCT2MINI input-plan Track 2 §4.2: LED Options window.
+        // Reachable from the Cheats / Debug dropdown beneath the
+        // Haptics entry (same gating). Mirrors the Haptics panel:
+        // master enable + brightness spinner + test fire + status.
+        STR_LED = 7114,
+        STR_LED_ENABLE = 7115,
+        STR_LED_BRIGHTNESS = 7116,
+        STR_LED_BRIGHTNESS_VALUE = 7117,
+        STR_LED_TEST = 7118,
+        STR_LED_NO_CONTROLLER = 7119,
+        STR_LED_CONTROLLERS_DETECTED = 7120,
+        // OPENRCT2MINI input-plan Track 2 §4.3: per-event toggles.
+        // Three rumble-event checkboxes added to the Haptics window;
+        // three severity-bucket checkboxes added to the LED window.
+        // Each gates a single config flag; default state is on so
+        // first-launch behaviour matches v0.2.
+        STR_HAPTICS_ON_CRASH = 7121,
+        STR_HAPTICS_ON_CRITICAL_NEWS = 7122,
+        STR_HAPTICS_ON_CONSTRUCTION_REFUSAL = 7123,
+        STR_LED_ON_CRITICAL = 7124,
+        STR_LED_ON_WARNING = 7125,
+        STR_LED_ON_MONEY = 7126,
+        // OPENRCT2MINI focus-mode-plan / Phase F.1: focus-mode activator
+        // (renamed from caret-browse — see focus-mode-plan.md §3.1).
+        STR_SHORTCUT_ENTER_FOCUS_MODE = 7127,
+        // OPENRCT2MINI focus-mode-plan / Phase F.7: Options checkbox
+        // for Config::General::widgetFocusAlwaysOn. Two strings — the
+        // label and the tooltip — so the existing checkbox layout
+        // (label + tip pair on every checkbox) just works.
+        STR_WIDGET_FOCUS_ALWAYS_ON = 7128,
+        STR_WIDGET_FOCUS_ALWAYS_ON_TIP = 7129,
+        // OPENRCT2MINI focus-mode-plan §F.8: focus-window cycling.
+        STR_SHORTCUT_CYCLE_NEXT_WINDOW = 7130,
+        STR_SHORTCUT_CYCLE_PREVIOUS_WINDOW = 7131,
+        // OPENRCT2MINI focus-mode-plan §F.9: focus-ring directional
+        // moves (separated from cursor.* so the two can be rebound
+        // independently — see ShortcutIds.h kFocusUp comment).
+        STR_SHORTCUT_FOCUS_UP = 7132,
+        STR_SHORTCUT_FOCUS_DOWN = 7133,
+        STR_SHORTCUT_FOCUS_LEFT = 7134,
+        STR_SHORTCUT_FOCUS_RIGHT = 7135,
+        // OPENRCT2MINI cursor-selector-modal-plan §CS-R1: explicit
+        // show-cursor shortcut (selector hides cursor on Mini;
+        // this gives the user a way to bring it back).
+        STR_SHORTCUT_SHOW_CURSOR = 7136,
         STR_OR = 7000,
 
         // Widgets

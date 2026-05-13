@@ -180,13 +180,18 @@ private:
         const size_t totalCount = scanResult.Files.size();
         if (totalCount > 0)
         {
-            // OPENRCT2MINI: serialise the index build. Each per-file Create() peaks at ~12 MB
-            // transient (S4 staging + decode buffers); parallelising it multiplies the peak
-            // by the worker count. The work is I/O + decompression-bound and fits on one
-            // core; the index runs once and caches to disk, so spending an extra second of
-            // first-launch wall time is well worth keeping the cgroup peak bounded by a
-            // single file's allocations rather than all-cores' overlap.
+            // OPENRCT2MINI host-restoration-plan §1e: on Mini, serialise
+            // the index build — each per-file Create() peaks at ~12 MB
+            // transient (S4 staging + decode buffers); parallelising
+            // multiplies the peak by worker count, and the device runs
+            // under a tight cgroup cap. On host, restore upstream's
+            // multi-threaded scan (one worker per hardware thread,
+            // capped at 255) for the obvious wall-time win.
+#ifdef OPENRCT2MINI
             JobPool jobPool(1);
+#else
+            JobPool jobPool;
+#endif
             std::mutex mtx;
             std::atomic<size_t> processed{ 0 };
 

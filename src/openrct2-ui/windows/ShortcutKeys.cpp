@@ -9,7 +9,9 @@
 
 #include "Windows.h"
 
+#include <SDL.h>
 #include <algorithm>
+#include <cstdio>
 #include <openrct2-ui/UiContext.h>
 #include <openrct2-ui/input/ShortcutManager.h>
 #include <openrct2-ui/interface/Widget.h>
@@ -29,8 +31,26 @@ namespace OpenRCT2::Ui::Windows
     WindowBase* ResetShortcutKeysPromptOpen();
 
     static constexpr StringId kWindowTitle = STR_SHORTCUTS_TITLE;
-    static constexpr ScreenSize kWindowSize = { 420, 280 };
+    // OPENRCT2MINI gamepad-plan 1.7a / mouse-column refactor: window
+    // sized at 630 wide to fit three binding columns (Keyboard /
+    // Gamepad / Mouse) at their fixed widths plus the action name.
+    // 630×280 is now the MINIMUM size — the window is user-resizable
+    // up to kMaximumWindowSize. When the user drags it wider, only
+    // the action-name column flexes; the three binding columns stay
+    // at their fixed pixel widths so chord strings don't suddenly
+    // get more breathing room they don't need.
+    static constexpr ScreenSize kWindowSize = { 630, 280 };
     static constexpr ScreenSize kMaximumWindowSize = { 1200, 800 };
+
+    // OPENRCT2MINI mouse-input refactor: fixed pixel widths for the
+    // three binding columns. Tuned to the original proportional
+    // layout at 630px (~120px per column = ~20% of a 602px scroll
+    // area). Keeping them fixed means dragging the window wider only
+    // benefits the leftmost (action name) column where long shortcut
+    // names actually need the room — the binding columns are
+    // already sized for the longest typical chord strings.
+    static constexpr int32_t kBindingColumnWidth = 120;
+    static constexpr int32_t kColumnGap = 4;
 
     enum WindowShortcutWidgetIdx
     {
@@ -46,24 +66,39 @@ namespace OpenRCT2::Ui::Windows
     // clang-format off
     static const auto _shortcutWidgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
-        makeWidget({0,                      43}, {350, 287}, WidgetType::resize, WindowColour::secondary                                                          ),
-        makeWidget({4,                      47}, {412, 215}, WidgetType::scroll, WindowColour::secondary, SCROLL_VERTICAL,           STR_SHORTCUT_LIST_TIP        ),
+        // OPENRCT2MINI mouse-column refactor: resize panel widened to
+        // match the 630-wide window. Scroll widget pushed down 12 px
+        // (47→59) and shortened by 12 (215→203) to leave room for the
+        // column header row drawn in onDraw between y=47 and y=58.
+        makeWidget({0,                      43}, {kWindowSize.width - 70, 287}, WidgetType::resize, WindowColour::secondary                                       ),
+        makeWidget({4,                      59}, {kWindowSize.width - 8,  203}, WidgetType::scroll, WindowColour::secondary, SCROLL_VERTICAL,           STR_SHORTCUT_LIST_TIP        ),
         makeWidget({4, kWindowSize.height - 15}, {150,  12}, WidgetType::button, WindowColour::secondary, STR_SHORTCUT_ACTION_RESET, STR_SHORTCUT_ACTION_RESET_TIP)
     );
     // clang-format on
 
     static constexpr StringId kWindowTitleChange = STR_SHORTCUT_CHANGE_TITLE;
-    static constexpr ScreenSize kWindowSizeChange = { 250, 80 };
+    // OPENRCT2MINI gamepad-plan 1.7c/1.7d/1.7e: extra height so the
+    // live capture preview ("PAD L1+R1"), the 5-second countdown
+    // text, and the append-checkbox row all fit below the prompt.
+    // 130 px = prompt (16) + preview (12) + countdown (12) + Remove
+    // button (16 incl. padding) + Append checkbox (12 incl. padding)
+    // + breathing room.
+    static constexpr ScreenSize kWindowSizeChange = { 250, 130 };
 
     enum
     {
-        WIDX_REMOVE = 3
+        WIDX_REMOVE = 3,
+        WIDX_APPEND_CHECKBOX = 4,
     };
 
     // clang-format off
     static const auto window_shortcut_change_widgets = makeWidgets(
         makeWindowShim(kWindowTitleChange, kWindowSizeChange),
-        makeWidget({ 75, 56 }, { 100, 14 }, WidgetType::button, WindowColour::primary, STR_SHORTCUT_REMOVE, STR_SHORTCUT_REMOVE_TIP)
+        makeWidget({ 75, kWindowSizeChange.height - 36 }, { 100, 14 }, WidgetType::button,   WindowColour::primary, STR_SHORTCUT_REMOVE,             STR_SHORTCUT_REMOVE_TIP),
+        // OPENRCT2MINI gamepad-plan 1.7e: append-mode checkbox. Below
+        // the Remove button. Default unchecked (replace existing).
+        // Checking switches the active capture session to append.
+        makeWidget({ 14, kWindowSizeChange.height - 18 }, { 222, 12 }, WidgetType::checkbox, WindowColour::primary, STR_SHORTCUT_APPEND_TO_EXISTING, STR_SHORTCUT_APPEND_TO_EXISTING_TIP)
     );
     // clang-format on
 
@@ -73,9 +108,31 @@ namespace OpenRCT2::Ui::Windows
         std::string _shortcutId;
         StringId _shortcutLocalisedName{};
         std::string _shortcutCustomName;
+        // OPENRCT2MINI gamepad-plan 1.7b: which kind the active capture
+        // session is filtering for. Stored on the modal so onPrepareDraw
+        // can render the right "press a key" / "press a button" prompt
+        // (1.7d will use this for the prompt-text variation).
+        PendingShortcutKind _kind = PendingShortcutKind::any;
+        // OPENRCT2MINI gamepad-plan 1.7e: replace vs append mode.
+        // Bound to the WIDX_APPEND_CHECKBOX widget below. Toggled by
+        // clicking the checkbox; the live state is forwarded to
+        // ShortcutManager::setPendingShortcutMode so an in-progress
+        // capture session uses the latest setting at commit time.
+        bool _appendMode = false;
+        // OPENRCT2MINI gamepad-plan 1.7d: token from InputManager::
+        // pushModalHooks. ESC and PAD BACK route through the hook to
+        // close the modal without committing.
+        OpenRCT2::Ui::InputManager::ModalHooksToken _modalHooksToken{};
 
     public:
-        static ChangeShortcutWindow* Open(std::string_view shortcutId)
+        // OPENRCT2MINI gamepad-plan 1.7b/1.7e: kind defaults to `any`
+        // and mode defaults to `replace` for legacy callers that
+        // don't yet route through the per-column ShortcutKeys window.
+        // `any` + `replace` preserves the original upstream "rebind
+        // replaces all bindings" semantic.
+        static ChangeShortcutWindow* Open(
+            std::string_view shortcutId, PendingShortcutKind kind = PendingShortcutKind::any,
+            PendingShortcutMode mode = PendingShortcutMode::replace)
         {
             auto& shortcutManager = GetShortcutManager();
             auto registeredShortcut = shortcutManager.getShortcut(shortcutId);
@@ -90,7 +147,9 @@ namespace OpenRCT2::Ui::Windows
                     w->_shortcutId = shortcutId;
                     w->_shortcutLocalisedName = registeredShortcut->localisedName;
                     w->_shortcutCustomName = registeredShortcut->customName;
-                    shortcutManager.setPendingShortcutChange(registeredShortcut->id);
+                    w->_kind = kind;
+                    w->_appendMode = (mode == PendingShortcutMode::append);
+                    shortcutManager.setPendingShortcutChange(registeredShortcut->id, kind, mode);
                     return w;
                 }
             }
@@ -101,13 +160,42 @@ namespace OpenRCT2::Ui::Windows
         {
             setWidgets(window_shortcut_change_widgets);
             WindowInitScrollWidgets(*this);
+
+            // OPENRCT2MINI gamepad-plan 1.7d: install ModalHooks so
+            // ESC and PAD BACK close the modal without committing.
+            // Confirm hook intentionally not installed — RETURN /
+            // PAD START during a capture session is a binding event,
+            // not a confirm gesture (the user might be trying to
+            // bind RETURN itself).
+            _modalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
+                /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                    close();
+                    return true;
+                },
+                /*confirm=*/ {},
+            });
         }
 
         void onClose() override
         {
+            // OPENRCT2MINI gamepad-plan 1.7d: pop the modal hooks
+            // before clearing the pending state so ESC/PAD BACK
+            // can no longer fire the cancel callback after the
+            // window is gone.
+            OpenRCT2::Ui::GetInputManager().popModalHooks(_modalHooksToken);
+
             auto& shortcutManager = GetShortcutManager();
             shortcutManager.setPendingShortcutChange({});
             NotifyShortcutKeysWindow();
+        }
+
+        void onUpdate() override
+        {
+            // OPENRCT2MINI gamepad-plan 1.7c: invalidate every frame so
+            // the captured-chord preview and countdown text below the
+            // prompt redraw as the user adds buttons / waits for the
+            // 5-second auto-commit.
+            invalidate();
         }
 
         void onMouseUp(WidgetIndex widgetIndex) override
@@ -120,7 +208,27 @@ namespace OpenRCT2::Ui::Windows
                 case WIDX_REMOVE:
                     Remove();
                     break;
+                case WIDX_APPEND_CHECKBOX:
+                {
+                    // OPENRCT2MINI gamepad-plan 1.7e: toggle append mode
+                    // and forward the new state to ShortcutManager so
+                    // an in-progress capture session uses the latest
+                    // setting on commit. Toggling mid-session is
+                    // intentional — the user can hold L1, decide they
+                    // want to keep the existing binding, tick the
+                    // checkbox, and the captured chord will append.
+                    _appendMode = !_appendMode;
+                    GetShortcutManager().setPendingShortcutMode(
+                        _appendMode ? PendingShortcutMode::append : PendingShortcutMode::replace);
+                    invalidate();
+                    break;
+                }
             }
+        }
+
+        void onPrepareDraw() override
+        {
+            setWidgetPressed(WIDX_APPEND_CHECKBOX, _appendMode);
         }
 
         void onDraw(RenderTarget& rt) override
@@ -140,6 +248,66 @@ namespace OpenRCT2::Ui::Windows
                 ft.Add<const char*>(_shortcutCustomName.c_str());
             }
             drawTextWrapped(rt, stringCoords, 242, STR_SHORTCUT_CHANGE_PROMPT, ft, { TextAlignment::centre });
+
+            // OPENRCT2MINI gamepad-plan 1.7c: live capture feedback.
+            // Below the existing prompt we render two extra lines for
+            // gamepad capture sessions:
+            //   line 1 — the chord captured so far ("PAD L1+R1")
+            //   line 2 — countdown text when the 5s auto-commit timer
+            //            is armed ("Locking in 4s...")
+            // Without this, the user has no feedback that pressing L1
+            // was registered, or that holding L1+R1 will commit at
+            // the timer's expiry.
+            // OPENRCT2MINI hold-binding capture: countdown / preview
+            // text now renders for keyboard / mouse sessions too,
+            // not just gamepad. The 5-second hold-elapsed path
+            // commits the binding as a HOLD binding regardless of
+            // input device, so the user gets the same visual
+            // feedback ("Locking in 4s...") on every kind.
+            {
+                auto& shortcutManager = GetShortcutManager();
+                const auto preview = shortcutManager.getCaptureMaxChordPreview();
+                if (!preview.empty())
+                {
+                    // OPENRCT2MINI gamepad-plan 1.7c: STR_SHORTCUT_-
+                    // CAPTURED_CHORD wraps the chord string with
+                    // {WINDOW_COLOUR_2} so the text inherits the
+                    // modal's colour scheme — matches the styling of
+                    // the prompt above (STR_SHORTCUT_CHANGE_PROMPT,
+                    // which also starts with that token).
+                    auto ft2 = Formatter();
+                    ft2.Add<const char*>(preview.c_str());
+                    ScreenCoordsXY previewCoords(
+                        windowPos.x + 125,
+                        windowPos.y + widgets[WIDX_TITLE].bottom + 32);
+                    drawTextWrapped(
+                        rt, previewCoords, 242, STR_SHORTCUT_CAPTURED_CHORD, ft2,
+                        { TextAlignment::centre });
+                }
+
+                if (shortcutManager.isCaptureChordTimerArmed())
+                {
+                    const uint32_t msRemaining = shortcutManager.getCaptureCountdownMsRemaining(SDL_GetTicks());
+                    char countdown[32];
+                    std::snprintf(
+                        countdown, sizeof(countdown), "Hold %us for HOLD binding...",
+                        static_cast<unsigned>((msRemaining + 999) / 1000));
+                    auto ft3 = Formatter();
+                    ft3.Add<const char*>(countdown);
+                    ScreenCoordsXY countdownCoords(
+                        windowPos.x + 125,
+                        windowPos.y + widgets[WIDX_TITLE].bottom + 46);
+                    drawTextWrapped(
+                        rt, countdownCoords, 242, STR_SHORTCUT_LOCKING_IN_COUNTDOWN, ft3,
+                        { TextAlignment::centre });
+                }
+            }
+
+            // OPENRCT2MINI overlap-warn refactor: the conflict-
+            // rejection message rendering is gone. Duplicate
+            // bindings are now allowed at commit time; the
+            // overlapping bindings get rendered yellow in the
+            // Shortcut Keys list as the soft warning.
         }
 
     private:
@@ -166,7 +334,34 @@ namespace OpenRCT2::Ui::Windows
             std::string ShortcutId;
             ::StringId StringId = kStringIdNone;
             std::string CustomString;
-            std::string Binding;
+            // OPENRCT2MINI gamepad-plan 1.7a / mouse-column refactor:
+            // split single Binding into THREE per-kind columns.
+            //   KeyboardBinding: kind == keyboard.
+            //   GamepadBinding:  kind == joyButton / joyHat / joyAxis.
+            //   MouseBinding:    kind == mouse — used to be lumped in
+            //                    with KeyboardBinding, but now that the
+            //                    rebind UI distinguishes mouse as its
+            //                    own capture column it gets its own
+            //                    field too.
+            // Any of the three may be empty when the shortcut has no
+            // binding of that kind.
+            std::string KeyboardBinding;
+            std::string GamepadBinding;
+            std::string MouseBinding;
+            // OPENRCT2MINI overlap-warn: per-column flag set by
+            // initialiseList when ANY current binding of that kind
+            // duplicates a binding registered against another shortcut
+            // ID (compared via ShortcutManager::isBindingOverlapping,
+            // which uses fire-time identity — kind, code, modifiers,
+            // and holdMs). Drives a yellow {YELLOW}{STRINGID} colour
+            // wrapper in DrawItem instead of the default black, as a
+            // soft "warning" that this column will fight another
+            // shortcut for the same input. Allowed at commit time —
+            // the rebind UI no longer rejects overlapping captures —
+            // so this is purely a visual cue.
+            bool KeyboardOverlap = false;
+            bool GamepadOverlap = false;
+            bool MouseOverlap = false;
         };
 
         struct ShortcutTabDesc
@@ -190,6 +385,12 @@ namespace OpenRCT2::Ui::Windows
             initialiseTabs();
             initialiseWidgets();
             initialiseList();
+            // OPENRCT2MINI mouse-input refactor: follow the RideList
+            // pattern — set min / max once on open. Min is the
+            // shipped baseline so the three binding columns and the
+            // action column always have enough room; max gives users
+            // ample horizontal space for long shortcut / chord names.
+            WindowSetResize(*this, kWindowSize, kMaximumWindowSize);
         }
 
         void onClose() override
@@ -200,7 +401,18 @@ namespace OpenRCT2::Ui::Windows
 
         void onResize() override
         {
-            WindowSetResize(*this, kWindowSize, kMaximumWindowSize);
+            // Lightweight clamp — min / max already set in onOpen.
+            // Mirrors RideListWindow::onResize.
+            if (width < minWidth)
+            {
+                invalidate();
+                width = minWidth;
+            }
+            if (height < minHeight)
+            {
+                invalidate();
+                height = minHeight;
+            }
         }
 
         void onUpdate() override
@@ -257,6 +469,39 @@ namespace OpenRCT2::Ui::Windows
         {
             drawWidgets(rt);
             DrawTabImages(rt);
+            DrawColumnHeaders(rt);
+        }
+
+        // OPENRCT2MINI mouse-column refactor: column header row drawn
+        // above the scroll widget. Tells the user which column is
+        // which — without this, three side-by-side binding columns
+        // are indistinguishable. Header order matches DrawItem and
+        // computeColumnLayout: Keyboard | Gamepad | Mouse.
+        //
+        // scrollWidth uses the SAME formula as onScrollDraw below
+        // (`width - kScrollBarWidth - 10`) so the header offsets line
+        // up exactly with the data rows rendered inside the scroll
+        // area; without this, dragging the window wider would
+        // gradually drift the headers off their columns.
+        void DrawColumnHeaders(RenderTarget& rt) const
+        {
+            const auto& scrollWidget = widgets[WIDX_SCROLL];
+            const auto scrollWidth = width - kScrollBarWidth - 10;
+            const auto cols = computeColumnLayout(scrollWidth);
+            const int32_t headerY = windowPos.y + scrollWidget.top - 12;
+            const int32_t scrollX = windowPos.x + scrollWidget.left;
+
+            // Each header is left-aligned into its column. The action-
+            // name column has no header (it's just shortcut names).
+            auto draw = [&](int32_t offset, int32_t colWidth, StringId stringId) {
+                auto ft = Formatter();
+                ft.Add<StringId>(stringId);
+                drawTextEllipsised(
+                    rt, { scrollX + offset, headerY }, colWidth, STR_BLACK_STRING, ft);
+            };
+            draw(cols.keyboardOffset, cols.keyboardWidth, STR_SHORTCUT_COL_KEYBOARD);
+            draw(cols.gamepadOffset, cols.gamepadWidth, STR_SHORTCUT_COL_GAMEPAD);
+            draw(cols.mouseOffset, cols.mouseWidth, STR_SHORTCUT_COL_MOUSE);
         }
 
         ScreenSize onScrollGetSize(int32_t scrollIndex) override
@@ -294,7 +539,21 @@ namespace OpenRCT2::Ui::Windows
                 if (!_list[selectedItem].ShortcutId.empty())
                 {
                     auto& shortcut = _list[selectedItem];
-                    ChangeShortcutWindow::Open(shortcut.ShortcutId);
+                    // OPENRCT2MINI gamepad-plan 1.7b / mouse-column
+                    // refactor: pick the capture kind from the clicked
+                    // column. Action-name column falls through to
+                    // keyboard mode (the most common bind kind on
+                    // host); each binding column opens its own kind.
+                    const auto scrollWidth = width - kScrollBarWidth - 10;
+                    const auto cols = computeColumnLayout(scrollWidth);
+                    PendingShortcutKind kind;
+                    if (screenCoords.x >= cols.mouseOffset)
+                        kind = PendingShortcutKind::mouse;
+                    else if (screenCoords.x >= cols.gamepadOffset)
+                        kind = PendingShortcutKind::gamepad;
+                    else
+                        kind = PendingShortcutKind::keyboard;
+                    ChangeShortcutWindow::Open(shortcut.ShortcutId, kind);
                 }
             }
         }
@@ -393,6 +652,13 @@ namespace OpenRCT2::Ui::Windows
                 return a->orderIndex < b->orderIndex;
             });
 
+            // OPENRCT2MINI overlap-warn: compute per-column overlap
+            // flags by asking the ShortcutManager whether any binding
+            // of a given kind on this shortcut collides with a binding
+            // on a DIFFERENT shortcut. Done once in initialiseList so
+            // DrawItem stays cheap.
+            auto& shortcutManager = GetShortcutManager();
+
             // Create list items with a separator between each group
             _list.clear();
             std::string group;
@@ -417,7 +683,51 @@ namespace OpenRCT2::Ui::Windows
                 ssp.ShortcutId = shortcut->id;
                 ssp.StringId = shortcut->localisedName;
                 ssp.CustomString = shortcut->customName;
-                ssp.Binding = shortcut->getDisplayString();
+                // OPENRCT2MINI gamepad-plan 1.7a / mouse-column refactor:
+                // cache per-kind display strings so DrawItem can render
+                // three binding columns without re-walking
+                // shortcut->current each frame.
+                ssp.KeyboardBinding = shortcut->getKeyboardDisplayString();
+                ssp.GamepadBinding = shortcut->getGamepadDisplayString();
+                ssp.MouseBinding = shortcut->getMouseDisplayString();
+
+                // OPENRCT2MINI overlap-warn: walk shortcut->current and
+                // bucket each binding into the keyboard / gamepad /
+                // mouse column, asking the manager if it collides with
+                // any binding registered on another shortcut. As soon
+                // as we hit one collision in a given column we set its
+                // flag and stop bucketing that column further (still
+                // need to scan for the others though).
+                for (const auto& binding : shortcut->current)
+                {
+                    if (binding.kind == InputDeviceKind::keyboard)
+                    {
+                        if (!ssp.KeyboardOverlap
+                            && shortcutManager.isBindingOverlapping(shortcut->id, binding))
+                        {
+                            ssp.KeyboardOverlap = true;
+                        }
+                    }
+                    else if (binding.kind == InputDeviceKind::mouse)
+                    {
+                        if (!ssp.MouseOverlap
+                            && shortcutManager.isBindingOverlapping(shortcut->id, binding))
+                        {
+                            ssp.MouseOverlap = true;
+                        }
+                    }
+                    else if (
+                        binding.kind == InputDeviceKind::joyButton
+                        || binding.kind == InputDeviceKind::joyHat
+                        || binding.kind == InputDeviceKind::joyAxis)
+                    {
+                        if (!ssp.GamepadOverlap
+                            && shortcutManager.isBindingOverlapping(shortcut->id, binding))
+                        {
+                            ssp.GamepadOverlap = true;
+                        }
+                    }
+                }
                 _list.push_back(std::move(ssp));
             }
 
@@ -510,9 +820,45 @@ namespace OpenRCT2::Ui::Windows
             Rectangle::fill(rt, { { 0, top + 1 }, { scrollWidth, top + 1 } }, getColourMap(colours[1].colour).lightest);
         }
 
+        // OPENRCT2MINI mouse-column refactor: column-layout helper.
+        // Centralises the four x-offsets used by DrawItem, the column
+        // header row in onDraw, and onScrollMouseDown. Order matches
+        // the user-specified header order: Keyboard | Gamepad | Mouse.
+        struct ColumnLayout
+        {
+            int32_t actionWidth;     // 0..actionWidth: action name
+            int32_t keyboardOffset;  // start x of the keyboard column
+            int32_t gamepadOffset;   // start x of the gamepad column
+            int32_t mouseOffset;     // start x of the mouse column
+            int32_t keyboardWidth;
+            int32_t gamepadWidth;
+            int32_t mouseWidth;
+        };
+
+        static ColumnLayout computeColumnLayout(int32_t scrollWidth)
+        {
+            ColumnLayout l{};
+            // OPENRCT2MINI mouse-input refactor: resize-friendly
+            // four-column layout. The three binding columns are
+            // anchored to the right of the scroll area at fixed
+            // pixel widths (kBindingColumnWidth each, kColumnGap
+            // between them). Whatever space remains on the left
+            // becomes the action-name column. Dragging the window
+            // wider grows the action column only — the binding
+            // columns stay sized for typical chord strings.
+            l.keyboardWidth = kBindingColumnWidth;
+            l.gamepadWidth = kBindingColumnWidth;
+            l.mouseWidth = kBindingColumnWidth;
+            l.mouseOffset = scrollWidth - kBindingColumnWidth;
+            l.gamepadOffset = l.mouseOffset - kColumnGap - kBindingColumnWidth;
+            l.keyboardOffset = l.gamepadOffset - kColumnGap - kBindingColumnWidth;
+            l.actionWidth = std::max(0, l.keyboardOffset - kColumnGap);
+            return l;
+        }
+
         void DrawItem(RenderTarget& rt, int32_t y, int32_t scrollWidth, const ShortcutStringPair& shortcut, bool isHighlighted)
         {
-            auto format = STR_BLACK_STRING;
+            StringId format = STR_BLACK_STRING;
             if (isHighlighted)
             {
                 format = STR_WINDOW_COLOUR_2_STRINGID;
@@ -520,7 +866,36 @@ namespace OpenRCT2::Ui::Windows
                     rt, { 0, y - 1, scrollWidth, y + (kScrollableRowHeight - 2) }, FilterPaletteID::paletteDarken1);
             }
 
-            auto bindingOffset = (scrollWidth * 2) / 3;
+            // OPENRCT2MINI overlap-warn: per-column colour wrappers.
+            // The action column always uses the row's default `format`
+            // (black or window-colour-2 when highlighted). Each binding
+            // column independently switches to STR_SHORTCUT_BINDING_OVERLAP_WARN
+            // (yellow) when ANY binding in that column collides with a
+            // binding registered against another shortcut. Highlighted
+            // rows keep their colour treatment — yellow takes priority
+            // because it's the more important signal (something needs
+            // the user's attention) and the row remains shaded by the
+            // paletteDarken1 fill so they can still tell it's selected.
+            // NOTE: explicit StringId-typed locals avoid a -Werror=enum-compare
+            // mismatch — STR_SHORTCUT_BINDING_OVERLAP_WARN lives in our
+            // OPENRCT2MINI UiStringIds enum while STR_BLACK_STRING /
+            // STR_WINDOW_COLOUR_2_STRINGID are upstream unnamed-enum
+            // constants, so the conditional needs a common type.
+            StringId keyboardFormat = shortcut.KeyboardOverlap
+                ? static_cast<StringId>(STR_SHORTCUT_BINDING_OVERLAP_WARN)
+                : format;
+            StringId gamepadFormat = shortcut.GamepadOverlap
+                ? static_cast<StringId>(STR_SHORTCUT_BINDING_OVERLAP_WARN)
+                : format;
+            StringId mouseFormat = shortcut.MouseOverlap
+                ? static_cast<StringId>(STR_SHORTCUT_BINDING_OVERLAP_WARN)
+                : format;
+
+            // OPENRCT2MINI gamepad-plan 1.7a / mouse-column refactor:
+            // four-column layout —
+            //   [action name] [keyboard] [gamepad] [mouse]
+            const auto cols = computeColumnLayout(scrollWidth);
+
             auto ft = Formatter();
             ft.Add<StringId>(STR_SHORTCUT_ENTRY_FORMAT);
             if (shortcut.CustomString.empty())
@@ -532,14 +907,30 @@ namespace OpenRCT2::Ui::Windows
                 ft.Add<StringId>(STR_STRING);
                 ft.Add<const char*>(shortcut.CustomString.c_str());
             }
-            drawTextEllipsised(rt, { 0, y - 1 }, bindingOffset, format, ft);
+            drawTextEllipsised(rt, { 0, y - 1 }, cols.actionWidth, format, ft);
 
-            if (!shortcut.Binding.empty())
+            if (!shortcut.KeyboardBinding.empty())
             {
                 ft = Formatter();
                 ft.Add<StringId>(STR_STRING);
-                ft.Add<const char*>(shortcut.Binding.c_str());
-                drawTextEllipsised(rt, { bindingOffset, y - 1 }, 150, format, ft);
+                ft.Add<const char*>(shortcut.KeyboardBinding.c_str());
+                drawTextEllipsised(rt, { cols.keyboardOffset, y - 1 }, cols.keyboardWidth, keyboardFormat, ft);
+            }
+
+            if (!shortcut.GamepadBinding.empty())
+            {
+                ft = Formatter();
+                ft.Add<StringId>(STR_STRING);
+                ft.Add<const char*>(shortcut.GamepadBinding.c_str());
+                drawTextEllipsised(rt, { cols.gamepadOffset, y - 1 }, cols.gamepadWidth, gamepadFormat, ft);
+            }
+
+            if (!shortcut.MouseBinding.empty())
+            {
+                ft = Formatter();
+                ft.Add<StringId>(STR_STRING);
+                ft.Add<const char*>(shortcut.MouseBinding.c_str());
+                drawTextEllipsised(rt, { cols.mouseOffset, y - 1 }, cols.mouseWidth, mouseFormat, ft);
             }
         }
     };

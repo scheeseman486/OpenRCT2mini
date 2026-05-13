@@ -56,4 +56,15 @@ namespace OpenRCT2::Ui
     [[nodiscard]] InGameConsole& GetInGameConsole();
     [[nodiscard]] InputManager& GetInputManager();
     [[nodiscard]] ShortcutManager& GetShortcutManager();
+
+    // OPENRCT2MINI gamepad-plan 1.5c: action bridges for shade-related
+    // shortcuts. Called from action lambdas in Shortcuts.cpp.
+    void FireToggleShadeAll();
+    void FireCloseWindowUnderCursor();
+    // OPENRCT2MINI hold-binding refactor: bridge for shade-window
+    // tap action. Was previously fired by the per-frame poll in
+    // ProcessWorldCursor; now fires via the kInterfaceShadeWindowUnderCursor
+    // action lambda when the hold-binding dispatch fires it on tap-
+    // release (release-before-500ms-threshold).
+    void FireShadeWindowUnderCursor();
 } // namespace OpenRCT2::Ui

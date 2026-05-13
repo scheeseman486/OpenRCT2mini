@@ -10,6 +10,8 @@
 #include "InGameConsole.h"
 
 #include "../UiStringIds.h"
+#include "../UiContext.h"
+#include "../input/InputManager.h"
 #include "../windows/Windows.h"
 #include "Theme.h"
 
@@ -247,6 +249,25 @@ void InGameConsole::Open()
     ScrollToEnd();
     RefreshCaret();
     _consoleTextInputSession = ContextStartTextInput(_consoleCurrentLine, kConsoleInputSize);
+
+    // OPENRCT2MINI gamepad-plan 1.6c.5: route kInterfaceDismiss /
+    // kInterfaceConfirm to LineClear / LineExecute. Stack is layered
+    // — the OSK that OskOpenForConsole spawns below pushes ITS hooks
+    // on top of ours; OSK's confirm / dismiss handles its own state
+    // first, and when OSK closes (line submit, OSK cancel) ours
+    // become active again. ESC / RETURN keyboard via the same
+    // dispatch as PAD BACK / PAD START.
+    _modalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
+        /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+            Input(ConsoleInput::LineClear);
+            return true;
+        },
+        /*confirm=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+            Input(ConsoleInput::LineExecute);
+            return true;
+        },
+    });
+
     // OPENRCT2MINI: spawn the on-screen keyboard so the user can type
     // commands without a physical keyboard. The OSK calls back into
     // OskMirrorBuffer / OskSubmitLine for the live mirror and commit.
@@ -259,6 +280,8 @@ void InGameConsole::Close()
     _isOpen = false;
     Invalidate();
     ContextStopTextInput();
+    // OPENRCT2MINI gamepad-plan 1.6c.5: pop our modal-hooks slot.
+    OpenRCT2::Ui::GetInputManager().popModalHooks(_modalHooksToken);
     // OPENRCT2MINI: tear down the OSK along with the console.
     // CloseByClass is idempotent if the OSK is already closing.
     OpenRCT2::Ui::Windows::OskClose();

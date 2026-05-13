@@ -789,6 +789,37 @@ void ShortcutManager::registerDefaultShortcuts()
             }
         }
     });
+    // OPENRCT2MINI focus-mode-plan / Phase F.1 + cursor-selector-modal-
+    // plan v2 follow-up: focus-mode activator. Default binding TAB —
+    // press to flip the selector active and land focus on the first
+    // widget of the topmost open window. Re-pressing TAB resets the
+    // selector to the first widget of whatever's on top (useful when
+    // you've navigated deep into a window and want to start over).
+    //
+    // enterFocusModeOnTopmost handles all three jobs in one call: it
+    // finds the topmost focusable window with the same two-pass walk
+    // the per-frame bootstrap uses, sets focus to that window's first
+    // focusable widget directly (bypassing the sameSetOrClass guard
+    // in snapFocusToTopmostFocusable), and dispatches enterFocusMode-
+    // Requested which flips SelectorMode::active. Returns false (no-
+    // op) if no focusable window exists — TAB on an empty title scene
+    // before the menu loads, for instance.
+    registerShortcut(ShortcutId::kInterfaceEnterFocusMode,
+                     STR_SHORTCUT_ENTER_FOCUS_MODE, "TAB", []() {
+        OpenRCT2::Ui::GetInputManager().enterFocusModeOnTopmost();
+    });
+    // OPENRCT2MINI focus-mode-plan §F.8: cycle the focus ring between
+    // windows. Defaults SHIFT+TAB / CTRL+TAB as requested; gamepad
+    // bindings TBD (will surface in a follow-up once we settle the
+    // chord scheme on the Miyoo layout).
+    registerShortcut(ShortcutId::kInterfaceCycleNextWindow,
+                     STR_SHORTCUT_CYCLE_NEXT_WINDOW, "SHIFT+TAB", []() {
+        OpenRCT2::Ui::GetInputManager().cycleFocusedWindow(+1);
+    });
+    registerShortcut(ShortcutId::kInterfaceCyclePreviousWindow,
+                     STR_SHORTCUT_CYCLE_PREVIOUS_WINDOW, "CTRL+TAB", []() {
+        OpenRCT2::Ui::GetInputManager().cycleFocusedWindow(-1);
+    });
     registerShortcut(ShortcutId::kInterfacePause, STR_SHORTCUT_PAUSE_GAME, "PAUSE", []() {
         if (gLegacyScene != LegacyScene::titleSequence && gLegacyScene != LegacyScene::scenarioEditor && gLegacyScene != LegacyScene::trackDesignsManager)
         {
@@ -850,6 +881,16 @@ void ShortcutManager::registerDefaultShortcuts()
     // View
     registerShortcut(ShortcutId::kViewGeneralZoomOut, STR_SHORTCUT_ZOOM_VIEW_OUT, "PAGEUP", std::bind(MainWindowZoom, false, false));
     registerShortcut(ShortcutId::kViewGeneralZoomIn, STR_SHORTCUT_ZOOM_VIEW_IN, "PAGEDOWN", std::bind(MainWindowZoom, true, false));
+    // OPENRCT2MINI mouse-input refactor: context-sensitive wheel
+    // shortcuts. Action lambdas zoom only when the cursor is over a
+    // viewport-class window; over scroll widgets / spinners they
+    // no-op so the existing _cursorState.wheel-driven WindowAllWheelInput
+    // dispatch can scroll the widget without doubling up with zoom.
+    // Default-bound to MOUSE WHEEL UP / DOWN (further down in this
+    // function); kViewGeneralZoomIn/Out keep their unconditional
+    // action and PAGEUP/PAGEDOWN/PAD L2/R2 defaults for force-zoom.
+    registerShortcut(ShortcutId::kViewZoomScrollUp,   STR_SHORTCUT_ZOOM_OR_SCROLL_UP,   "", std::bind(FireZoomOrScrollWheel, true));
+    registerShortcut(ShortcutId::kViewZoomScrollDown, STR_SHORTCUT_ZOOM_OR_SCROLL_DOWN, "", std::bind(FireZoomOrScrollWheel, false));
     registerShortcut(ShortcutId::kViewGeneralRotateClockwise, STR_SHORTCUT_ROTATE_VIEW_CLOCKWISE, "RETURN", "MOUSE 6", std::bind(RotateCamera, 1));
     registerShortcut(ShortcutId::kViewGeneralRotateAnticlockwise, STR_SHORTCUT_ROTATE_VIEW_ANTICLOCKWISE, "SHIFT+RETURN", "MOUSE 5", std::bind(RotateCamera, -1));
     registerShortcut(ShortcutId::kViewScrollUp, STR_SHORTCUT_SCROLL_MAP_UP, "UP", []() {});
@@ -926,6 +967,117 @@ void ShortcutManager::registerDefaultShortcuts()
             }
         }
     });
+
+    // OPENRCT2MINI gamepad-plan 1.5a: virtual cursor + chord shortcuts.
+    // These IDs are net-new — they migrate the _vKb*-driven cursor /
+    // click / shade / Z-lock behaviour out of UiContext and into the
+    // ShortcutManager pipeline. In 1.5a we only REGISTER the IDs with
+    // stub no-op actions so they show up in the rebind UI (and can be
+    // reassigned by the user) without changing any in-game behaviour
+    // yet. The actions get wired in 1.5b-f, then the legacy _vKb*
+    // block is deleted in 1.6.
+    //
+    // Default keyboard bindings are passed for the rebind UI's "reset
+    // to default" path. cut 44 strips them via [[maybe_unused]] in the
+    // RegisteredShortcut constructor — the device's vendor SDL2 emits
+    // fake keyboard events for D-pad / face buttons, so live keyboard
+    // defaults would double-fire — but the strings still show in the
+    // rebind UI as the canonical "what this is" hint.
+    //
+    // Default PAD bindings come from registerPadDefault below. Per the
+    // migration table in gamepad-plan.md §1.5: cursor motion → DPAD
+    // directions; click → south face (SDL "A"); cancel → east face
+    // (SDL "B"); shade-window → north face (SDL "Y"); chord shortcuts
+    // get explicit "PAD MOD+ACTION" strings.
+    registerShortcut(ShortcutId::kCursorUp,           STR_SHORTCUT_CURSOR_UP,           "UP",      []() {});
+    registerShortcut(ShortcutId::kCursorDown,         STR_SHORTCUT_CURSOR_DOWN,         "DOWN",    []() {});
+    registerShortcut(ShortcutId::kCursorLeft,         STR_SHORTCUT_CURSOR_LEFT,         "LEFT",    []() {});
+    registerShortcut(ShortcutId::kCursorRight,        STR_SHORTCUT_CURSOR_RIGHT,        "RIGHT",   []() {});
+    // OPENRCT2MINI focus-mode-plan §F.9: focus-ring direction moves.
+    // Separate namespace from cursor.* so the user can rebind each
+    // side independently — see ShortcutIds.h kFocusUp comment for
+    // the rationale. Action lambdas are empty stubs (like cursor.*);
+    // the actual focus-ring movement runs from
+    // WidgetFocusContextImpl::onShortcut, which dispatches its
+    // findNearestInDirection / setFocus calls on these ids.
+    // Defaults overlap with cursor.* keyboard arrows + D-pad on
+    // purpose: first-launch behaviour stays "D-pad navigates the
+    // focus ring", and users who want non-overlap (e.g. D-pad
+    // moves only cursor, never focus) can drop the focus.* binding
+    // through the Shortcut Keys window.
+    registerShortcut(ShortcutId::kFocusUp,    STR_SHORTCUT_FOCUS_UP,    "UP",    []() {});
+    registerShortcut(ShortcutId::kFocusDown,  STR_SHORTCUT_FOCUS_DOWN,  "DOWN",  []() {});
+    registerShortcut(ShortcutId::kFocusLeft,  STR_SHORTCUT_FOCUS_LEFT,  "LEFT",  []() {});
+    registerShortcut(ShortcutId::kFocusRight, STR_SHORTCUT_FOCUS_RIGHT, "RIGHT", []() {});
+    // OPENRCT2MINI cursor-selector-modal-plan §CS-R1: explicit
+    // show-cursor escape hatch. No default binding; users on the
+    // Mini bind to a face button if they want a way out of the
+    // always-on selector. Host users with widgetFocusAlwaysOn=true
+    // get the same affordance — they can bind a key if mouse motion
+    // isn't sufficient (rare).
+    registerShortcut(ShortcutId::kInterfaceShowCursor, STR_SHORTCUT_SHOW_CURSOR, "", []() {
+        GetInputManager().onTransitionEvent(InputManager::SelectorTransitionSource::wakeCursorRequested);
+    });
+    registerShortcut(ShortcutId::kCursorClick,        STR_SHORTCUT_CURSOR_CLICK,        "Z",       []() {});
+    registerShortcut(ShortcutId::kCursorCancel,       STR_SHORTCUT_CURSOR_CANCEL,       "X",       []() {});
+    registerShortcut(ShortcutId::kCursorFastModifier, STR_SHORTCUT_CURSOR_FAST_MODIFIER, "LSHIFT", []() {});
+    registerShortcut(ShortcutId::kInterfaceConstructionZLock,
+                     STR_SHORTCUT_CONSTRUCTION_Z_LOCK,        "LCTRL",  []() {});
+    // OPENRCT2MINI hold-binding refactor: shade-window fires on tap-
+    // release (binding holdMs == 0) of the bound input; shade-all fires
+    // on hold-elapsed (binding holdMs == 500, set by the "HOLD " prefix
+    // on its default bindings further down). ShortcutManager's
+    // _holdPending mechanism coordinates the two so the same physical
+    // input drives tap → shade-window and 500ms-hold → shade-all
+    // without double-firing.
+    registerShortcut(ShortcutId::kInterfaceShadeWindowUnderCursor,
+                     STR_SHORTCUT_SHADE_WINDOW_UNDER_CURSOR,  "C",      []() {
+        FireShadeWindowUnderCursor();
+    });
+    registerShortcut(ShortcutId::kInterfaceToggleShadeAllWindows,
+                     STR_SHORTCUT_TOGGLE_SHADE_ALL_WINDOWS,   "SHIFT+C", []() {
+        FireToggleShadeAll();
+    });
+    registerShortcut(ShortcutId::kInterfaceCloseWindowUnderCursor,
+                     STR_SHORTCUT_CLOSE_WINDOW_UNDER_CURSOR,  "ALT+C",  []() {
+        FireCloseWindowUnderCursor();
+    });
+    // OPENRCT2MINI gamepad-plan 1.5g: shift modifier — held-state-only
+    // (queried by handleModifiers); action lambda is a stub. Default
+    // keyboard binding is empty because SDL's real Shift mod state
+    // already drives these behaviours; this shortcut is for host
+    // gamepad users who want to bind PAD R3 / PAD L3 / etc. to access
+    // OpenRCT2's KMOD_SHIFT-driven construction features.
+    registerShortcut(ShortcutId::kInterfaceShiftModifier,
+                     STR_SHORTCUT_SHIFT_MODIFIER,             "",       []() {});
+    // OPENRCT2MINI gamepad-plan 1.6c.1: dismiss / confirm — fire the
+    // active modal's registered ModalHooks callbacks. Action lambdas
+    // are STUBS at this stage (1.6c.1 ships only the IDs + defaults).
+    // 1.6c.2 wires the InputManager modal-gate dispatch that consults
+    // these shortcuts via shortcutManager.matches() ahead of the per-
+    // context hardcoded checks. After 1.6c.7 the matching gate is the
+    // sole dispatcher; the per-modal callbacks installed via
+    // setModalHooks do the actual work.
+    //
+    // Default ESCAPE / RETURN keyboard bindings overlap with the
+    // existing kInterfaceCancelConstruction (ESCAPE) and
+    // kViewGeneralRotateClockwise (RETURN) bindings — both shortcuts
+    // fire on the same key, action lambdas run independently, no
+    // regression for world-context users.
+    registerShortcut(ShortcutId::kInterfaceDismiss,
+                     STR_SHORTCUT_DISMISS,                    "ESCAPE", []() {});
+    registerShortcut(ShortcutId::kInterfaceConfirm,
+                     STR_SHORTCUT_CONFIRM,                    "RETURN", []() {});
+    // OPENRCT2MINI mouse-input refactor: camera drag shortcut. Held →
+    // camera pans with cursor motion. Tap-and-release < 500ms → fires
+    // the context-sensitive right-click action at the cursor position
+    // (delete tile element, etc.). Default mouse binding RMB and
+    // default gamepad binding PAD B added below; the action lambda is
+    // a stub because the per-frame poll in UiContext::ProcessWorld-
+    // Cursor drives both Begin and End directly off the bound input's
+    // held state.
+    registerShortcut(ShortcutId::kInterfaceCameraDrag,
+                     STR_SHORTCUT_CAMERA_DRAG,                "",       []() {});
     // clang-format on
 
     // OPENRCT2MINI gamepad-plan 1.4: ship a conservative set of default
@@ -951,6 +1103,122 @@ void ShortcutManager::registerDefaultShortcuts()
     registerPadDefault(ShortcutId::kViewGeneralZoomOut,             "PAD L2");
     registerPadDefault(ShortcutId::kViewGeneralZoomIn,              "PAD R2");
 
+    // OPENRCT2MINI gamepad-plan 1.5h: device-friendly keyboard
+    // defaults for the W/S scancodes that the device's vendor SDL2
+    // emits for L2 / R2. The SCANCODE_W/_S intercepts in UiContext
+    // were dropped — these keyboard bindings now drive view-rotate
+    // unconditionally on the device, matching cut-162's L2-CCW /
+    // R2-CW polish. Loses the _vGamepadMod swap-to-zoom behaviour;
+    // user binds a chord shortcut if they miss it.
+    registerKeyboardDefault(ShortcutId::kViewGeneralRotateAnticlockwise, "W");
+    registerKeyboardDefault(ShortcutId::kViewGeneralRotateClockwise,     "S");
+
+    // OPENRCT2MINI gamepad-plan 1.5i: device-friendly keyboard default
+    // for the V scancode (face-Y on the device's vendor SDL2 mapping).
+    // The SCANCODE_V intercept in UiContext was dropped in favour of
+    // ShortcutManager dispatch.
+    registerKeyboardDefault(ShortcutId::kInterfaceRotateConstruction, "V");
+
+    // OPENRCT2MINI gamepad-plan 1.5j: the device's R1 maps to LALT
+    // through vendor SDL2. With the legacy _vKbShift / _vGamepadMod
+    // setters in the SCANCODE_LALT handler stripped down to just the
+    // R1+C chord prerequisite, fast-cursor needs an explicit binding
+    // path. LALT as a keyboard default for cursor.fast_modifier means
+    // R1 on the device drives fast-cursor through the new held-state
+    // poll. Host users can rebind to LSHIFT or whatever they prefer.
+    registerKeyboardDefault(ShortcutId::kCursorFastModifier, "LALT");
+
+    // OPENRCT2MINI gamepad-plan 1.6: device-friendly keyboard defaults
+    // for cursor motion / click / cancel. The device's vendor SDL2
+    // emits arrow scancodes for the D-pad and Z / X for face buttons
+    // (cut 38b's mapping). Without these defaults, the legacy _vKb*
+    // arrow / Z / X latches in InterceptVirtualCursorKey would have
+    // been the only things driving cursor motion / click / cancel on
+    // the device — and 1.6 deletes those latches entirely. Adding
+    // the bindings explicitly here means scancode → shortcut fall-
+    // through covers the device's needs unconditionally, and the user
+    // can additionally rebind to anything they want via the rebind UI.
+    registerKeyboardDefault(ShortcutId::kCursorUp,     "UP");
+    registerKeyboardDefault(ShortcutId::kCursorDown,   "DOWN");
+    registerKeyboardDefault(ShortcutId::kCursorLeft,   "LEFT");
+    registerKeyboardDefault(ShortcutId::kCursorRight,  "RIGHT");
+    registerKeyboardDefault(ShortcutId::kCursorClick,  "Z");
+    registerKeyboardDefault(ShortcutId::kCursorCancel, "X");
+
+    // OPENRCT2MINI mouse-input refactor: real mouse buttons used to be
+    // hardcoded in the SDL_MOUSEBUTTONDOWN/UP handler — SDL_BUTTON_LEFT
+    // synthesised StoreMouseInput(leftPress) directly. That path is gone
+    // now; mouse buttons are bindable through the same shortcut system
+    // as keyboard / gamepad. cursor.click / cursor.cancel get LMB / RMB
+    // defaults so the user-facing behaviour matches what was hardcoded
+    // before — but the user can rebind to any input.
+    //
+    // The polling loop in ProcessWorldCursor::handleButton picks up the
+    // shortcut held-state (via getState(), which consults
+    // SDL_GetMouseState's bitmask for mouse-kind bindings) and
+    // synthesises StoreMouseInput on transitions.
+    registerMouseDefault(ShortcutId::kCursorClick,  "LMB");
+    registerMouseDefault(ShortcutId::kCursorCancel, "RMB");
+
+    // OPENRCT2MINI mouse-input refactor: scroll-wheel defaults bind
+    // to the CONTEXT-SENSITIVE Zoom+Scroll shortcuts (not the
+    // unconditional kViewGeneralZoomIn/Out). The action lambdas
+    // dispatch on cursor position: zoom over viewport, no-op over
+    // scroll/spinner widgets so the existing _cursorState.wheel feed
+    // handles widget-local scroll without double-firing zoom.
+    registerMouseDefault(ShortcutId::kViewZoomScrollUp,   "MOUSE WHEEL UP");
+    registerMouseDefault(ShortcutId::kViewZoomScrollDown, "MOUSE WHEEL DOWN");
+
+    // OPENRCT2MINI mouse-input refactor: camera drag default bindings.
+    // RMB drives the legacy "press and hold to pan camera" gesture;
+    // PAD B is the gamepad equivalent. Both also fire cursor.cancel
+    // (right-click action) because cursor.cancel is bound to the
+    // same inputs by default — the cursor.cancel poll synthesises a
+    // rightPress that gets consumed for window-position-drag /
+    // scroll-drag (when not over a viewport) by the existing
+    // MouseInput state machine, while kInterfaceCameraDrag handles
+    // the camera-pan-on-viewport case via its own poll. The two
+    // don't conflict because the camera-drag poll only fires when
+    // cursor is over a viewport, and we removed the camera-drag
+    // branch from the rightPress switch in MouseInput.
+    registerMouseDefault(ShortcutId::kInterfaceCameraDrag, "RMB");
+    // shade-window keeps the C scancode as its default (the device
+    // emits C for face-X). The SCANCODE_C handler in UiContext keeps
+    // the R1+C chord-close special case as the only remaining hard-
+    // coded device intercept until Phase 2 lands real joybutton events.
+    registerKeyboardDefault(ShortcutId::kInterfaceShadeWindowUnderCursor, "C");
+
+    // OPENRCT2MINI gamepad-plan 1.6: device L1 dual-emits Q + LSHIFT
+    // through the vendor SDL2's set_key patch. The legacy SCANCODE_Q
+    // intercept that injected KMOD_LSHIFT into SDL's mod state was
+    // dropped in 1.6 — Q is now the default keyboard binding for the
+    // shift modifier shortcut, which ORs into ModifierKey::shift via
+    // handleModifiers. Same downstream effect on the device, but
+    // cleaner: shift modifier doesn't pollute SDL chord-shortcut
+    // matching (CTRL+SHIFT+S etc. only see real Shift). Host users
+    // can rebind to whatever physical control they prefer.
+    registerKeyboardDefault(ShortcutId::kInterfaceShiftModifier, "Q");
+
+    // OPENRCT2MINI shift/ctrl-modifier refactor: bind the real Shift /
+    // Ctrl keys to their respective modifier shortcuts as defaults. The
+    // SDL_GetModState() hardcoded path in handleModifiers used to set
+    // ModifierKey::shift / ::ctrl unconditionally on real Shift / Ctrl
+    // press; that path is gone, so out-of-the-box Shift / Ctrl behaviour
+    // depends on these bindings now. Both LSHIFT and RSHIFT (and likewise
+    // for Ctrl) are bound so either side of the keyboard works.
+    //
+    // Standalone modifier-key tokens are recognised by ShortcutInput's
+    // parser (ShortcutInput.cpp; previously they tried to parse as
+    // chord prefixes and silently produced a 0-button binding).
+    // InputManager::getState recognises bare-modifier keyboard
+    // bindings and reads the keyboard scancode bitmap directly,
+    // bypassing the SDL mod-state comparison that would otherwise
+    // always mismatch.
+    registerKeyboardDefault(ShortcutId::kInterfaceShiftModifier,    "LSHIFT");
+    registerKeyboardDefault(ShortcutId::kInterfaceShiftModifier,    "RSHIFT");
+    registerKeyboardDefault(ShortcutId::kInterfaceConstructionZLock, "LCTRL");
+    registerKeyboardDefault(ShortcutId::kInterfaceConstructionZLock, "RCTRL");
+
     // System buttons:
     registerPadDefault(ShortcutId::kInterfacePause,        "PAD START");
     registerPadDefault(ShortcutId::kDebugToggleConsole,    "PAD GUIDE");
@@ -965,4 +1233,104 @@ void ShortcutManager::registerDefaultShortcuts()
     // shortcut. Phase 1.5 migrates the cursor / click / shade behaviours
     // to ShortcutManager, at which point face-button defaults can ship
     // without conflict.
+    //
+    // OPENRCT2MINI gamepad-plan 1.5a: pre-register PAD defaults for the
+    // new cursor / chord shortcut IDs added above. The defaults LIVE in
+    // shortcuts.json (and show up in the rebind UI), but the actions are
+    // stub no-ops in 1.5a — pressing these buttons does nothing yet.
+    // The legacy _vKb* direct-poll path is still authoritative for
+    // cursor / click / shade until 1.6 deletes it.
+    //
+    // Why ship PAD defaults now even though they're inert: it lets the
+    // user see + test the rebind UI in 1.5a, and means 1.5b-f can wire
+    // actions one at a time without also having to plumb defaults each
+    // time.
+    registerPadDefault(ShortcutId::kCursorUp,                          "PAD DPAD_UP");
+    registerPadDefault(ShortcutId::kCursorDown,                        "PAD DPAD_DOWN");
+    registerPadDefault(ShortcutId::kCursorLeft,                        "PAD DPAD_LEFT");
+    registerPadDefault(ShortcutId::kCursorRight,                       "PAD DPAD_RIGHT");
+    // OPENRCT2MINI focus-mode-plan §F.9: D-pad defaults for focus
+    // direction. Overlaps with cursor.* on purpose (both fire on
+    // D-pad press) so first-launch behaviour matches what users
+    // saw before this split. The two ids are separate in the
+    // rebind UI, so users can drop one without affecting the
+    // other.
+    registerPadDefault(ShortcutId::kFocusUp,                           "PAD DPAD_UP");
+    registerPadDefault(ShortcutId::kFocusDown,                         "PAD DPAD_DOWN");
+    registerPadDefault(ShortcutId::kFocusLeft,                         "PAD DPAD_LEFT");
+    registerPadDefault(ShortcutId::kFocusRight,                        "PAD DPAD_RIGHT");
+    // OPENRCT2MINI gamepad-plan 1.9 follow-on: also bind the left
+    // stick to cursor motion. Each cursor.* shortcut now has BOTH
+    // a digital DPAD binding AND an analog STICK_L axis binding —
+    // ProcessWorldCursor's digital block handles the dpad, and its
+    // new analog block handles the stick via getAnalogState. User
+    // can rebind either side via the Shortcut Keys window.
+    registerPadDefault(ShortcutId::kCursorUp,                          "PAD STICK_L UP");
+    registerPadDefault(ShortcutId::kCursorDown,                        "PAD STICK_L DOWN");
+    registerPadDefault(ShortcutId::kCursorLeft,                        "PAD STICK_L LEFT");
+    registerPadDefault(ShortcutId::kCursorRight,                       "PAD STICK_L RIGHT");
+    registerPadDefault(ShortcutId::kCursorClick,                       "PAD A");
+    registerPadDefault(ShortcutId::kCursorCancel,                      "PAD B");
+    // OPENRCT2MINI mouse-input refactor: gamepad camera drag default.
+    // PAD B is also bound to cursor.cancel (right-click). Holding it
+    // over the viewport pans the camera via the kInterfaceCameraDrag
+    // poll; releasing within ~500ms additionally fires the
+    // context-sensitive right-click action (delete tile element).
+    registerPadDefault(ShortcutId::kInterfaceCameraDrag,               "PAD B");
+    // OPENRCT2MINI gamepad-plan 1.9 follow-on: bind the right stick
+    // to view-scroll. The kViewScroll* shortcuts already exist with
+    // arrow-key keyboard defaults; PAD STICK_R bindings layer on
+    // alongside so the right stick pans the camera through the
+    // bindable shortcut system rather than the previous hardcoded
+    // SDL_CONTROLLER_AXIS_RIGHTX/Y poll. processAnalogueInput reads
+    // these via getAnalogState.
+    registerPadDefault(ShortcutId::kViewScrollUp,                      "PAD STICK_R UP");
+    registerPadDefault(ShortcutId::kViewScrollDown,                    "PAD STICK_R DOWN");
+    registerPadDefault(ShortcutId::kViewScrollLeft,                    "PAD STICK_R LEFT");
+    registerPadDefault(ShortcutId::kViewScrollRight,                   "PAD STICK_R RIGHT");
+    // OPENRCT2MINI gamepad-plan 1.6b step 0: PAD R1 default for fast-
+    // cursor modifier. kViewGeneralRotateClockwise also defaults to
+    // PAD R1 — that's intentional per gamepad-plan §1.4. They live in
+    // different shortcut buckets and the dispatcher fires them via
+    // independent paths: rotate-cw is a one-shot action lambda on
+    // press transition, fast-modifier is a per-frame held-state poll.
+    // Pressing R1 once rotates the view AND briefly speeds the cursor
+    // — pretty much imperceptible on a tap. Holding R1 keeps the
+    // cursor fast (the design intent) and the rotate-cw action fires
+    // exactly once on the press edge. No double-fire issue.
+    //
+    // This binding replaces the legacy
+    // SDL_GameControllerGetButton(BUTTON_RIGHTSHOULDER) direct poll in
+    // UiContext::ProcessVirtualGamepadCursor that 1.6b step 0 deletes.
+    // Without this default, host gamepad users would silently lose
+    // fast-cursor when the direct poll goes away (the device path is
+    // unaffected — vendor SDL2 emits LALT scancode for R1, picked up
+    // via the kCursorFastModifier keyboard default at line ~1031).
+    registerPadDefault(ShortcutId::kCursorFastModifier,                "PAD R1");
+    // kInterfaceConstructionZLock: same reasoning, no PAD default —
+    // most physical buttons that make sense here already have view
+    // bindings. 1.5d wires the held-state query and the user can
+    // rebind to whatever they prefer (likely L1+R1 chord).
+    registerPadDefault(ShortcutId::kInterfaceShadeWindowUnderCursor,   "PAD Y");
+    // OPENRCT2MINI hold-binding refactor: shade-all is the hold-
+    // variant of the same physical button as shade-window. The
+    // dispatcher's _holdPending mechanism coordinates the two: a
+    // tap of PAD Y / C fires shade-window (the bindings on
+    // kInterfaceShadeWindowUnderCursor have holdMs == 0); holding
+    // for 500 ms fires shade-all (these HOLD bindings have
+    // holdMs == 500 via the "HOLD " parser prefix).
+    registerPadDefault(ShortcutId::kInterfaceToggleShadeAllWindows,    "HOLD PAD Y");
+    registerKeyboardDefault(ShortcutId::kInterfaceToggleShadeAllWindows, "HOLD C");
+    registerPadDefault(ShortcutId::kInterfaceCloseWindowUnderCursor,   "PAD R1+Y");
+
+    // OPENRCT2MINI gamepad-plan 1.6c.1: dismiss / confirm PAD defaults.
+    // BACK = the small side button (Mini SELECT, DS4 Share, Xbox View);
+    // START = the small centre-right button (Mini START, DS4 Options,
+    // Xbox Menu). Mirrors the SNES / Switch convention where Select
+    // backs out and Start commits or pauses. Pause itself defaults to
+    // PAD START (line 1067) — same physical button. Inside a modal the
+    // 1.6c dispatch fires Confirm; outside any modal it falls through
+    // to kInterfacePause's action lambda. No conflict.
+    registerPadDefault(ShortcutId::kInterfaceDismiss,                  "PAD BACK");
+    registerPadDefault(ShortcutId::kInterfaceConfirm,                  "PAD START");
 }

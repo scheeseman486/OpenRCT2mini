@@ -152,6 +152,40 @@ namespace OpenRCT2
             virtual const uint8_t* GetKeysPressed() = 0;
             virtual void SetKeysPressed(uint32_t keysym, uint8_t scancode) = 0;
 
+            // OPENRCT2MINI gamepad-plan 1.11: haptic feedback. Walks every
+            // connected SDL game controller and submits a rumble pulse via
+            // SDL_GameControllerRumble. `low` and `high` are 0.0–1.0 motor
+            // intensities (low-frequency / high-frequency). `durationMs`
+            // is the maximum runtime — SDL clears the rumble automatically
+            // when the timer expires; an in-progress rumble is overwritten
+            // by a fresh call. Globally scaled by Config::Get().general.
+            // gamepadRumbleIntensity and globally gated by gamepadRumble-
+            // Enabled before the SDL call. Silent no-op on pads SDL
+            // reports as having no rumble (SDL_GameControllerHasRumble),
+            // and a complete no-op on the dummy UiContext used by headless
+            // runs / tests / the Mini build pre-2.6.
+            virtual void RumbleControllers(float low, float high, uint32_t durationMs) = 0;
+
+            // OPENRCT2MINI gamepad-plan 1.13: DualShock-style RGB
+            // lightbar control. SetControllerLED walks every connected
+            // SDL game controller and submits an `SDL_GameControllerSet-
+            // LED(r, g, b)` colour. Globally gated by Config::Get().
+            // general.gamepadLedEnabled and scaled by gamepadLedBright-
+            // ness before the SDL call, so users can dim the bright
+            // DualShock 4/5 lightbars without re-authoring per-severity
+            // colours. Pads SDL reports as having no LED (Xbox, the
+            // Mini panel button-board, etc.) are silently skipped.
+            //   r / g / b — raw 0..255 colour as defined by the
+            //               severity → colour map in Led::tickEngine
+            //               BEFORE brightness scaling. Implementation
+            //               applies cfg.gamepadLedBrightness internally
+            //               so callers don't have to know the global.
+            // ControllerHasLED returns true if *any* currently-attached
+            // pad reports an LED — used by Led::tickEngine to avoid
+            // queueing a fade timer on no-LED setups.
+            virtual void SetControllerLED(uint8_t r, uint8_t g, uint8_t b) = 0;
+            virtual bool ControllerHasLED() = 0;
+
             // Drawing
             [[nodiscard]] virtual std::shared_ptr<Drawing::IDrawingEngineFactory> GetDrawingEngineFactory() = 0;
             virtual void DrawWeatherAnimation(

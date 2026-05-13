@@ -19,6 +19,7 @@
 #include "../core/Memory.hpp"
 #include "../core/String.hpp"
 #include "../entity/Peep.h"
+#include "../haptic/HapticEvent.h"
 #include "../interface/Viewport.h"
 #include "../localisation/Language.h"
 #include "../localisation/StringIds.h"
@@ -214,6 +215,58 @@ namespace OpenRCT2::Audio
         CreateAudioChannel(audioSource, MixerGroup::Sound, false, DStoMixerVolume(volume), DStoMixerPan(mixerPan), 1, true);
     }
 
+    bool getPcmForSoundId(SoundId soundId, std::vector<uint8_t>& outBytes, int32_t& outBytesPerSec)
+    {
+        // OPENRCT2MINI gamepad-plan 1.11b: PCM accessor for the
+        // Rumble Editor's waveform pane. Available regardless of
+        // IsAvailable() — we only need the source bytes, not a
+        // playback channel.
+        outBytes.clear();
+        outBytesPerSec = 0;
+
+        auto [baseAudioObject, sampleIndex] = GetAudioObjectAndSampleIndex(soundId);
+        if (baseAudioObject == nullptr)
+            return false;
+
+        auto* source = baseAudioObject->GetSample(sampleIndex);
+        if (source == nullptr)
+            return false;
+
+        const auto totalLen = source->GetLength();
+        if (totalLen == 0)
+            return false;
+
+        outBytesPerSec = source->GetBytesPerSecond();
+        if (outBytesPerSec <= 0)
+            return false;
+
+        // Cap at 10 MiB. Larger sources are almost certainly
+        // streamed music, not haptic-authoring material.
+        constexpr uint64_t kMaxBytes = 10ull * 1024 * 1024;
+        const auto bytesToRead = static_cast<size_t>(std::min<uint64_t>(totalLen, kMaxBytes));
+        outBytes.resize(bytesToRead);
+
+        // IAudioSource::Read is a streaming read — implementations
+        // are free to return less than `len` per call (chunk reads,
+        // SDL backbuffer constraints, etc.). Loop until either we
+        // have everything we asked for or the source EOFs out.
+        // Without this loop the editor's waveform peaks were
+        // truncated to the first chunk's worth of data and the
+        // continuous-mode playhead wrapped before the audio loop
+        // fired, breaking sync.
+        size_t totalGot = 0;
+        while (totalGot < bytesToRead)
+        {
+            const auto got = source->Read(
+                outBytes.data() + totalGot, static_cast<uint64_t>(totalGot), bytesToRead - totalGot);
+            if (got == 0)
+                break;
+            totalGot += got;
+        }
+        outBytes.resize(totalGot);
+        return totalGot > 0;
+    }
+
     void Play3D(SoundId soundId, const CoordsXYZ& loc)
     {
         if (!IsAvailable())
@@ -239,6 +292,16 @@ namespace OpenRCT2::Audio
     {
         if (!IsAvailable())
             return;
+
+        // OPENRCT2MINI gamepad-plan 1.11b.3.a: rumble hook. Pushes a
+        // fresh active-playhead entry onto the haptic engine for any
+        // SoundId that has a one-shot envelope authored in
+        // rumble.json. No-op if the SoundId has no profile, the
+        // profile is continuous-mode, or no rumble-capable controller
+        // is connected. Volume / pan are intentionally NOT forwarded
+        // — the rumble profile owns the curve, independent of how
+        // loud the sample plays.
+        OpenRCT2::Haptic::onSoundPlayed(soundId);
 
         // Get sound from base object
         auto [baseAudioObject, sampleIndex] = GetAudioObjectAndSampleIndex(soundId);

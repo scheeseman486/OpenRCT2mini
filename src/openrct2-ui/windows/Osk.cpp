@@ -20,6 +20,8 @@
 #include <array>
 #include <cstring>
 #include <openrct2-ui/UiContext.h>
+#include <openrct2-ui/input/InputManager.h>
+#include <openrct2-ui/input/ShortcutIds.h>
 #include <openrct2-ui/interface/InGameConsole.h>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2-ui/interface/Window.h>
@@ -207,6 +209,11 @@ namespace OpenRCT2::Ui::Windows
             int _selKey = 0;
             bool _caps = false;
             int _pressFlashFrames = 0;
+            // OPENRCT2MINI gamepad-plan 1.6c.3: token returned from
+            // pushModalHooks in onOpen, passed back to popModalHooks
+            // in onClose. Stack pop is by token so the parent
+            // TextInput's hooks aren't accidentally torn down.
+            OpenRCT2::Ui::InputManager::ModalHooksToken _modalHooksToken{};
             WidgetIndex _pressFlashIdx = kWidgetIndexNull;
             // Edit-strip state.
             u8string _editBuffer;
@@ -251,6 +258,7 @@ namespace OpenRCT2::Ui::Windows
                         _selRow = 0;
                         _selKey = 0;
                     }
+                    SyncFocusState(); // Phase F.6
                     invalidate();
                 }
             }
@@ -325,11 +333,49 @@ namespace OpenRCT2::Ui::Windows
                     _selRow = 0;
                     _selKey = 0;
                 }
+                // Phase F.6: publish initial selection so the generic
+                // focus ring paints the right key from the first frame.
+                SyncFocusState();
+
+                // OPENRCT2MINI gamepad-plan 1.6c.3: route kInterfaceDismiss
+                // / kInterfaceConfirm to OSK Cancel / Commit. Replaces the
+                // hardcoded SDL_SCANCODE_RETURN / SDL_SCANCODE_ESCAPE arms
+                // in IsOskScancode + FireScancode below — with hooks
+                // installed, those keys flow through InputManager, match
+                // the dismiss / confirm shortcuts, and fire these
+                // callbacks before any other dispatch sees them. PAD BACK
+                // / PAD START fire here too via the same path. Lambdas
+                // capture `this`; lifetime is scoped to onClose's
+                // clearModalHooks call.
+                auto& im = OpenRCT2::Ui::GetInputManager();
+                _modalHooksToken = im.pushModalHooks({
+                    /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                        Cancel();
+                        return true;
+                    },
+                    /*confirm=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                        Commit();
+                        return true;
+                    },
+                });
             }
 
             void onClose() override
             {
                 gGamePaused &= ~GAME_PAUSED_MODAL;
+                // OPENRCT2MINI gamepad-plan 1.6c.3: pop our modal hooks
+                // off the stack — exposes the parent (TextInput) hooks
+                // again if there is one. Token-based pop so nested
+                // modals can close in any order without disturbing
+                // each other's slot.
+                OpenRCT2::Ui::GetInputManager().popModalHooks(_modalHooksToken);
+                // Phase F.6: drop our focus claim so the next frame's
+                // bootstrap can re-snap to whatever's underneath. If
+                // we don't clear here, the focus ring would persist
+                // pointing at a now-dead window-class for one tick
+                // (Phase F.3's stale-check would clear it anyway, but
+                // clearing here is the honest signal).
+                OpenRCT2::Ui::GetInputManager().clearFocus();
             }
 
             void onUpdate() override
@@ -382,22 +428,15 @@ namespace OpenRCT2::Ui::Windows
             void onDrawWidget(WidgetIndex widgetIndex, RenderTarget& rt) override
             {
                 // Default rendering (frame, button face, label).
+                // The selection-ring overlay that used to live here was
+                // deleted in Phase F.6 — the generic render hook in
+                // WindowDrawSingle (via Ui::drawFocusOutlineIfActive)
+                // now paints the yellow inset outline for the focused
+                // widget across ALL focusable windows, so the OSK gets
+                // it for free as long as it publishes its current
+                // selection via SyncFocusState. See WidgetFocus.h
+                // §F.5 and the SyncFocusState comment for the wiring.
                 Window::onDrawWidget(widgetIndex, rt);
-
-                // Selection outline — drawn AFTER widgetDraw so it sits
-                // on top. Colour intentionally distinct from the
-                // inherited theme so it's legible against any parent.
-                if (widgetIndex == GetSelectedWidgetIdx())
-                {
-                    const auto& widget = widgets[widgetIndex];
-                    const auto rect = ScreenRect{
-                        { windowPos.x + widget.left, windowPos.y + widget.top },
-                        { windowPos.x + widget.right, windowPos.y + widget.bottom },
-                    };
-                    Rectangle::fillInset(
-                        rt, rect, ColourWithFlags{ Colour::brightYellow },
-                        Rectangle::BorderStyle::outset, Rectangle::FillBrightness::light, Rectangle::FillMode::none);
-                }
             }
 
             // OPENRCT2MINI: snapshot accessors so the parent
@@ -626,6 +665,31 @@ namespace OpenRCT2::Ui::Windows
                 return _keys[_selRow][_selKey];
             }
 
+            // OPENRCT2MINI focus-mode-plan / Phase F.6: publish the OSK's
+            // current 2D selection to InputManager's shared focus state.
+            // Phase F.5's generic render hook reads that state and paints
+            // the yellow ring, replacing the OSK's per-key outline draw
+            // (deleted from onDrawWidget — search for the F.6 comment
+            // there). Called after every selection change (MoveSelection*,
+            // onOpen reset, setMode reset). onClose mirrors the cleanup
+            // via clearFocus().
+            //
+            // The shared focus state is intentionally a write-only sink
+            // from the OSK's perspective for now: we publish, the
+            // renderer consumes. The OSK keeps owning navigation /
+            // activation via _selRow + _selKey + FireScancode because
+            // its 2D row/column layout has horizontal-runs / non-
+            // uniform row widths that the generic spatial search would
+            // sometimes wander through. A future iteration can replace
+            // the 2D state with focus state + widget-coord nav helpers
+            // (per focus-mode-plan §F.6 follow-up), but that's not
+            // needed to consolidate the ring rendering — which is the
+            // headline goal of F.6.
+            void SyncFocusState()
+            {
+                OpenRCT2::Ui::GetInputManager().setFocus(WindowClass::osk, GetSelectedWidgetIdx());
+            }
+
             void DrawEditStrip(RenderTarget& rt)
             {
                 const auto stripRect = ScreenRect{
@@ -803,6 +867,7 @@ namespace OpenRCT2::Ui::Windows
                 if (_keys[_selRow].empty())
                     return;
                 _selKey = (_selKey - 1 + static_cast<int>(_keys[_selRow].size())) % static_cast<int>(_keys[_selRow].size());
+                SyncFocusState(); // Phase F.6
             }
 
             void MoveSelectionRight()
@@ -810,6 +875,7 @@ namespace OpenRCT2::Ui::Windows
                 if (_keys[_selRow].empty())
                     return;
                 _selKey = (_selKey + 1) % static_cast<int>(_keys[_selRow].size());
+                SyncFocusState(); // Phase F.6
             }
 
             void MoveSelectionVertical(int dir)
@@ -833,6 +899,7 @@ namespace OpenRCT2::Ui::Windows
                 }
                 _selRow = newRow;
                 _selKey = bestKey;
+                SyncFocusState(); // Phase F.6
             }
 
             void Commit()
@@ -935,8 +1002,14 @@ namespace OpenRCT2::Ui::Windows
                     case SDL_SCANCODE_A:
                     case SDL_SCANCODE_LALT:   // R1 — caret right
                     case SDL_SCANCODE_RALT:
-                    case SDL_SCANCODE_RETURN: // Start — commit
-                    case SDL_SCANCODE_ESCAPE: // Select — cancel
+                    // OPENRCT2MINI gamepad-plan 1.6c.3: SDL_SCANCODE_RETURN
+                    // / SDL_SCANCODE_ESCAPE removed — those keys now flow
+                    // through InputManager and match
+                    // kInterfaceConfirm / kInterfaceDismiss respectively,
+                    // which fire the OSK's registered ModalHooks
+                    // callbacks (Commit / Cancel). Same behaviour, but
+                    // routed through the bindable shortcut system so PAD
+                    // START / PAD BACK work too.
                     case SDL_SCANCODE_W:      // L2 — swallow / console scroll prev (was F14)
                     case SDL_SCANCODE_S:      // R2 — swallow / console scroll next (was F15)
                         return true;
@@ -1001,12 +1074,11 @@ namespace OpenRCT2::Ui::Windows
                     case SDL_SCANCODE_RALT:
                         CaretRight();
                         break;
-                    case SDL_SCANCODE_RETURN:
-                        Commit();
-                        break;
-                    case SDL_SCANCODE_ESCAPE:
-                        Cancel();
-                        break;
+                    // OPENRCT2MINI gamepad-plan 1.6c.3: SDL_SCANCODE_RETURN
+                    // / SDL_SCANCODE_ESCAPE arms deleted — the matching
+                    // ModalHooks callbacks installed in onOpen() fire
+                    // Commit / Cancel before the scancode reaches this
+                    // dispatcher.
                     case SDL_SCANCODE_W: // L2 (W0: was F14)
                         if (_target == OskTarget::Console)
                             OpenRCT2::Ui::GetInGameConsole().Input(ConsoleInput::ScrollPrevious);

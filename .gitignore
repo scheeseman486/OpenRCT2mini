@@ -12,20 +12,29 @@
 /build-arm/
 /build-host/
 /build-host-i686/
+/build-asan/
 
-# Internal planning documents — Claude-generated, scratch material, not part of
-# the published source tree. Kept on disk so the dev can reference them locally
-# without committing scratch reasoning into git history.
+# Internal planning documents — design plans, audits, peer-reviews, phase
+# progress logs, perf reports. Kept on disk so the dev can reference them
+# locally without committing scratch reasoning into git history. Anything
+# user-facing (readme.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, contributors.md,
+# THIRD_PARTY_NOTICES.md) doesn't match these patterns and stays tracked.
+/*-plan.md
+/*-plan-review.md
+/*-audit.md
+/phase-*.md
+/perf-report-*.md
 /OpenRCT2mini-Plan.md
-/phase-a-baseline.md
-/phase-b-progress.md
-/phase-c-iteration.md
-/window-mgmt-plan.md
 
 # Local game-data installs used for on-host testing. RCT1 / RCT2 are
 # Chris Sawyer / Atari / Infogrames property — not redistributable. The user
 # of an OpenRCT2mini build supplies their own legitimate copies (see readme.md).
 /gamedata/
+
+# Sprite dumps extracted from g1.dat / g2.dat for visual reference during UI
+# work (cut 50 / Rumble Editor v2.12 / etc.). They originate from the
+# proprietary game data and are not redistributable.
+/ui_art/
 
 # Build / packaging logs and per-revision dumps generated under dist/.
 # (dist/ itself is excluded by upstream below, but make the intent explicit

@@ -1,9 +1,18 @@
 /*****************************************************************************
  * OpenRCT2mini revision 71 — persistent sprite-decode cache implementation.
  * See SpriteCache.h for design rationale.
+ *
+ * host-restoration-plan §1c: the entire active body is gated on
+ * OPENRCT2MINI. On host the cache is a no-op — Lookup always misses,
+ * Store does nothing, Init does nothing. ImageTable just decodes fresh
+ * each launch (which is the upstream behaviour anyway). The Linux mmap /
+ * fstat / unlink / fcntl calls also don't need to compile on Windows.
  *****************************************************************************/
 
 #include "SpriteCache.h"
+
+#ifdef OPENRCT2MINI
+
 #include "../Diagnostic.h"
 #include "../profiling/Sampler.h"
 
@@ -561,3 +570,32 @@ namespace OpenRCT2::Drawing
         return stats;
     }
 } // namespace OpenRCT2::Drawing
+
+#else // !OPENRCT2MINI
+
+// Host stubs. Always miss on lookup; storing is a no-op.
+namespace OpenRCT2::Drawing
+{
+    SpriteCacheKey ComputeSpriteCacheKey(
+        std::string_view /*objectIdentifier*/, std::string_view /*sourcePath*/, bool /*csgLoaded*/)
+    {
+        return 0;
+    }
+
+    std::optional<SpriteCacheHit> SpriteCacheLookup(SpriteCacheKey /*key*/)
+    {
+        return std::nullopt;
+    }
+
+    void SpriteCacheStore(
+        SpriteCacheKey /*key*/, const std::vector<G1Element>& /*entries*/,
+        const uint8_t* /*packedPixels*/, size_t /*packedSize*/, bool /*usesFallbackSprites*/)
+    {
+    }
+
+    void SpriteCacheInit() {}
+
+    SpriteCacheStats GetSpriteCacheStats() { return {}; }
+} // namespace OpenRCT2::Drawing
+
+#endif // OPENRCT2MINI

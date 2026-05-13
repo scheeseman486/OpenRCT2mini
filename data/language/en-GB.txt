@@ -3864,4 +3864,107 @@ STR_7053    :Snapshot save failed
 # OPENRCT2MINI: title-screen entry point for the Performance Profiler.
 STR_7054    :Start Profiler
 STR_7055    :Open the Performance Profiler window. The profiler persists across the title screen and game so it can capture park-load metrics.
+# OPENRCT2MINI gamepad-plan 1.5a: cursor + chord shortcut names exposed in the rebind UI.
+STR_7056    :Move cursor up
+STR_7057    :Move cursor down
+STR_7058    :Move cursor left
+STR_7059    :Move cursor right
+STR_7060    :Cursor click (primary)
+STR_7061    :Cursor cancel (secondary)
+STR_7062    :Cursor fast-move modifier
+STR_7063    :Construction Z-axis lock modifier
+STR_7064    :Shade window under cursor
+STR_7065    :Shade / unshade all windows
+STR_7066    :Close window under cursor
+# OPENRCT2MINI gamepad-plan 1.5g: generic shift modifier (vertical track stack etc.) for gamepad users.
+STR_7067    :Shift modifier (vertical placement)
+# OPENRCT2MINI gamepad-plan 1.6c: generic dismiss / confirm — bindable equivalents of Escape / Return for any modal context.
+STR_7068    :Dismiss dialog / Cancel
+STR_7069    :Confirm dialog / OK
+# OPENRCT2MINI gamepad-plan 1.7c: live capture preview text — wraps the captured chord string and the 5-second countdown so the text inherits the modal's colour scheme.
+STR_7070    :{WINDOW_COLOUR_2}{STRING}
+STR_7071    :{WINDOW_COLOUR_2}{STRING}
+# OPENRCT2MINI gamepad-plan 1.7e: append-mode checkbox in the rebind modal.
+STR_7072    :Add to existing
+STR_7073    :Keep existing bindings and add this new one alongside, instead of replacing them
+# OPENRCT2MINI gamepad-plan 1.7g: rejected-conflict message displayed in the rebind modal when the new binding collides with another shortcut.
+STR_7074    :{WINDOW_COLOUR_2}Already bound to: {STRING}
+# OPENRCT2MINI mouse-column refactor: column header labels in the Shortcut Keys window.
+STR_7075    :Keyboard
+STR_7076    :Gamepad
+STR_7077    :Mouse
+# OPENRCT2MINI mouse-input refactor: context-sensitive wheel shortcut labels.
+STR_7078    :Zoom or scroll up
+STR_7079    :Zoom or scroll down
+# OPENRCT2MINI mouse-input refactor: camera drag shortcut label.
+STR_7080    :Drag camera
+# OPENRCT2MINI overlap-warn: yellow colour-prefix wrapper for STR_BLACK_STRING-style binding lines that overlap another shortcut's bindings.
+STR_7081    :{YELLOW}{STRINGID}
+# OPENRCT2MINI gamepad-plan 1.11: Haptics control window strings.
+STR_7082    :Haptics
+STR_7083    :Enable rumble
+STR_7084    :Intensity
+STR_7085    :{INT32}%
+STR_7086    :Test rumble
+STR_7087    :No rumble-capable controller detected
+STR_7088    :{INT32} controller(s) detected
+# OPENRCT2MINI gamepad-plan 1.11b: Rumble Editor strings.
+STR_7089    :Rumble Editor
+STR_7090    :Mode:
+STR_7091    :One-shot
+STR_7092    :Continuous
+STR_7093    :Motor:
+STR_7094    :Low (deep rumble)
+STR_7095    :High (buzz)
+STR_7096    :Play
+STR_7097    :Stop
+STR_7098    :Move to start
+STR_7099    :Move to end
+STR_7100    :Delete
+STR_7101    :Zoom in
+STR_7102    :Zoom out
+STR_7103    :Pause
+STR_7104    :Tail:
+STR_7105    :Shorten rumble tail by 100ms
+STR_7106    :Extend rumble tail by 100ms
+STR_7107    :Disabled
+STR_7108    :Disable rumble for this sound (keeps the envelope curves saved)
+STR_7109    :Scale with speed
+STR_7110    :Reduce rumble intensity when audio plays slower (continuous sounds only)
+STR_7111    :Reduction:
+STR_7112    :Reduce reduction strength
+STR_7113    :Increase reduction strength
+# OPENRCT2MINI input-plan Track 2 §4.2: LED Options window strings.
+STR_7114    :LED
+STR_7115    :Enable LED
+STR_7116    :Brightness
+STR_7117    :{INT32}%
+STR_7118    :Test LED
+STR_7119    :No LED-capable controller detected
+STR_7120    :{INT32} LED-capable controller(s) detected
+# OPENRCT2MINI input-plan Track 2 §4.3: per-event haptic + LED toggles.
+STR_7121    :Rumble on ride crash
+STR_7122    :Rumble on critical news
+STR_7123    :Rumble on construction refusal
+STR_7124    :Flash LED on critical news
+STR_7125    :Flash LED on warning news
+STR_7126    :Flash LED on money news
+# OPENRCT2MINI focus-mode-plan / Phase F.1: focus-mode activator
+# (renamed from caret-browse — focus-mode-plan.md §3.1).
+STR_7127    :Enter focus mode
+# OPENRCT2MINI focus-mode-plan / Phase F.7: Options > Controls
+# checkbox label + tooltip for widgetFocusAlwaysOn.
+STR_7128    :Focus mode always on
+STR_7129    :{SMALLFONT}{BLACK}Auto-highlight a focusable widget in every window so the D-pad navigates buttons without first pressing the focus-mode shortcut.
+# OPENRCT2MINI focus-mode-plan §F.8: cycle the focus ring through
+# the open windows. SHIFT+TAB = next, CTRL+TAB = previous.
+STR_7130    :Cycle next window
+STR_7131    :Cycle previous window
+# OPENRCT2MINI focus-mode-plan §F.9: focus-ring direction moves,
+# separated from cursor.* so they can be rebound independently.
+STR_7132    :Move focus up
+STR_7133    :Move focus down
+STR_7134    :Move focus left
+STR_7135    :Move focus right
+STR_7136    :Show mouse cursor (exit selector)
 # OPENRCT2MINI W1b: hold to drag any window from any pixel inside it (face X / keyboard C by default).

@@ -35,15 +35,27 @@ namespace OpenRCT2::TitleSequenceManager
         ::StringId StringId;
     };
 
-    // OPENRCT2MINI cut 44: only the RCT1 and RCT2 vanilla title sequences
-    // are reachable. The other built-ins (RCT1AA, RCT1AALL, OPENRCT2)
-    // include parks that exceed our 255-ride cap (Limits.h) — the loader
-    // (cut 41b) drops the overflow rides and the title sequence renders
-    // corrupt. Keeping only the small original-game intro parks.
+    // host-restoration-plan §2i: on Mini only the vanilla RCT1/RCT2 intro
+    // parks are kept — the other built-ins (RCT1AA, RCT1AALL, OPENRCT2)
+    // include parks that exceed the 255-ride cap (Limits.h) and the
+    // park loader (cut 41b) drops overflow rides, rendering the title
+    // sequence corrupt. On host the caps are restored to upstream values
+    // (kMaxRidesInPark = 255 matches upstream; kMaxStationsPerRide = 255
+    // on host per §1a), so all five sequences load cleanly.
+#ifdef OPENRCT2MINI
     static constexpr PredefinedSequence PredefinedSequences[] = {
         { "*RCT1", "rct1.parkseq", STR_TITLE_SEQUENCE_RCT1 },
         { "*RCT2", "rct2.parkseq", STR_TITLE_SEQUENCE_RCT2 },
     };
+#else
+    static constexpr PredefinedSequence PredefinedSequences[] = {
+        { "*RCT1", "rct1.parkseq", STR_TITLE_SEQUENCE_RCT1 },
+        { "*RCT1AA", "rct1aa.parkseq", STR_TITLE_SEQUENCE_RCT1_AA },
+        { "*RCT1AALL", "rct1aall.parkseq", STR_TITLE_SEQUENCE_RCT1_AA_LL },
+        { "*RCT2", "rct2.parkseq", STR_TITLE_SEQUENCE_RCT2 },
+        { "*OPENRCT2", "openrct2.parkseq", STR_TITLE_SEQUENCE_OPENRCT2 },
+    };
+#endif
 
     static std::vector<Item> _items;
 

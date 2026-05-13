@@ -10,6 +10,8 @@
 #include <SDL.h>
 #include <SDL_keycode.h>
 #include <iterator>
+#include <openrct2-ui/UiContext.h>
+#include <openrct2-ui/input/InputManager.h>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2-ui/windows/Windows.h>
 #include <openrct2/Context.h>
@@ -66,6 +68,11 @@ namespace OpenRCT2::Ui::Windows
         // OPENRCT2MINI: OSK layout to spawn. Default is full QWERTY;
         // numeric callers tag themselves as numpad before opening.
         OskMode _oskMode = OskMode::full;
+        // OPENRCT2MINI gamepad-plan 1.6c.4: token from pushModalHooks
+        // in onOpen, passed to popModalHooks in onClose. Stack-based
+        // so a child OSK's hooks layer on top of ours and pop back to
+        // ours when the OSK closes.
+        OpenRCT2::Ui::InputManager::ModalHooksToken _modalHooksToken{};
 
     public:
         void onOpen() override
@@ -76,6 +83,28 @@ namespace OpenRCT2::Ui::Windows
             // OPENRCT2MINI: OSK is spawned by the caller AFTER Create
             // returns (so it can override the layout via OskOpen's mode
             // parameter). See WindowTextInputRawOpen et al below.
+            //
+            // OPENRCT2MINI gamepad-plan 1.6c.4: dismiss closes (cancel),
+            // confirm fires onReturnPressed (commit). Replaces the
+            // hardcoded SDLK_RETURN check in WindowTextInputKey, and
+            // adds the previously-missing ESC handler — pressing
+            // Escape while a TextInput is up now actually closes it
+            // instead of falling through to kInterfaceCancelConstruction.
+            //
+            // Stack-based: the OSK (when up) pushes its OWN slot on
+            // top of ours; OSK's onClose pops only that slot, leaving
+            // ours active again. So commit/dismiss-on-TextInput keeps
+            // working after OSK opens and closes.
+            _modalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
+                /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                    close();
+                    return true;
+                },
+                /*confirm=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                    onReturnPressed();
+                    return true;
+                },
+            });
         }
 
         void setParentWindow(WindowBase* parentWindow, WidgetIndex widgetIndex)
@@ -142,6 +171,10 @@ namespace OpenRCT2::Ui::Windows
 
         void onClose() override
         {
+            // OPENRCT2MINI gamepad-plan 1.6c.4: pop our modal-hooks
+            // slot. Done before OskClose() so the OSK still has its
+            // own (top-of-stack) slot when its onClose runs.
+            OpenRCT2::Ui::GetInputManager().popModalHooks(_modalHooksToken);
             // Make sure that we take it out of the text input
             // mode otherwise problems may occur.
             ContextStopTextInput();
@@ -531,23 +564,17 @@ namespace OpenRCT2::Ui::Windows
 
     void WindowTextInputKey(WindowBase* w, uint32_t keycode)
     {
-        const auto wndNumber = w->number;
-        const auto wndClass = w->classification;
-
-        // If the return button is pressed stop text input
-        if (keycode == SDLK_RETURN || keycode == SDLK_KP_ENTER)
-        {
-            if (w->classification == WindowClass::textinput)
-            {
-                auto textInputWindow = static_cast<TextInputWindow*>(w);
-                textInputWindow->onReturnPressed();
-            }
-        }
-
-        // The window can be potentially closed within a callback, we need to check if its still alive.
-        auto* windowMgr = GetWindowManager();
-        w = windowMgr->FindByNumber(wndClass, wndNumber);
-        if (w != nullptr)
-            w->invalidate();
+        // OPENRCT2MINI gamepad-plan 1.6c.7: SDLK_RETURN/KP_ENTER cases
+        // deleted. RETURN now routes through InputManager's ModalHooks
+        // dispatch (installed by onOpen) and fires onReturnPressed via
+        // the registered confirm callback. The invalidate() at the
+        // bottom is preserved — it triggers a redraw on every release
+        // event the gate forwards (typing, modifier keys, navigation
+        // keys), which the textbox needs to keep its caret blink in
+        // sync with input.
+        (void)keycode;
+        if (w == nullptr)
+            return;
+        w->invalidate();
     }
 } // namespace OpenRCT2::Ui::Windows

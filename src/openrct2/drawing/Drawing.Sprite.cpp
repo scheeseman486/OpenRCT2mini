@@ -480,9 +480,12 @@ bool GfxLoadG1(const IPlatformEnvironment& env)
         _g1.elements.resize(_g1.header.numEntries);
         ReadAndConvertGxDat(&fs, _g1.header.numEntries, is_rctc, _g1.elements.data());
 
-        // OPENRCT2MINI: Sprite Paging — mmap g1.dat instead of reading 16 MB into heap.
-        // The header + element-table portion has already been read sequentially via fs;
-        // we mmap the data segment starting at the current file offset.
+        // OPENRCT2MINI host-restoration-plan §1b: on Mini, Sprite Paging
+        // mmaps g1.dat (cut L3 — the 16 MB blob was the largest anonymous
+        // mapping). On host, read into heap directly to match upstream;
+        // 16 MB is unremarkable on desktop and the deleter-union shape
+        // lets either pointer flow through Gx::data identically.
+#ifdef OPENRCT2MINI
         size_t mmapDataSize = 0;
         size_t dataOffset = static_cast<size_t>(fs.GetPosition());
         _g1.data = OpenRCT2::Drawing::MmapSpriteData(path, dataOffset, _g1.header.totalSize, &mmapDataSize);
@@ -492,6 +495,9 @@ bool GfxLoadG1(const IPlatformEnvironment& env)
             LOG_WARNING("g1.dat mmap failed; falling back to heap read");
             _g1.data = OpenRCT2::Drawing::MakeHeapSpriteData(fs.ReadArray<uint8_t>(_g1.header.totalSize));
         }
+#else
+        _g1.data = OpenRCT2::Drawing::MakeHeapSpriteData(fs.ReadArray<uint8_t>(_g1.header.totalSize));
+#endif
 
         // Fix entry data offsets
         for (uint32_t i = 0; i < _g1.header.numEntries; i++)
@@ -573,7 +579,8 @@ static bool GfxLoadOpenRCT2Gx(std::string filename, Gx& target, size_t expectedN
         target.elements.resize(target.header.numEntries);
         ReadAndConvertGxDat(&fs, target.header.numEntries, false, target.elements.data());
 
-        // OPENRCT2MINI: Sprite Paging — mmap g2/palettes/fonts/tracks instead of heap-reading.
+        // OPENRCT2MINI host-restoration-plan §1b: see g1 site above.
+#ifdef OPENRCT2MINI
         size_t mmapDataSize2 = 0;
         size_t dataOffset2 = static_cast<size_t>(fs.GetPosition());
         target.data = OpenRCT2::Drawing::MmapSpriteData(path, dataOffset2, target.header.totalSize, &mmapDataSize2);
@@ -581,6 +588,9 @@ static bool GfxLoadOpenRCT2Gx(std::string filename, Gx& target, size_t expectedN
         {
             target.data = OpenRCT2::Drawing::MakeHeapSpriteData(fs.ReadArray<uint8_t>(target.header.totalSize));
         }
+#else
+        target.data = OpenRCT2::Drawing::MakeHeapSpriteData(fs.ReadArray<uint8_t>(target.header.totalSize));
+#endif
 
         if (target.header.numEntries != expectedNumItems)
         {
@@ -671,12 +681,11 @@ bool GfxLoadCsg()
         ReadAndConvertGxDat(&fileHeader, _csg.header.numEntries, false, _csg.elements.data());
 
         // Read element data
-        // OPENRCT2MINI revision 65: route CSG through SpritePager mmap. csg1.dat
-        // (the data file) has no header in front of the pixel data — csg1i.dat
-        // is separate — so the offset is GetPosition() of an unread stream, i.e.
-        // 0 in practice. Symmetry with GfxLoadG1 / GfxLoadOpenRCT2Gx kept for
-        // clarity and future-proofing. mmap drops the 39.5 MB heap pin to ~0
-        // anon RSS; the kernel pages in only what gets rendered.
+        // OPENRCT2MINI host-restoration-plan §1b: see g1 site above.
+        // On Mini, revision 65's CSG-through-SpritePager mmap stays in
+        // place (drops 39.5 MB anon RSS). On host, heap-load matches
+        // upstream OpenRCT2 v0.5.0.
+#ifdef OPENRCT2MINI
         size_t mmapCsgSize = 0;
         size_t csgOffset = static_cast<size_t>(fileData.GetPosition());
         _csg.data = OpenRCT2::Drawing::MmapSpriteData(
@@ -687,6 +696,10 @@ bool GfxLoadCsg()
             _csg.data = OpenRCT2::Drawing::MakeHeapSpriteData(
                 fileData.ReadArray<uint8_t>(_csg.header.totalSize));
         }
+#else
+        _csg.data = OpenRCT2::Drawing::MakeHeapSpriteData(
+            fileData.ReadArray<uint8_t>(_csg.header.totalSize));
+#endif
 
         // Fix entry data offsets
         for (uint32_t i = 0; i < _csg.header.numEntries; i++)

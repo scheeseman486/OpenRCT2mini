@@ -98,6 +98,27 @@ enum class WindowClass : uint8_t
     // OPENRCT2MINI: performance profiler window. See profiler-plan.md.
     performanceProfiler = 141,
 
+    // OPENRCT2MINI gamepad-plan 1.11: haptics control window. Lives in
+    // the cheats / debug dropdown under the performance profiler. Hosts
+    // the rumble enable/disable toggle, intensity slider, and a Test
+    // Rumble button so the user can verify the pad actually buzzes.
+    // Phase 1.11b layers a per-SoundId Rumble Editor on top, in its
+    // own window class — this one stays as the simple global panel.
+    haptics = 142,
+
+    // OPENRCT2MINI gamepad-plan 1.11b: rumble editor (per-SoundId
+    // envelope authoring). Sits beneath the basic Haptics window in
+    // the cheats / debug dropdown. List of all SoundId entries on the
+    // left; envelope editor with motor dropdown, mode radio, and
+    // transport controls on the right.
+    rumbleEditor = 143,
+
+    // OPENRCT2MINI input-plan Track 2 §4.2: LED Options window. Sits
+    // beneath the Rumble Editor in the cheats / debug dropdown. Mirrors
+    // the Haptics panel: master enable + brightness spinner + test
+    // button + LED-capable controller count.
+    led = 144,
+
     // Only used for colour schemes
     staff = 220,
     editorTrackBottomToolbar = 221,

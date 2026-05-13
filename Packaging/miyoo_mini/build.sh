@@ -79,6 +79,11 @@ fi
 CMAKE_FLAGS=(
     -DCMAKE_TOOLCHAIN_FILE=/src/Packaging/miyoo_mini/toolchainfile.cmake
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+    # host-restoration-plan Phase 0: the OPENRCT2MINI build variant. ON
+    # here so the cross-compile activates every #ifdef OPENRCT2MINI gate.
+    # The host build defaults this to OFF (see CMakeLists.txt) and gets
+    # upstream feature parity for those gates.
+    -DOPENRCT2MINI=ON
     -DDISABLE_NETWORK=ON
     -DDISABLE_HTTP=ON
     -DDISABLE_OPENGL=ON

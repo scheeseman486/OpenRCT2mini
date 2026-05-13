@@ -46,6 +46,42 @@ namespace OpenRCT2::News
         count
     };
 
+    // OPENRCT2MINI gamepad-plan 1.12: severity classification for
+    // news items. ItemType groups by CATEGORY (peep / money /
+    // research / …); a single category can span multiple severities
+    // ("guest drowned" and "guest joined queue" are both peep). This
+    // enum is the orthogonal severity axis, used by the DualShock
+    // LED indicator (1.13) and the critical-news rumble pulse hook
+    // deferred from 1.11.
+    //   info     — generic / cosmetic notifications, no signal needed
+    //   money    — financial / progression-positive events
+    //   warning  — actionable problem (mechanic en route, queue jam,
+    //              cash flow warning, multi-week rating countdown)
+    //   critical — emergency requiring immediate attention (ride
+    //              crash, guest drowned, vandalism, park closure /
+    //              1-week-remaining countdown)
+    enum class Severity : uint8_t
+    {
+        info,
+        money,
+        warning,
+        critical,
+    };
+
+    // Classify a news item by (ItemType, StringId, assoc).
+    //   - Most ItemTypes bucket cleanly (money → money, research →
+    //     info, etc.); the StringId lookup is only consulted for the
+    //     ride / peep / peeps types where the same category spans
+    //     multiple severities.
+    //   - `assoc` carries award type / ride id; used to disambiguate
+    //     positive vs negative awards via AwardIsPositive. Defaults
+    //     to 0 so callers that only have type + stringId don't have
+    //     to pass it.
+    // Unknown StringIds fall through to the category's default. New
+    // strings added later don't break the function — they just get
+    // the default until someone explicitly classifies them.
+    Severity GetSeverity(ItemType type, StringId stringId, uint32_t assoc = 0);
+
     constexpr size_t ItemTypeCount = static_cast<size_t>(ItemType::count);
 
     enum ItemTypeProperty : uint8_t
@@ -70,6 +106,15 @@ namespace OpenRCT2::News
         uint16_t ticks{};
         uint16_t monthYear{};
         uint8_t day{};
+        // OPENRCT2MINI gamepad-plan 1.13: classification cached at
+        // ingestion time so UpdateCurrentItem can drive the DualShock
+        // lightbar across the news item's full on-screen lifetime
+        // without re-running GetSeverity each frame and without
+        // storing the original StringId (which is lost after
+        // FormatStringLegacy bakes the text). Defaults to `info` so
+        // legacy items deserialised from older saves / network sync
+        // simply produce no LED flash rather than a wrong colour.
+        Severity severity = Severity::info;
         std::string text{};
 
         constexpr bool isEmpty() const noexcept

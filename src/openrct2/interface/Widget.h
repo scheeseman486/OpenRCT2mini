@@ -63,6 +63,13 @@ namespace OpenRCT2
     enum class WidgetFlag : uint8_t
     {
         textIsString = 0,
+        // OPENRCT2MINI v2.17: suppress the framework's per-widget
+        // click1 / click2 sound effect when the widget is pressed /
+        // released. Used by the Rumble Editor's Play/Pause button —
+        // the click1 sound competes with the rumble preview audio
+        // and makes it impossible to hear short one-shot samples.
+        // Off by default so existing buttons sound unchanged.
+        suppressClickSound = 1,
         isPressed = 2,
         isDisabled = 3,
         tooltipIsString = 4,

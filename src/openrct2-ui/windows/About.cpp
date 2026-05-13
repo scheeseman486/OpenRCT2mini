@@ -72,9 +72,12 @@ namespace OpenRCT2::Ui::Windows
     // our build with networking disabled), "Join OpenRCT2 Discord" (this is
     // a fork — wrong support channel to point at), and "Contributors..."
     // (the contributors list is in contributors.md inside the source tree).
-    // The widget slots remain in the enum to keep handler indices stable;
-    // they're just invisible / non-interactive. The corresponding case
-    // statements in onMouseUp become unreachable but are kept for clarity.
+    // Kept hidden on host too — networking is still disabled, the fork
+    // doesn't have its own Discord, and the contributors list lives in
+    // the source tree. The widget slots remain in the enum to keep handler
+    // indices stable; they're just invisible / non-interactive. The
+    // corresponding case statements in onMouseUp become unreachable but are
+    // kept for clarity.
     static const auto _windowAboutOpenRCT2Widgets = makeWidgets(
         kMainWidgets,
         makeWidget({10, 60},        {kWindowSize.width - 20, 20}, WidgetType::labelCentred, WindowColour::secondary, STR_ABOUT_OPENRCT2_DESCRIPTION           ), // Introduction

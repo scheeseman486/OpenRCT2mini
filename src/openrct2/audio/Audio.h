@@ -229,6 +229,18 @@ namespace OpenRCT2::Audio
      */
     void Play(SoundId soundId, int32_t volume, int32_t pan);
 
+    // OPENRCT2MINI gamepad-plan 1.11b: read-only PCM accessor used by
+    // the Rumble Editor waveform pane. Looks up the SoundId's
+    // IAudioSource (loading lazily if needed), allocates a buffer,
+    // and reads the entire PCM payload into it. Time is computed
+    // from `outBytesPerSec` (e.g. 44100 stereo S16 = 176400 B/s,
+    // 22050 mono S16 = 44100 B/s). Returns false if the sound
+    // isn't available (e.g. CSG not loaded). The caller treats
+    // bytes as 16-bit little-endian samples for waveform peak
+    // rendering — accuracy isn't critical for a debug viz, and
+    // RCT2 sounds are S16 by convention.
+    bool getPcmForSoundId(SoundId soundId, std::vector<uint8_t>& outBytes, int32_t& outBytesPerSec);
+
     /**
      * Plays the specified sound at a virtual location.
      * @param soundId The sound effect to play.

@@ -198,9 +198,13 @@ void TextComposition::HandleMessage(const SDL_Event* e)
                     Windows::WindowUpdateTextbox();
                     break;
                 }
-                case SDLK_RETURN:
-                    Windows::WindowCancelTextbox();
-                    break;
+                // OPENRCT2MINI gamepad-plan 1.6c.6: SDLK_RETURN case
+                // removed — RETURN now flows through to InputManager,
+                // matches kInterfaceConfirm, and fires the textbox
+                // ModalHooks confirm callback (WindowCancelTextbox)
+                // installed by WindowStartTextbox. Same final
+                // behaviour, but routed through the bindable shortcut
+                // system so PAD START works for gamepad too.
                 case SDLK_LEFT:
                     if (modifier & KB_PRIMARY_MODIFIER)
                         CaretMoveToLeftToken();

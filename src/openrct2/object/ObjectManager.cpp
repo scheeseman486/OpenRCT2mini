@@ -650,13 +650,17 @@ namespace OpenRCT2
                     ReportProgress(processed, numRequired);
             };
 
-            // OPENRCT2MINI: dispatch single-threaded. Each loadSingleObject parses a .DAT file
-            // — Sawyer chunk decode (multi-MB transient) + Object instance + ImageTable +
-            // SpriteScratchAppend write — and multi-threaded execution multiplies the peak
-            // in flight by core count (~16 on a build host, 2 on the device). Loading is
-            // I/O + decompression bound; one core saturates it without much wall-time loss
-            // and bounds peak transient by a single Object's worth.
+            // OPENRCT2MINI host-restoration-plan §1e: on Mini, single-
+            // threaded — each loadSingleObject parses a .DAT (Sawyer
+            // chunk decode + Object instance + ImageTable + SpriteScratch
+            // write) and multi-threading multiplies peak transient by
+            // worker count, exceeding device memory caps. On host, the
+            // upstream multi-worker pool is the obvious win.
+#ifdef OPENRCT2MINI
             JobPool jobs{ 1 };
+#else
+            JobPool jobs;
+#endif
             for (auto* object : objectsToLoad)
             {
                 jobs.AddTask([object, &loadSingleObject]() { loadSingleObject(object); }, completionFn);

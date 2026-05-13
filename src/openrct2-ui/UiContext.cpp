@@ -15,10 +15,13 @@
 #include "UiStringIds.h"
 #include "WindowManager.h"
 #include "drawing/engines/DrawingEngineFactory.hpp"
+#include "input/ShortcutIds.h"
 #include "input/ShortcutManager.h"
+#include "interface/Dropdown.h"
 #include "interface/InGameConsole.h"
 #include "interface/Theme.h"
 #include "interface/Viewport.h"
+#include "interface/ViewportInteraction.h"
 #include "scripting/UiExtensions.h"
 #include "title/TitleSequencePlayer.h"
 
@@ -127,37 +130,62 @@ private:
     int32_t _vcursorLastIntY = -1;
     bool _vprevA = false;
     bool _vprevB = false;
-    // Keyboard pressed-state, latched from intercepted SDL_KEYDOWN / SDL_KEYUP
-    // so the keys never reach the shortcut handler (arrows would otherwise
-    // pan the camera and Z/X would trigger menu shortcuts).
-    bool _vKbUp = false, _vKbDown = false, _vKbLeft = false, _vKbRight = false;
-    bool _vKbZ = false, _vKbX = false, _vKbShift = false;
-    // OPENRCT2MINI cut 59: R1 (F13) is also our "gamepad modifier" — when held,
-    // L2/R2/Y change action (rotate view / rotate object anti-clockwise
-    // instead of zoom / rotate clockwise).
+    // OPENRCT2MINI gamepad-plan 1.6: legacy _vKbUp/Down/Left/Right/Z/X
+    // arrow + click latches deleted. Their consumers in Process-
+    // VirtualGamepadCursor migrated to held-state polls against the
+    // cursor.* shortcut bindings; their setters in InterceptVirtual-
+    // CursorKey were removed. Keyboard arrows / Z / X still drive
+    // cursor motion / click / cancel via registerKeyboardDefault
+    // entries on the new shortcuts (Shortcuts.cpp).
+    //
+    // OPENRCT2MINI cut 59 / gamepad-plan 1.5j: _vGamepadMod remains
+    // live with exactly one consumer left — the device R1+C close-
+    // window chord in the SDL_SCANCODE_C handler. Set by the LALT/
+    // RALT handler since the device's vendor SDL2 maps R1 → LALT.
+    // Phase 2 emits real joybutton events from the vendor SDL2;
+    // when that lands, kInterfaceCloseWindowUnderCursor's "PAD R1+Y"
+    // chord fires through ShortcutManager and this flag goes away
+    // entirely.
     bool _vGamepadMod = false;
-    // OPENRCT2MINI cut 60: latched LCTRL/RCTRL state. Set by L1+R1 chord (the
-    // SDL driver swaps L1's emitted modifier from LSHIFT to LCTRL when R1 is
-    // held) or by a real keyboard Ctrl. Used to suppress fast cursor while
-    // Ctrl is held — Ctrl is the construction Z-lock modifier and fast
-    // cursor defeats the precision it provides.
-    bool _vKbCtrl = false;
+    // OPENRCT2MINI gamepad-plan 1.6: _vKbCtrl deleted — every consumer
+    // migrated to InputManager::handleModifiers()'s synthetic
+    // ModifierKey::ctrl bit (via real KMOD_CTRL + kInterfaceConstruction-
+    // ZLock binding's held-state). The SDL_SCANCODE_LCTRL/RCTRL handler
+    // no longer sets it (still returns false to propagate to SDL mod
+    // state).
+    //
+    // OPENRCT2MINI gamepad-plan 1.6: _vKbCPressed / _vKbCHoldFired /
+    // _vKbCPressedAtMs / _vKbCSuppressShade deleted. The shade tap-
+    // OPENRCT2MINI hold-binding refactor: tap-vs-hold detection for
+    // shade-window / shade-all moved into ShortcutManager's
+    // _holdPending mechanism. The legacy edge-tracking state
+    // (_vShadePrev, _vShadePressedAtMs, _vShadeHoldFired,
+    // _vShadeSuppress) is gone — the dispatcher handles deferring
+    // the tap on press, firing the hold on threshold-elapsed, and
+    // firing the tap on release-before-threshold. Same 500 ms hold
+    // window (now expressed via the "HOLD " prefix on the
+    // kInterfaceToggleShadeAllWindows binding).
 
-    // OPENRCT2MINI W9: face-X (scancode C) shade controls. Tap shades the
-    // window under the cursor (or unshades it if it was already shaded).
-    // A 500 ms hold fires a shade-all toggle once: if any shadable window
-    // is currently expanded the action shades them all, otherwise it
-    // unshades all. The hold fires once per press — releasing X is
-    // required before another hold can re-trigger.
-    bool _vKbCPressed = false;
-    bool _vKbCHoldFired = false;
-    uint32_t _vKbCPressedAtMs = 0;
-    static constexpr uint32_t kShadeAllHoldMs = 500;
-    // OPENRCT2MINI: R1+X = close window under cursor. The chord fires on
-    // X-press (immediate response), and we set this flag so the matching
-    // X-release skips the normal tap-shade action. Cleared on every fresh
-    // X-press so independent presses don't accidentally inherit it.
-    bool _vKbCSuppressShade = false;
+    // OPENRCT2MINI mouse-input refactor: edge-tracking for the
+    // kInterfaceCameraDrag held-state poll in ProcessWorldCursor.
+    // Rising edge → InputViewportDragBeginAtCursor. Falling edge →
+    // InputViewportDragEndCurrent + short-press right-click. The
+    // legacy rightPress→drag-begin path in MouseInput is gone, so
+    // this poll is the sole source of camera-drag begin/end.
+    bool _vCameraDragPrev = false;
+
+    // OPENRCT2MINI: per-frame edge-detection state for routing host
+    // gamepad cursor.* shortcuts to the OSK while it's active. See the
+    // OskIsActive() block in ProcessVirtualGamepadCursor for context —
+    // host SDL_CONTROLLERBUTTONDOWN events bypass the keyboard
+    // intercept that the OSK relies on, so we synthesise OskHandleKey
+    // calls on rising / falling edges of the held-state poll.
+    bool _vOskPrevUp = false;
+    bool _vOskPrevDown = false;
+    bool _vOskPrevLeft = false;
+    bool _vOskPrevRight = false;
+    bool _vOskPrevClick = false;
+    bool _vOskPrevCancel = false;
 
     // OPENRCT2MINI OSK: when a KEYDOWN handed to OskHandleKey closes the
     // OSK (e.g. ESCAPE → Cancel, RETURN → Commit), we still need to
@@ -256,16 +284,29 @@ private:
 
     bool InterceptVirtualCursorKey(SDL_Scancode sc, bool down)
     {
-        // OPENRCT2MINI OSK: when the on-screen keyboard is up, route every
-        // device button to it instead of running the cursor / shortcut
-        // pipeline. The OSK consumes arrows for selection, A/B/X/Y for
-        // edit actions, L1/R1 for caret motion, Start/Select for
-        // commit/cancel. We forward the scancode + down state and trust
-        // its return value.
-        if (Windows::OskIsActive() && Windows::OskHandleKey(static_cast<int32_t>(sc), down))
+        // OPENRCT2MINI gamepad-plan 1.6b step 4: when the OSK is active,
+        // route every device button to it instead of running the cursor
+        // / shortcut pipeline. The OSK consumes arrows for selection,
+        // A/B/X/Y for edit actions, L1/R1 for caret motion, Start/
+        // Select for commit/cancel. We forward the scancode + down
+        // state and trust the OSK's return value.
+        //
+        // Asks _inputManager.getActiveContext() == osk rather than
+        // Windows::OskIsActive() directly so this intercept and the
+        // per-frame ProcessOskCursor poll share one source of truth
+        // for "is the OSK driving input right now". The InputManager
+        // resolved the context at the top of this frame's process()
+        // call, so the cached value is current.
+        if (_inputManager.getActiveContext() == InputContext::osk
+            && Windows::OskHandleKey(static_cast<int32_t>(sc), down))
         {
             // If OSK closed during this event (Cancel/Commit), record
             // the scancode so its matching KEYUP gets swallowed too.
+            // We still consult Windows::OskIsActive() here because the
+            // OSK may have closed mid-event (within OskHandleKey),
+            // ahead of the next process() refreshing the cached
+            // context — we need the live "did this event close it?"
+            // signal, not the cached pre-event context.
             if (down && !Windows::OskIsActive())
                 _oskClosingSwallowKey = sc;
             return true;
@@ -278,12 +319,16 @@ private:
         }
         switch (sc)
         {
-            case SDL_SCANCODE_UP:    _vKbUp = down;    return true;
-            case SDL_SCANCODE_DOWN:  _vKbDown = down;  return true;
-            case SDL_SCANCODE_LEFT:  _vKbLeft = down;  return true;
-            case SDL_SCANCODE_RIGHT: _vKbRight = down; return true;
-            case SDL_SCANCODE_Z:     _vKbZ = down;     return true;
-            case SDL_SCANCODE_X:     _vKbX = down;     return true;
+            // OPENRCT2MINI gamepad-plan 1.6: SDL_SCANCODE_UP/DOWN/LEFT/
+            // RIGHT/Z/X intercepts removed. They previously latched
+            // into _vKb* flags that fed cursor motion / click / cancel
+            // in ProcessVirtualGamepadCursor. Now those scancodes fall
+            // through to ShortcutManager which fires the bound
+            // shortcut, and the new held-state poll picks up cursor
+            // motion / click / cancel from the binding's `current`
+            // set (default keyboard arrows / Z / X via register-
+            // KeyboardDefault calls in Shortcuts.cpp). Net effect on
+            // the device is identical; on host the user can rebind.
             // OPENRCT2MINI W0: device L1 dual-emits Q + LSHIFT and R1 dual-
             // emits A + LALT (the SDL2 set_key patch in build-deps.sh). On
             // host PC there's no patch, so pressing the user-facing letter
@@ -291,29 +336,24 @@ private:
             // bits here so a host dev pressing Q/A gets the same effective
             // behavior as a device user pressing L1/R1.
             //
-            // Q → LSHIFT in SDL mod state, so OpenRCT2's "Shift modifier"
-            // paths (raise placement Z, vertical track stack, etc.) fire.
-            // A → fast-cursor + gamepad-mod flags directly, mirroring the
-            // LALT case below; we don't bother updating SDL mod state for
-            // ALT because the LALT case immediately clears it anyway.
+            // OPENRCT2MINI gamepad-plan 1.6: SDL_SCANCODE_Q intercept
+            // dropped. Was injecting KMOD_LSHIFT into SDL's mod state
+            // so OpenRCT2's shift-modifier behaviours (raise placement
+            // Z, vertical track stack, etc.) fired when device L1 = Q
+            // was held. Now kInterfaceShiftModifier with default
+            // keyboard "Q" (registered via registerKeyboardDefault in
+            // Shortcuts.cpp) ORs into ModifierKey::shift through
+            // handleModifiers, covering the same call sites without
+            // polluting SDL's chord-shortcut matcher.
+            // OPENRCT2MINI gamepad-plan 1.5j: SDL_SCANCODE_A handler
+            // dropped. Was a host-only test path that mirrored R1's
+            // LALT mapping (so devs without a controller could test
+            // fast-cursor / gamepad-mod). Now that fast-cursor is a
+            // user-rebindable shortcut and gamepad-mod is consumed
+            // only by the device R1+C close-window chord (which is
+            // device-specific anyway), the A test path is redundant.
+            // Host devs use real keyboard or a real gamepad.
             //
-            // Text-input guard: yield Q/A to typing in peep-rename / chat /
-            // console fields. On device the OSK eats keys before they reach
-            // here, so this guard only matters on host.
-            case SDL_SCANCODE_Q:
-                if (IsTextInputActive())
-                    return false;
-                if (down)
-                    SDL_SetModState(static_cast<SDL_Keymod>(SDL_GetModState() | KMOD_LSHIFT));
-                else
-                    SDL_SetModState(static_cast<SDL_Keymod>(SDL_GetModState() & ~KMOD_LSHIFT));
-                return true;
-            case SDL_SCANCODE_A:
-                if (IsTextInputActive())
-                    return false;
-                _vKbShift = down;
-                _vGamepadMod = down;
-                return true;
             // OPENRCT2MINI cut 58/59/60/61: R1 = LALT (was RSHIFT in 58, F13
             // in 59-60). Alt is on every PC keyboard so the dev can test
             // fast-cursor / gamepad-mod natively. We swallow the event AND
@@ -324,10 +364,18 @@ private:
             // Alt bindings are ALT+RETURN and CTRL+ALT+C; neither has any
             // role on the device, and on the host the dev can use Options
             // for fullscreen toggle.
+            //
+            // OPENRCT2MINI gamepad-plan 1.5j: we no longer set _vKbShift
+            // here. cursor.fast_modifier's default keyboard binding is
+            // LALT (registered via registerKeyboardDefault in
+            // Shortcuts.cpp), so the device's R1=LALT drives fast-cursor
+            // through the new shortcut held-state poll. _vGamepadMod
+            // remains live solely for the device R1+C close-window
+            // chord (in SDL_SCANCODE_C below) until Phase 2 emits real
+            // joybutton events from the vendor SDL2.
             case SDL_SCANCODE_LALT:
             case SDL_SCANCODE_RALT:
-                _vKbShift = down;       // fast cursor
-                _vGamepadMod = down;    // gamepad modifier (L2/R2/Y semantics)
+                _vGamepadMod = down;    // device R1+C chord prerequisite
                 SDL_SetModState(static_cast<SDL_Keymod>(
                     SDL_GetModState() & ~(KMOD_LALT | KMOD_RALT)));
                 return true;
@@ -338,14 +386,19 @@ private:
             // vertical-stack, track/footpath Z-raise, etc.).
             case SDL_SCANCODE_LSHIFT:
             case SDL_SCANCODE_RSHIFT: return false;
-            // OPENRCT2MINI cut 60: latch Ctrl. The SDL driver emits LCTRL for
-            // the L1+R1 chord (in place of L1's usual LSHIFT). Real keyboard
-            // Ctrl also lands here. Don't swallow — the modifier propagates
-            // to OpenRCT2's InputManager so the construction Z-lock paths
-            // see KMOD_CTRL. The latch is consumed in
-            // ProcessVirtualGamepadCursor to suppress fast cursor.
+            // OPENRCT2MINI cut 60 / gamepad-plan 1.6: LCTRL / RCTRL.
+            // The SDL driver emits LCTRL for the L1+R1 chord (in place
+            // of L1's usual LSHIFT). Real keyboard Ctrl also lands
+            // here. Don't swallow — the modifier propagates to SDL's
+            // mod state so chord-shortcut matching still works (CTRL+L
+            // load, etc.) and so InputManager::handleModifiers() picks
+            // it up as ModifierKey::ctrl for construction Z-lock /
+            // fast-cursor suppression. 1.6 dropped the _vKbCtrl latch
+            // — handleModifiers() reads SDL's mod state directly and
+            // also ORs the kInterfaceConstructionZLock binding's held
+            // state, covering both the keyboard CTRL and any rebind.
             case SDL_SCANCODE_LCTRL:
-            case SDL_SCANCODE_RCTRL: _vKbCtrl = down; return false;
+            case SDL_SCANCODE_RCTRL: return false;
             // OPENRCT2MINI W0 (was cut 59): face X / face Y / L2 / R2 onto
             // WASD-cluster letters emitted by the SDL2 set_key patch. F-keys
             // (F14-F17) were testable only on full-size PC keyboards; letters
@@ -353,89 +406,57 @@ private:
             // dev typing in a peep-rename / chat / console field still gets
             // the literal letter; the OSK is the device-side text-entry
             // path and routes its own keys via OskHandleKey above.
-            // OPENRCT2MINI polish: rotate view is the default for L2/R2;
-            // R1 (gamepad-modifier) flips them to zoom. The original
-            // arrangement (zoom default, R1 to rotate) was awkward when
-            // sightseeing — most "I want to look around" actions are
-            // rotation, and zoom is occasional. The chord pattern stays
-            // consistent: the modifier always swaps to the secondary
-            // function.
-            case SDL_SCANCODE_W: // L2 — rotate view CCW, or zoom out with R1
-                if (IsTextInputActive())
-                    return false;
-                // OPENRCT2MINI: viewport actions are no-ops on the title
-                // sequence — the cinematic auto-pan owns the camera there
-                // and rotating / zooming derails the loop. Still swallow
-                // the key (return true) so it doesn't fall through to any
-                // user-bound shortcut and produce surprises.
-                if (down && gLegacyScene != LegacyScene::titleSequence)
-                {
-                    if (_vGamepadMod)
-                        Windows::MainWindowZoom(false, false);
-                    else
-                        ViewportRotateAll(-1);
-                }
-                return true;
-            case SDL_SCANCODE_S: // R2 — rotate view CW, or zoom in with R1
-                if (IsTextInputActive())
-                    return false;
-                if (down && gLegacyScene != LegacyScene::titleSequence)
-                {
-                    if (_vGamepadMod)
-                        Windows::MainWindowZoom(true, false);
-                    else
-                        ViewportRotateAll(1);
-                }
-                return true;
-            // OPENRCT2MINI W9: face-X (scancode C) drives the shade
-            // controls. We just latch press / release here; the actions
-            // fire from ProcessVirtualGamepadCursor's per-frame poll
-            // (hold) and the release branch below (tap). Cycle-game-speed
-            // (cut 31) and window-drag (cut 270) used to live on this
-            // button; both are gone now.
+            // OPENRCT2MINI gamepad-plan 1.5h: SDL_SCANCODE_W / _S
+            // intercepts removed. The device's vendor SDL2 emits W for
+            // L2 and S for R2; falling through to ShortcutManager lets
+            // the registered shortcut bindings (kViewGeneralRotate-
+            // Anticlockwise / kViewGeneralRotateClockwise by default
+            // per registerKeyboardDefault calls in Shortcuts.cpp) fire
+            // them. The user can rebind L2 / R2 to anything — including
+            // zoom, the gamepad-mod swap behaviour the legacy code did
+            // automatically — through the normal rebind UI.
+            //
+            // Loses the cut-31-era _vGamepadMod-conditional rotate-vs-
+            // zoom toggle. If anyone wants R1+L2 = zoom-out, they bind
+            // a chord shortcut to PAD R1+L2 against kViewGeneralZoomOut
+            // explicitly. Cleaner generalisation is worth one less
+            // baked-in chord behaviour.
+            // OPENRCT2MINI W9 / gamepad-plan 1.5c: face-X (scancode C) on
+            // the device. Tap-shade and shade-all-hold actions are now
+            // driven by the per-frame held-state poll in ProcessShade-
+            // Shortcut() — that handler watches kInterfaceShadeWindow-
+            // UnderCursor's binding (default keyboard "C" + PAD "Y") so
+            // the user can rebind to anything and it still works.
+            //
+            // What stays here: the device-only R1+C close-window chord.
+            // The keyboard path can't fire a "PAD R1+Y" chord, and a
+            // "ALT+C" keyboard chord can't fire either because the
+            // SDL_SCANCODE_LALT handler (above) scrubs KMOD_LALT/RALT
+            // from SDL's mod state to prevent ALT+RETURN double-fires.
+            // So the only way to fire close-window-via-chord on the
+            // device's vendor-SDL2 path is to check _vGamepadMod here on
+            // C-press explicitly. After firing CloseWindow we have to
+            // drop the deferred shade-window tap from ShortcutManager's
+            // _holdPending — otherwise releasing C would still fire
+            // shade-window for the same physical press (since the C
+            // press also matched the kInterfaceShadeWindowUnderCursor
+            // tap binding).
             case SDL_SCANCODE_C:
                 if (IsTextInputActive())
                     return false;
-                if (down)
+                if (down && _vGamepadMod)
                 {
-                    if (!_vKbCPressed)
-                    {
-                        _vKbCPressed = true;
-                        _vKbCPressedAtMs = SDL_GetTicks();
-                        _vKbCHoldFired = false;
-                        _vKbCSuppressShade = false;
-                        // OPENRCT2MINI: R1+X = close the window under the
-                        // cursor. Fires immediately on press; the matching
-                        // X-release sees _vKbCSuppressShade and skips the
-                        // tap-shade action that would otherwise follow.
-                        if (_vGamepadMod)
-                        {
-                            CloseWindowUnderCursor();
-                            _vKbCSuppressShade = true;
-                        }
-                    }
-                }
-                else
-                {
-                    if (_vKbCPressed)
-                    {
-                        _vKbCPressed = false;
-                        if (!_vKbCHoldFired && !_vKbCSuppressShade)
-                            ShadeWindowUnderCursor();
-                    }
+                    CloseWindowUnderCursor();
+                    _shortcutManager.cancelPendingHoldForInput(InputDeviceKind::keyboard, SDLK_c);
                 }
                 return true;
-            case SDL_SCANCODE_V: // face Y — rotate construction object CW
-                                 // (3x = anti-clockwise when R1 held)
-                if (IsTextInputActive())
-                    return false;
-                if (down)
-                {
-                    int turns = _vGamepadMod ? 3 : 1;
-                    for (int i = 0; i < turns; ++i)
-                        ::ShortcutRotateConstructionObject();
-                }
-                return true;
+            // OPENRCT2MINI gamepad-plan 1.5i: SDL_SCANCODE_V intercept
+            // removed. Falls through to ShortcutManager which fires the
+            // bound shortcut — by default kInterfaceRotateConstruction
+            // (registered with keyboard "V" via registerKeyboardDefault
+            // in Shortcuts.cpp). Loses the _vGamepadMod-conditional
+            // 3×=anti-clockwise behaviour; user binds a separate chord
+            // shortcut if they miss it.
             default: return false;
         }
     }
@@ -455,6 +476,40 @@ public:
         return _inputManager;
     }
 
+    // OPENRCT2MINI gamepad-plan 1.5c: action bridges for shade / close-
+    // window shortcuts. Called by the Ui::Fire* free functions defined
+    // at the bottom of this file, which in turn run from action lambdas
+    // in Shortcuts.cpp.
+    //
+    // ToggleShadeAll fires on press of kInterfaceToggleShadeAllWindows
+    // (default keyboard SHIFT+C, no PAD default — shade-all is also
+    // available via a 500 ms hold of the shade-window button).
+    //
+    // CloseWindowAndSuppressShade fires on press of kInterfaceClose-
+    // WindowUnderCursor (default keyboard ALT+C, default PAD R1+Y).
+    // The suppress flag prevents the shade-shortcut poll's tap path
+    // from also firing on the same chord — without it, R1+Y would
+    // close the window AND shade an arbitrary other window when Y is
+    // released.
+    void ActionToggleShadeAll() { ToggleShadeAll(); }
+    void ActionShadeWindowUnderCursor() { ShadeWindowUnderCursor(); }
+    void ActionCloseWindowAndSuppressShade()
+    {
+        CloseWindowUnderCursor();
+        // OPENRCT2MINI hold-binding refactor: drop any pending hold
+        // tracking for the C / Y key so the shade-window tap doesn't
+        // also fire when the user releases the chord. The C / Y press
+        // entered _holdPending if the user is holding R1/ALT and pressed
+        // C/Y, then the chord matched and fired this action; without
+        // this cancel, releasing C/Y would still fire the deferred tap
+        // (shade an arbitrary window). Two cancels — one keyboard, one
+        // joybutton — cover both physical input devices.
+        auto& sm = _shortcutManager;
+        sm.cancelPendingHoldForInput(InputDeviceKind::keyboard, SDLK_c);
+        sm.cancelPendingHoldForInput(
+            InputDeviceKind::joyButton, static_cast<uint32_t>(SDL_CONTROLLER_BUTTON_Y));
+    }
+
     ShortcutManager& GetShortcutManager()
     {
         return _shortcutManager;
@@ -466,9 +521,22 @@ public:
         , _shortcutManager(env)
     {
         LogSDLVersion();
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0)
+        // OPENRCT2MINI: SDL_INIT_GAMECONTROLLER is required for SDL to
+        // emit SDL_CONTROLLERBUTTONDOWN/UP and SDL_CONTROLLERAXISMOTION
+        // events with translated button enum values (SDL_CONTROLLER_-
+        // BUTTON_DPAD_UP etc.). Without it, SDL only emits raw
+        // SDL_JOYBUTTONDOWN events with hardware-specific button
+        // indices, and a DS4's D-pad fires as SDL_JOYHATMOTION rather
+        // than buttons at all. queueInputEvent's SDL_CONTROLLERBUTTON-
+        // DOWN branch is what populates _heldGamepadButtons with the
+        // canonical enum keys that getState's joyButton path checks
+        // against, so without GAMECONTROLLER init the held-state poll
+        // can't see any gamepad input. SDL_GameControllerOpen on its
+        // own auto-inits the subsystem but doesn't register the event
+        // watch — so explicitly include SDL_INIT_GAMECONTROLLER here.
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0)
         {
-            SDLException::Throw("SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK)");
+            SDLException::Throw("SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER)");
         }
         _cursorRepository.LoadCursors();
         _shortcutManager.loadUserBindings();
@@ -701,6 +769,116 @@ public:
         _keysPressed[scancode] = 1;
     }
 
+    // OPENRCT2MINI gamepad-plan 1.11: walk every connected SDL game
+    // controller and submit a rumble pulse. Inputs are float 0.0–1.0
+    // motor intensities (low / high) and a duration in milliseconds.
+    // Globally gated by Config::Get().general.gamepadRumbleEnabled and
+    // scaled by gamepadRumbleIntensity before the SDL call so users
+    // can mute / soften haptics without rebuilding game logic. Pads
+    // SDL reports as having no rumble are silently skipped (e.g. Mini
+    // before 2.6 wires its motor through SDL).
+    //
+    // Phase 1.11 ships with one-shot semantics — each call overwrites
+    // any in-progress rumble on a given pad. Phase 1.11b adds a
+    // per-controller decay queue layered on top so dual-motor pulses
+    // with mismatched durations and continuous (loop-driven) rumble
+    // can co-exist; for now a hot crash punch on top of an active
+    // rumble simply replaces it, which is fine for the events 1.11
+    // hooks (crash, construction refusal — both punctual).
+    void RumbleControllers(float low, float high, uint32_t durationMs) override
+    {
+        const auto& cfg = Config::Get().general;
+        if (!cfg.gamepadRumbleEnabled)
+            return;
+        if (durationMs == 0)
+            return;
+
+        const float globalScale = std::clamp(cfg.gamepadRumbleIntensity, 0.0f, 1.0f);
+        const float scaledLow = std::clamp(low, 0.0f, 1.0f) * globalScale;
+        const float scaledHigh = std::clamp(high, 0.0f, 1.0f) * globalScale;
+        if (scaledLow <= 0.0f && scaledHigh <= 0.0f)
+            return;
+
+        // Convert to SDL's 0..0xFFFF magnitude. round() avoids the
+        // off-by-one floor that would map intensity 1.0 to 0xFFFE.
+        const auto toSdl = [](float v) -> uint16_t {
+            const auto u = static_cast<uint32_t>(std::lround(v * 65535.0f));
+            return static_cast<uint16_t>(std::min<uint32_t>(u, 0xFFFF));
+        };
+        const uint16_t lowMag = toSdl(scaledLow);
+        const uint16_t highMag = toSdl(scaledHigh);
+
+        for (auto* gc : _inputManager.getGameControllers())
+        {
+            if (gc == nullptr)
+                continue;
+            if (!SDL_GameControllerHasRumble(gc))
+                continue;
+            // SDL silently ignores the motor a single-motor pad
+            // doesn't have, so passing both magnitudes is safe.
+            // Phase 1.11b's mix() helper handles the case where SDL
+            // reports a single combined motor and we want low + high
+            // blended — for 1.11's plumbing we just pass through.
+            SDL_GameControllerRumble(gc, lowMag, highMag, durationMs);
+        }
+    }
+
+    // OPENRCT2MINI gamepad-plan 1.13: DualShock-style LED control.
+    // Walks every connected SDL game controller and submits an
+    // SDL_GameControllerSetLED colour. The (r, g, b) input is the
+    // pre-brightness severity colour; this layer applies the global
+    // brightness scaler internally so callers don't need to know the
+    // config value. Globally gated by gamepadLedEnabled — when off
+    // the call is a complete no-op, and the LED keeps whatever colour
+    // it had (Led::tickEngine will issue a 0,0,0 sweep when it next
+    // observes the enabled flag false → clear).
+    //
+    // Pads SDL reports as having no LED (Xbox, most generic USB pads,
+    // the Mini's panel button-board pre-Phase-2) are silently skipped
+    // — SetLED would error and the engine wastes no CPU on them.
+    void SetControllerLED(uint8_t r, uint8_t g, uint8_t b) override
+    {
+        const auto& cfg = Config::Get().general;
+        if (!cfg.gamepadLedEnabled)
+            return;
+
+        const float brightness = std::clamp(cfg.gamepadLedBrightness, 0.0f, 1.0f);
+        const auto scale = [brightness](uint8_t v) -> uint8_t {
+            const auto scaled = static_cast<int32_t>(std::lround(static_cast<float>(v) * brightness));
+            return static_cast<uint8_t>(std::clamp(scaled, 0, 255));
+        };
+        const uint8_t sR = scale(r);
+        const uint8_t sG = scale(g);
+        const uint8_t sB = scale(b);
+
+        for (auto* gc : _inputManager.getGameControllers())
+        {
+            if (gc == nullptr)
+                continue;
+            if (!SDL_GameControllerHasLED(gc))
+                continue;
+            SDL_GameControllerSetLED(gc, sR, sG, sB);
+        }
+    }
+
+    // OPENRCT2MINI gamepad-plan 1.13: capability probe. Returns true
+    // if any currently-connected pad reports an LED. Led::tickEngine
+    // uses this to short-circuit the per-frame fade evaluation on
+    // setups where no LED is present (host with Xbox pad, the Mini
+    // pre-Phase-2, headless test runs) — saves a multiply + branch
+    // per frame at no cost to correctness.
+    bool ControllerHasLED() override
+    {
+        for (auto* gc : _inputManager.getGameControllers())
+        {
+            if (gc == nullptr)
+                continue;
+            if (SDL_GameControllerHasLED(gc))
+                return true;
+        }
+        return false;
+    }
+
     // Drawing
     std::shared_ptr<IDrawingEngineFactory> GetDrawingEngineFactory() override
     {
@@ -810,6 +988,24 @@ public:
                 case SDL_MOUSEMOTION:
                     _cursorState.position = { static_cast<int32_t>(e.motion.x / Config::Get().general.windowScale),
                                               static_cast<int32_t>(e.motion.y / Config::Get().general.windowScale) };
+                    // OPENRCT2MINI cursor-selector-modal-plan v2: only
+                    // treat events with non-zero relative motion as
+                    // real user activity. SDL emits an initial
+                    // SDL_MOUSEMOTION with xrel=yrel=0 at startup
+                    // (and after every window-focus change) just to
+                    // report the cursor's current position; firing
+                    // the realMouseMotion transition for that would
+                    // flip an active-selector boot straight to
+                    // cursor mode before the user has touched
+                    // anything. Real motion has at least one non-
+                    // zero delta.
+                    if (e.motion.xrel != 0 || e.motion.yrel != 0)
+                    {
+                        OpenRCT2::Ui::Windows::gDropdown.navigationSource
+                            = OpenRCT2::Dropdown::NavigationSource::cursor;
+                        _inputManager.onTransitionEvent(
+                            InputManager::SelectorTransitionSource::realMouseMotion);
+                    }
                     break;
                 case SDL_MOUSEWHEEL:
                     if (_inGameConsole.IsOpen())
@@ -818,6 +1014,29 @@ public:
                         break;
                     }
                     _cursorState.wheel -= e.wheel.y;
+                    // OPENRCT2MINI mouse-input refactor: scroll wheel
+                    // is now a bindable input. Emit a shortcut input
+                    // event for each wheel click so any shortcut bound
+                    // to MOUSE WHEEL UP / DOWN fires. Default bindings
+                    // ship in Shortcuts.cpp (zoom in / out). The
+                    // _cursorState.wheel feed above stays so in-widget
+                    // scroll handling (WindowAllWheelInput) still
+                    // works for scroll widgets.
+                    if (e.wheel.y != 0)
+                    {
+                        const int32_t ticks = std::abs(e.wheel.y);
+                        const uint32_t button
+                            = (e.wheel.y > 0) ? 8u /*kMouseWheelUpButton*/ : 9u /*kMouseWheelDownButton*/;
+                        for (int32_t i = 0; i < ticks; ++i)
+                        {
+                            InputEvent ie;
+                            ie.deviceKind = InputDeviceKind::mouse;
+                            ie.modifiers = SDL_GetModState();
+                            ie.button = button;
+                            ie.state = InputEventState::down;
+                            _inputManager.queueInputEvent(std::move(ie));
+                        }
+                    }
                     break;
                 case SDL_MOUSEBUTTONDOWN:
                 {
@@ -825,12 +1044,28 @@ public:
                     {
                         break;
                     }
-                    ScreenCoordsXY mousePos = { static_cast<int32_t>(e.button.x / Config::Get().general.windowScale),
-                                                static_cast<int32_t>(e.button.y / Config::Get().general.windowScale) };
+                    // OPENRCT2MINI mouse-input refactor: no hardcoded
+                    // mouse-button bindings. Real LMB / RMB no longer
+                    // synthesise StoreMouseInput from this handler —
+                    // they're bindable shortcuts now (default
+                    // cursor.click ← MOUSE 0, cursor.cancel ← MOUSE 2).
+                    // The per-frame poll in ProcessWorldCursor::
+                    // handleButton drives the click synthesis off
+                    // whatever input is bound to those shortcuts.
+                    //
+                    // Sync _cursorState.position from the click event
+                    // so the poll synthesises StoreMouseInput at the
+                    // exact click position (not the most recent
+                    // MOUSEMOTION sample). _cursorState.left / right /
+                    // middle / touch / old still update so the
+                    // cursor renderer keeps the correct pressed-look.
+                    _cursorState.position = {
+                        static_cast<int32_t>(e.button.x / Config::Get().general.windowScale),
+                        static_cast<int32_t>(e.button.y / Config::Get().general.windowScale),
+                    };
                     switch (e.button.button)
                     {
                         case SDL_BUTTON_LEFT:
-                            StoreMouseInput(MouseState::leftPress, mousePos);
                             _cursorState.left = CURSOR_PRESSED;
                             _cursorState.old = 1;
                             break;
@@ -838,7 +1073,6 @@ public:
                             _cursorState.middle = CURSOR_PRESSED;
                             break;
                         case SDL_BUTTON_RIGHT:
-                            StoreMouseInput(MouseState::rightPress, mousePos);
                             _cursorState.right = CURSOR_PRESSED;
                             _cursorState.old = 2;
                             break;
@@ -849,7 +1083,15 @@ public:
                         InputEvent ie;
                         ie.deviceKind = InputDeviceKind::mouse;
                         ie.modifiers = SDL_GetModState();
-                        ie.button = e.button.button;
+                        // OPENRCT2MINI mouse-input refactor: convert
+                        // SDL's 1-based button index to 0-based to
+                        // match ShortcutInput's binding storage
+                        // (LMB=0, MMB=1, RMB=2). Without this,
+                        // matches() never fired for real mouse
+                        // events because binding's button=0 (LMB)
+                        // disagreed with event's button=1
+                        // (SDL_BUTTON_LEFT).
+                        ie.button = e.button.button > 0 ? e.button.button - 1 : 0;
                         ie.state = InputEventState::down;
                         _inputManager.queueInputEvent(std::move(ie));
                     }
@@ -861,12 +1103,18 @@ public:
                     {
                         break;
                     }
-                    ScreenCoordsXY mousePos = { static_cast<int32_t>(e.button.x / Config::Get().general.windowScale),
-                                                static_cast<int32_t>(e.button.y / Config::Get().general.windowScale) };
+                    // OPENRCT2MINI mouse-input refactor: same as
+                    // SDL_MOUSEBUTTONDOWN above — release synthesis
+                    // is now driven by the per-frame poll, not this
+                    // handler. Position-sync so the poll uses the
+                    // exact release-event coordinates.
+                    _cursorState.position = {
+                        static_cast<int32_t>(e.button.x / Config::Get().general.windowScale),
+                        static_cast<int32_t>(e.button.y / Config::Get().general.windowScale),
+                    };
                     switch (e.button.button)
                     {
                         case SDL_BUTTON_LEFT:
-                            StoreMouseInput(MouseState::leftRelease, mousePos);
                             _cursorState.left = CURSOR_RELEASED;
                             _cursorState.old = 3;
                             break;
@@ -874,7 +1122,6 @@ public:
                             _cursorState.middle = CURSOR_RELEASED;
                             break;
                         case SDL_BUTTON_RIGHT:
-                            StoreMouseInput(MouseState::rightRelease, mousePos);
                             _cursorState.right = CURSOR_RELEASED;
                             _cursorState.old = 4;
                             break;
@@ -885,7 +1132,7 @@ public:
                         InputEvent ie;
                         ie.deviceKind = InputDeviceKind::mouse;
                         ie.modifiers = SDL_GetModState();
-                        ie.button = e.button.button;
+                        ie.button = e.button.button > 0 ? e.button.button - 1 : 0;
                         ie.state = InputEventState::release;
                         _inputManager.queueInputEvent(std::move(ie));
                     }
@@ -1300,78 +1547,285 @@ private:
     // StoreMouseInput rather than synthesising SDL events — the synthetic
     // events would only be processed on the next frame, and there's no
     // benefit to going through the SDL queue when we own all the targets.
-    void ProcessVirtualGamepadCursor()
+    // OPENRCT2MINI gamepad-plan 1.6b step 2: OSK-mode cursor handler.
+    // Carved out of ProcessVirtualGamepadCursor. While OSK is up the
+    // virtual cursor is suspended; the D-pad / face buttons drive OSK
+    // selection instead. Routes the cursor.* shortcut held-state to
+    // OskHandleKey via per-shortcut edge detection, filtering out
+    // keyboard-kind bindings (those are owned by the SDL_KEYDOWN
+    // intercept at the top of InterceptVirtualCursorKey — polling
+    // keyboard sources here too would advance OSK selection by 2 per
+    // press). Mapping is by *purpose*, not physical key — cursor.up
+    // → SDL_SCANCODE_UP regardless of which device fired it.
+    void ProcessOskCursor()
     {
-        // OPENRCT2MINI OSK: cursor is suspended while the on-screen
-        // keyboard is up — the D-pad drives OSK selection instead.
-        // Clearing the latches here belt-and-braces against arrow events
-        // arriving on the same frame the OSK opens (with stale `down`
-        // state) and the cursor drifting after the OSK closes.
-        if (Windows::OskIsActive())
-        {
-            _vKbUp = _vKbDown = _vKbLeft = _vKbRight = false;
-            _vKbZ = _vKbX = false;
-            // OPENRCT2MINI W9: also drop any in-flight C press / hold so
-            // the OSK closing mid-hold doesn't immediately fire either
-            // shade action when control returns to the world view.
-            _vKbCPressed = false;
-            _vKbCHoldFired = false;
-            _vKbCSuppressShade = false;
-            return;
-        }
+        // OPENRCT2MINI gamepad-plan 1.6 + hold-binding refactor:
+        // legacy _vKb* arrow / Z / X latches deleted; the shade-
+        // shortcut tap-vs-hold state used to live in _vShade* here
+        // and got reset on every OSK-cursor frame. Both are gone —
+        // shade-window/all are now tracked inside ShortcutManager's
+        // _holdPending, which is unaffected by OSK transitions and
+        // releases naturally on key release.
 
-        // OPENRCT2MINI W9: per-frame X-button poll. Tap is handled in
-        // InterceptVirtualCursorKey on the KEYUP edge; hold needs a timer
-        // to fire once when the threshold is crossed. _vKbCSuppressShade is
-        // set when R1+X closed a window on press — in that case we've
-        // already done the action and the user holding the chord shouldn't
-        // also fire shade-all.
-        if (_vKbCPressed && !_vKbCHoldFired && !_vKbCSuppressShade)
+        struct OskRoute
         {
-            const uint32_t held = SDL_GetTicks() - _vKbCPressedAtMs;
-            if (held >= kShadeAllHoldMs)
+            std::string_view shortcutId;
+            int32_t scancode;
+            bool* prev;
+        };
+        const OskRoute routes[] = {
+            { ShortcutId::kCursorUp,     SDL_SCANCODE_UP,    &_vOskPrevUp },
+            { ShortcutId::kCursorDown,   SDL_SCANCODE_DOWN,  &_vOskPrevDown },
+            { ShortcutId::kCursorLeft,   SDL_SCANCODE_LEFT,  &_vOskPrevLeft },
+            { ShortcutId::kCursorRight,  SDL_SCANCODE_RIGHT, &_vOskPrevRight },
+            { ShortcutId::kCursorClick,  SDL_SCANCODE_Z,     &_vOskPrevClick },
+            { ShortcutId::kCursorCancel, SDL_SCANCODE_X,     &_vOskPrevCancel },
+        };
+        for (const auto& r : routes)
+        {
+            const auto* sc = _shortcutManager.getShortcut(r.shortcutId);
+            bool now = false;
+            if (sc != nullptr)
             {
-                ToggleShadeAll();
-                _vKbCHoldFired = true;
+                // OPENRCT2MINI gamepad-plan 1.10.3: skip mouse-source
+                // bindings for kCursorClick. Without this, real LMB
+                // (default mouse-source kCursorClick binding from #369)
+                // routes through the SDL_SCANCODE_Z synthesis below
+                // and selects the *focused* OSK key (D-pad position)
+                // instead of the key under the cursor — the same
+                // physical click would also reach the OSK widget's
+                // normal click handler via StoreMouseInput, but the
+                // Z synthesis runs first and consumes the action.
+                // Filtering mouse sources out of the click route lets
+                // mouse-clicks fall through to StoreMouseInput so the
+                // OSK widget picks them up at the cursor position;
+                // gamepad / keyboard sources still synthesise Z to
+                // commit the focused key, which is the documented
+                // gamepad nav behaviour.
+                //
+                // Keyboard sources are skipped for ALL routes (not just
+                // click) because the SDL_KEYDOWN intercept already
+                // routes UP/DOWN/LEFT/RIGHT/Z/X to OskHandleKey
+                // directly — running them through here too would
+                // double-fire.
+                const bool skipMouseForClick = (r.shortcutId == ShortcutId::kCursorClick);
+                for (const auto& input : sc->current)
+                {
+                    if (input.kind == InputDeviceKind::keyboard)
+                        continue;
+                    if (skipMouseForClick && input.kind == InputDeviceKind::mouse)
+                        continue;
+                    if (_inputManager.getState(input))
+                    {
+                        now = true;
+                        break;
+                    }
+                }
+            }
+            if (now != *r.prev)
+            {
+                Windows::OskHandleKey(r.scancode, now);
+                *r.prev = now;
             }
         }
-        const auto& controllers = _inputManager.getGameControllers();
+    }
 
-        // Read controller state.
+    // OPENRCT2MINI gamepad-plan 1.6b step 3: world-mode cursor handler.
+    // Carved out of ProcessVirtualGamepadCursor's tail. Owns the shade
+    // tap-vs-hold detector, the cursor.* held-state polls (motion /
+    // click / cancel / fast-modifier), and the per-frame velocity
+    // integrator that drives _vcursorX/Y and emits synthetic mouse
+    // press/release events. Runs whenever getActiveContext() ==
+    // world (the default).
+    //
+    // Ordering note: this method reads _vOskPrev* indirectly via
+    // ProcessOskCursor's edge tracking (none of these reads happen in
+    // world mode), so the dispatcher's _vOskPrev* clear above is
+    // belt-and-braces — keeps stale prev state from a prior OSK
+    // session from synthesising a release the next time the OSK
+    // opens. The shade-shortcut state (_vShade*) is reset each frame
+    // by ProcessOskCursor while OSK is up, so on first world-mode
+    // frame after OSK closes the rising/falling edge logic here
+    // starts clean.
+    void ProcessWorldCursor()
+    {
+        // OPENRCT2MINI hold-binding refactor: the per-frame shade-window
+        // poll that used to live here (rising-edge press tracking +
+        // hold timer + tap-on-release with a suppress flag) is gone.
+        // ShortcutManager now owns the tap-vs-hold dispatch via the
+        // HoldPendingState mechanism: kInterfaceShadeWindowUnderCursor
+        // (default "C" / "PAD Y") is a tap binding (holdMs == 0) and
+        // kInterfaceToggleShadeAllWindows has additional "HOLD C" /
+        // "HOLD PAD Y" bindings (holdMs == 500). The same physical
+        // input drives both; ShortcutManager defers the tap on press
+        // and fires whichever side wins (release-before-500ms ⇒ tap,
+        // 500ms-elapsed ⇒ hold). The R1+C / R1+Y close-window chord
+        // calls ShortcutManager::cancelPendingHoldForInput from its
+        // action so the deferred tap doesn't fire on chord release.
+
+        // OPENRCT2MINI mouse-input refactor: kInterfaceCameraDrag held-
+        // state poll. Replaces the hardcoded rightPress→
+        // InputViewportDragBegin path in MouseInput.cpp's mouse-state
+        // switch (the camera-drag-on-viewport branch). Held → camera
+        // pans with cursor motion. Tap-and-release < 500ms → fires the
+        // context-sensitive right-click action at cursor position.
+        //
+        // Begin gates on cursor-over-viewport-class window inside
+        // InputViewportDragBeginAtCursor (matches the legacy
+        // isUndraggableShell + WidgetType::viewport check), so this
+        // poll is safe to run unconditionally — it's a no-op when
+        // the cursor isn't over a pannable viewport.
+        //
+        // The polling-driven End is split from the state-machine end
+        // (which used to handle MouseState::rightRelease in
+        // InputState::ViewportRight) so the gesture works on inputs
+        // that don't synthesise a rightRelease event — e.g. PAD B
+        // bound to kInterfaceCameraDrag. Motion-continue stays in
+        // the state machine since it's already driven by per-frame
+        // released-fallback mouse events.
+        {
+            const auto* dragShortcut = _shortcutManager.getShortcut(
+                ShortcutId::kInterfaceCameraDrag);
+            const bool dragNow = (dragShortcut != nullptr) && _inputManager.getState(*dragShortcut);
+            if (dragNow && !_vCameraDragPrev)
+            {
+                InputViewportDragBeginAtCursor();
+            }
+            else if (!dragNow && _vCameraDragPrev)
+            {
+                if (CameraDragInProgress())
+                {
+                    const bool wasShortPress = CameraDragWasShortPress();
+                    InputViewportDragEndCurrent();
+                    if (wasShortPress)
+                    {
+                        // Short tap → fire the context-sensitive
+                        // right-click action at the cursor position.
+                        // Mirrors the legacy state-machine path that
+                        // fired ViewportInteractionRightClick on
+                        // rightRelease in InputState::ViewportRight.
+                        const auto cursorPos = ContextGetCursorPosition();
+                        ViewportInteractionRightClick(cursorPos);
+                    }
+                }
+            }
+            _vCameraDragPrev = dragNow;
+        }
+
+        // OPENRCT2MINI gamepad-plan 1.6b step 0: cursor motion / click /
+        // cancel / fast-modifier are driven solely by held-state polls
+        // against the cursor.* shortcut bindings. The legacy
+        // SDL_GameControllerGetButton(...) direct poll (DPAD_UP/DOWN/
+        // LEFT/RIGHT, BUTTON_A/B, RIGHTSHOULDER) was deleted here; that
+        // path predated rev 329's getState joybutton fix and was OR'd
+        // into the same flags the held-state poll already populates —
+        // pure duplication.
+        //
+        // The held-state poll uses ShortcutManager rather than raw SDL,
+        // so:
+        //   * The user can rebind cursor.* to any keyboard key, mouse
+        //     button, or PAD button via the rebind UI.
+        //   * Default PAD bindings (PAD DPAD_*, PAD A, PAD B, PAD R1
+        //     for fast-modifier) are registered in Shortcuts.cpp via
+        //     registerPadDefault.
+        //   * Default keyboard bindings (UP/DOWN/LEFT/RIGHT, Z, X,
+        //     LALT) are registered via registerKeyboardDefault — covers
+        //     the device's vendor-SDL2 fake-scancode emissions (arrow
+        //     keys / Z / X / R1→LALT) without any device-specific
+        //     code path here.
+        //
+        // ShortcutManager dispatches *actions* on press only, but cursor
+        // click / right-click / motion need PRESS AND RELEASE transi-
+        // tions for drag, context-menu, and continuous cursor velocity.
+        // Hence the held-state poll instead of action lambdas — the
+        // existing edge-trigger logic in handleButton synthesises mouse
+        // press / release transitions from these flags.
+        //
+        // Same shape as W2's window-drag held-state poll (MouseInput.cpp
+        // §549). The action lambdas registered in 1.5a stay as stubs —
+        // they could fire on press transitions, but doing so would
+        // double-fire alongside this poll's edge detection.
         bool dpadUp = false, dpadDown = false, dpadLeft = false, dpadRight = false;
         bool btnA = false, btnB = false, fastModifier = false;
-        for (auto* gc : controllers)
+        // OPENRCT2MINI cursor-selector-modal-plan §3.4 / CS.6:
+        // while the selector owns the screen, the polled cursor.*
+        // velocity is suppressed — the cursor doesn't move, so its
+        // ProcessMouseOver loop doesn't clobber dropdown highlights
+        // (F.14 navigationSource flip stays correct) and the
+        // physical D-pad is free to drive focus.* without the
+        // virtual cursor following along. Real mouse motion flips
+        // the state back to `mixed`, at which point the polled
+        // velocity is re-enabled.
+        const bool selectorActive
+            = _inputManager.getSelectorMode() == InputManager::SelectorMode::active;
         {
-            if (gc == nullptr)
-                continue;
-            dpadUp |= SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_DPAD_UP) != 0;
-            dpadDown |= SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_DPAD_DOWN) != 0;
-            dpadLeft |= SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_DPAD_LEFT) != 0;
-            dpadRight |= SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) != 0;
-            btnA |= SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) != 0;
-            btnB |= SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) != 0;
-            // Right-shoulder = "fast cursor" multiplier so users can cross
-            // the 640x480 frame quickly without long D-pad holds.
-            fastModifier |= SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) != 0;
+            auto& sm = _shortcutManager;
+            if (auto* up = sm.getShortcut(ShortcutId::kCursorUp))
+            {
+                dpadUp = _inputManager.getState(*up);
+            }
+            if (auto* down = sm.getShortcut(ShortcutId::kCursorDown))
+            {
+                dpadDown = _inputManager.getState(*down);
+            }
+            if (auto* left = sm.getShortcut(ShortcutId::kCursorLeft))
+            {
+                dpadLeft = _inputManager.getState(*left);
+            }
+            if (auto* right = sm.getShortcut(ShortcutId::kCursorRight))
+            {
+                dpadRight = _inputManager.getState(*right);
+            }
+            if (selectorActive)
+            {
+                dpadUp = dpadDown = dpadLeft = dpadRight = false;
+            }
+            if (auto* clickShortcut = sm.getShortcut(ShortcutId::kCursorClick))
+            {
+                btnA = _inputManager.getState(*clickShortcut);
+            }
+            if (auto* cancelShortcut = sm.getShortcut(ShortcutId::kCursorCancel))
+            {
+                btnB = _inputManager.getState(*cancelShortcut);
+            }
+            // OPENRCT2MINI cursor-selector-modal-plan v2 follow-up:
+            // while the selector owns the screen the world cursor is
+            // entirely disabled — both visually (HardwareDisplayDraw-
+            // ingEngine suppresses the software cursor sprite) and
+            // for input. Without this, a real LMB press at the
+            // invisible cursor's last position still passes through
+            // cursor.click's MOUSE 0 default binding into the held-
+            // state poll, and handleButton below synthesises
+            // StoreMouseInput(leftPress) at _cursorState.position —
+            // i.e. the click registers on whatever widget sits at the
+            // (hidden) cursor's coords. Suppress only the press edge
+            // so any in-flight release (PAD A held across the
+            // hidden→active transition, e.g. when virtual cursor
+            // input opens a window and auto-wakes the selector) still
+            // fires and we don't leave a widget stuck pressed-down.
+            if (selectorActive)
+            {
+                if (!_vprevA)
+                    btnA = false;
+                if (!_vprevB)
+                    btnB = false;
+            }
+            if (auto* fastShortcut = sm.getShortcut(ShortcutId::kCursorFastModifier))
+            {
+                fastModifier = _inputManager.getState(*fastShortcut);
+            }
         }
-        // OPENRCT2MINI cut 53b: always OR in the keyboard latched state. The
-        // earlier gate skipped this when text composition was active so
-        // arrow keys could navigate within text fields, but on a device
-        // with no keyboard there's no way to type anyway, and on host the
-        // user has plenty of other keys for text edit. Cursor mobility
-        // beats within-field caret movement.
-        dpadUp |= _vKbUp;
-        dpadDown |= _vKbDown;
-        dpadLeft |= _vKbLeft;
-        dpadRight |= _vKbRight;
-        btnA |= _vKbZ;
-        btnB |= _vKbX;
-        fastModifier |= _vKbShift;
-        // OPENRCT2MINI cut 60: when Ctrl is held (L1+R1 chord on the device,
-        // or real keyboard Ctrl) suppress fast cursor. Ctrl is the
-        // construction Z-lock modifier; the user is being precise and fast
-        // cursor defeats the purpose.
-        if (_vKbCtrl)
+        // OPENRCT2MINI cut 60 / gamepad-plan 1.5d: when the Z-lock
+        // modifier is held, suppress fast cursor. Z-lock means the user
+        // is being precise on the construction Z axis; fast cursor
+        // defeats the purpose. We consult InputManager's canonical
+        // ModifierKey::ctrl bit instead of polling sources separately —
+        // 1.5d-ext fattened handleModifiers() to OR the
+        // kInterfaceConstructionZLock binding's held-state into that
+        // bit, so it already covers both the legacy SDL_SCANCODE_LCTRL/
+        // RCTRL latch (real keyboard Ctrl + the device's L1+R1 chord
+        // mapped to LCTRL by the vendor SDL2) and any user rebind.
+        if (_inputManager.isModifierKeyPressed(ModifierKey::ctrl))
             fastModifier = false;
 
         if (!_vcursorInitialised)
@@ -1483,6 +1937,63 @@ private:
             _vcursorLastIntY = newY;
         }
 
+        // OPENRCT2MINI gamepad-plan 1.9 follow-on: analog cursor input
+        // through the bindable cursor.up/down/left/right shortcuts.
+        // Reads each direction's analog magnitude (0.0..1.0) via
+        // InputManager::getAnalogState, which only inspects joyAxis
+        // bindings — digital cursor.* bindings (keyboard arrows, PAD
+        // DPAD_*) go through the digital block above. Net X / Y
+        // velocity = right-left and down-up magnitudes.
+        //
+        // The user can rebind cursor.up/down/left/right to any
+        // joyAxis (e.g. STICK_R UP, or trigger axes for accelerator-
+        // pedal cursor speed) and the analog velocity follows the
+        // binding. Default PAD STICK_L bindings ship in
+        // Shortcuts.cpp.
+        //
+        // Speed model: 200 px/sec at full deflection × gamepad-
+        // Sensitivity (the cursor speed knob from cut 58). Fast-
+        // modifier still applies for the 2.5× boost.
+        {
+            // ShortcutManager::getShortcut is non-const (it returns a
+            // non-const RegisteredShortcut*); take a non-const ref so
+            // the calls compile. We don't mutate anything via these
+            // pointers here, just read held-state.
+            auto& sm = _shortcutManager;
+            const auto* cursorUp = sm.getShortcut(ShortcutId::kCursorUp);
+            const auto* cursorDown = sm.getShortcut(ShortcutId::kCursorDown);
+            const auto* cursorLeft = sm.getShortcut(ShortcutId::kCursorLeft);
+            const auto* cursorRight = sm.getShortcut(ShortcutId::kCursorRight);
+
+            const float upMag = (cursorUp != nullptr) ? _inputManager.getAnalogState(*cursorUp) : 0.0f;
+            const float downMag = (cursorDown != nullptr) ? _inputManager.getAnalogState(*cursorDown) : 0.0f;
+            const float leftMag = (cursorLeft != nullptr) ? _inputManager.getAnalogState(*cursorLeft) : 0.0f;
+            const float rightMag = (cursorRight != nullptr) ? _inputManager.getAnalogState(*cursorRight) : 0.0f;
+
+            const float rawX = rightMag - leftMag;
+            const float rawY = downMag - upMag;
+
+            if (rawX != 0.0f || rawY != 0.0f)
+            {
+                const float speedMult = std::clamp(Config::Get().general.gamepadSensitivity, 0.1f, 5.0f);
+                float speedPxPerSec = 200.0f * speedMult;
+                if (fastModifier && !_inputManager.isModifierKeyPressed(ModifierKey::ctrl))
+                    speedPxPerSec *= 2.5f;
+                const float speedThisFrame = speedPxPerSec * dtSec;
+                const float adx = rawX * speedThisFrame;
+                const float ady = rawY * speedThisFrame;
+                const float maxX = static_cast<float>(std::max(_width, 1) * scale - 1);
+                const float maxY = static_cast<float>(std::max(_height, 1) * scale - 1);
+                _vcursorX = std::clamp(_vcursorX + adx, 0.0f, maxX);
+                _vcursorY = std::clamp(_vcursorY + ady, 0.0f, maxY);
+                const int32_t newX = static_cast<int32_t>(std::round(_vcursorX / scale));
+                const int32_t newY = static_cast<int32_t>(std::round(_vcursorY / scale));
+                _cursorState.position = { newX, newY };
+                _vcursorLastIntX = newX;
+                _vcursorLastIntY = newY;
+            }
+        }
+
         // A/B (and Z/X) → left/right mouse buttons. Only emit on transition.
         auto handleButton = [&](bool now_pressed, bool& prev_pressed,
                                 MouseState pressEvent, MouseState releaseEvent,
@@ -1526,6 +2037,68 @@ private:
         handleButton(
             btnB, _vprevB, MouseState::rightPress, MouseState::rightRelease,
             _cursorState.right, /*down=*/2, /*up=*/4);
+    }
+
+    // OPENRCT2MINI gamepad-plan 1.6b step 3: per-frame dispatcher.
+    // Asks InputManager what context we're in and routes to the
+    // appropriate handler. Adding a new context is a one-line switch
+    // arm here plus a new ProcessXxxCursor method — no existing
+    // handler touched. The OSK-just-closed _vOskPrev* clear is the
+    // dispatcher's belt-and-braces against a stale "still held"
+    // record from a previous OSK session synthesising a phantom
+    // release the next time OSK opens.
+    void ProcessVirtualGamepadCursor()
+    {
+        switch (_inputManager.getActiveContext())
+        {
+            case InputContext::osk:
+                ProcessOskCursor();
+                return;
+            case InputContext::world:
+            // OPENRCT2MINI focus-mode-plan / Phase F.7 follow-up:
+            // widgetFocus reuses the world cursor handler. The real
+            // mouse-click synthesis lives there — LMB-held → fires
+            // StoreMouseInput leftPress → MouseInput.cpp dispatches
+            // onMouseDown/Up on whatever widget the cursor is over.
+            // Without this fallthrough the widgetFocus context took
+            // the default arm and did NOTHING per frame, which left
+            // mouse clicks completely unprocessed (user reported
+            // clicks not working at all on the title screen after
+            // focus mode landed).
+            //
+            // D-pad-into-virtual-cursor movement also runs from
+            // ProcessWorldCursor, which means D-pad in focus mode
+            // currently moves BOTH the focus ring (via the strategy
+            // dispatch) AND the virtual mouse cursor (via this
+            // poll). The double-effect is mildly confusing but
+            // strictly additive — users can still navigate via D-
+            // pad and click whatever they end up over. Splitting
+            // the mouse-click synthesis out of ProcessWorldCursor
+            // so widgetFocus only gets the click half is the
+            // proper follow-up.
+            case InputContext::widgetFocus:
+                _vOskPrevUp = _vOskPrevDown = _vOskPrevLeft = _vOskPrevRight = false;
+                _vOskPrevClick = _vOskPrevCancel = false;
+                ProcessWorldCursor();
+                return;
+            // OPENRCT2MINI gamepad-plan 1.10: typing / list modal
+            // contexts. Neither cursor handler runs — held-state polled
+            // shortcuts (camera drag, cursor velocity, click /
+            // cancel-as-LMB/RMB) are world-only inputs, so polling
+            // them while the user is typing into a console / textbox
+            // / load-save / overwrite-prompt would let RMB start a
+            // camera drag underneath the modal etc. ProcessOskCursor's
+            // edge tracker still gets reset on world re-entry above.
+            case InputContext::textInput:
+            case InputContext::loadSaveOverwritePrompt:
+            case InputContext::loadSave:
+            case InputContext::console:
+            case InputContext::widgetTextBox:
+            default:
+                _vOskPrevUp = _vOskPrevDown = _vOskPrevLeft = _vOskPrevRight = false;
+                _vOskPrevClick = _vOskPrevCancel = false;
+                return;
+        }
     }
 #endif
 
@@ -1789,4 +2362,29 @@ ShortcutManager& Ui::GetShortcutManager()
 {
     auto& uiContext = static_cast<UiContext&>(GetContext()->GetUiContext());
     return uiContext.GetShortcutManager();
+}
+
+// OPENRCT2MINI gamepad-plan 1.5c + hold-binding refactor: action
+// bridges for the shade / close-window shortcuts. Invoked from action
+// lambdas registered in Shortcuts.cpp::registerDefaultShortcuts().
+// Shade-all fires on hold-elapsed of the bound input, shade-window
+// fires on tap-release before the hold threshold — both driven by
+// ShortcutManager's _holdPending mechanism rather than the per-frame
+// poll that used to live in ProcessWorldCursor.
+void Ui::FireToggleShadeAll()
+{
+    auto& uiContext = static_cast<UiContext&>(GetContext()->GetUiContext());
+    uiContext.ActionToggleShadeAll();
+}
+
+void Ui::FireCloseWindowUnderCursor()
+{
+    auto& uiContext = static_cast<UiContext&>(GetContext()->GetUiContext());
+    uiContext.ActionCloseWindowAndSuppressShade();
+}
+
+void Ui::FireShadeWindowUnderCursor()
+{
+    auto& uiContext = static_cast<UiContext&>(GetContext()->GetUiContext());
+    uiContext.ActionShadeWindowUnderCursor();
 }

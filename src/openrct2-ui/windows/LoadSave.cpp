@@ -11,6 +11,8 @@
 #include <ctime>
 #include <iterator>
 #include <memory>
+#include <openrct2-ui/UiContext.h>
+#include <openrct2-ui/input/InputManager.h>
 #include <openrct2-ui/interface/Dropdown.h>
 #include <openrct2-ui/interface/FileBrowser.h>
 #include <openrct2-ui/interface/Widget.h>
@@ -138,6 +140,10 @@ namespace OpenRCT2::Ui::Windows
         LoadSaveType type;
         ParkPreview _preview;
         BackgroundWorker::Job _previewLoadJob;
+        // OPENRCT2MINI gamepad-plan 1.6c.4: token returned from
+        // pushModalHooks in onOpen, passed back to popModalHooks in
+        // onClose so child modals' slots aren't disturbed.
+        OpenRCT2::Ui::InputManager::ModalHooksToken _modalHooksToken{};
 
         bool ShowPreviews()
         {
@@ -588,10 +594,34 @@ namespace OpenRCT2::Ui::Windows
             ComputeMaxDateWidth();
 
             WindowSetResize(*this, GetMinimumWindowSize(), kWindowSizeMax);
+
+            // OPENRCT2MINI gamepad-plan 1.6c.4: dismiss closes the
+            // window; confirm clicks the Save button (which is a no-op
+            // when the load tab is showing because WIDX_SAVE is empty
+            // there — onMouseUp's switch falls through). Replaces the
+            // hardcoded SDLK_ESCAPE / SDLK_RETURN switch in
+            // WindowLoadSaveInputKey, and adds gamepad PAD BACK / PAD
+            // START routing.
+            _modalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
+                /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                    close();
+                    return true;
+                },
+                /*confirm=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                    onMouseUp(WIDX_SAVE);
+                    return true;
+                },
+            });
         }
 
         void onClose() override
         {
+            // OPENRCT2MINI gamepad-plan 1.6c.4: pop our modal-hooks
+            // slot. Child OverwritePrompt (if any) has its own slot
+            // pushed on top of ours; popping by token only removes
+            // our slot, regardless of stack position.
+            OpenRCT2::Ui::GetInputManager().popModalHooks(_modalHooksToken);
+
             _listItems.clear();
 
             auto* windowMgr = GetWindowManager();
@@ -1227,20 +1257,11 @@ namespace OpenRCT2::Ui::Windows
 
     void WindowLoadSaveInputKey(WindowBase* w, uint32_t keycode)
     {
-        if (w->classification != WindowClass::loadsave)
-        {
-            return;
-        }
-
-        auto loadSaveWindow = static_cast<LoadSaveWindow*>(w);
-
-        if (keycode == SDLK_RETURN || keycode == SDLK_KP_ENTER)
-        {
-            loadSaveWindow->onMouseUp(WIDX_SAVE);
-        }
-        else if (keycode == SDLK_ESCAPE)
-        {
-            loadSaveWindow->close();
-        }
+        // OPENRCT2MINI gamepad-plan 1.6c.7: ESC/RETURN/KP_ENTER cases
+        // deleted. Both keys now route through InputManager's
+        // ModalHooks dispatch (installed by onOpen) and fire WIDX_SAVE
+        // (confirm) / close() (dismiss) via the registered callbacks.
+        (void)w;
+        (void)keycode;
     }
 } // namespace OpenRCT2::Ui::Windows

@@ -187,6 +187,15 @@ namespace OpenRCT2::Ui::Windows
         // debug-tools cluster and is only surfaced when debuggingTools is on.
         // See profiler-plan.md.
         DDIDX_PERFORMANCE_PROFILER = 12,
+        // OPENRCT2MINI gamepad-plan 1.11: Haptics control panel. Sits
+        // directly under the performance profiler, gated on the same
+        // debuggingTools flag so the cheats dropdown stays unchanged
+        // for non-debug users. See gamepad-plan.md.
+        DDIDX_HAPTICS = 13,
+        // OPENRCT2MINI gamepad-plan 1.11b: per-SoundId rumble editor.
+        DDIDX_RUMBLE_EDITOR = 14,
+        // OPENRCT2MINI input-plan Track 2 §4.2: LED Options panel.
+        DDIDX_LED = 15,
 
         TOP_TOOLBAR_CHEATS_COUNT,
     };
@@ -720,10 +729,25 @@ namespace OpenRCT2::Ui::Windows
                 gDropdown.items[DDIDX_DEBUG_PAINT_TOOL] = Dropdown::ToggleOption(STR_DEBUG_DROPDOWN_DEBUG_PAINT);
 #ifdef ENABLE_PERFORMANCE_PROFILER
                 gDropdown.items[DDIDX_PERFORMANCE_PROFILER] = Dropdown::ToggleOption(STR_PERFORMANCE_PROFILER);
-                numItems = DDIDX_PERFORMANCE_PROFILER + 1;
 #else
-                numItems = DDIDX_DEBUG_PAINT_TOOL + 1;
+                // Profiler-disabled build: separator placeholder in
+                // slot 12 keeps the indices contiguous so the Haptics
+                // entry below stays at DDIDX_HAPTICS without needing
+                // a parallel set of #ifdef'd indices.
+                gDropdown.items[DDIDX_PERFORMANCE_PROFILER] = Dropdown::Separator();
 #endif
+                // OPENRCT2MINI gamepad-plan 1.11: Haptics control panel.
+                // Sits directly under Performance Profiler and is gated
+                // by the same debuggingTools flag.
+                gDropdown.items[DDIDX_HAPTICS] = Dropdown::ToggleOption(STR_HAPTICS);
+                // OPENRCT2MINI gamepad-plan 1.11b: Rumble Editor — per-
+                // SoundId envelope authoring. Sits below the basic
+                // Haptics window in the same dropdown.
+                gDropdown.items[DDIDX_RUMBLE_EDITOR] = Dropdown::ToggleOption(STR_RUMBLE_EDITOR_TITLE);
+                // OPENRCT2MINI input-plan Track 2 §4.2: LED Options panel.
+                // Sits below the Rumble Editor in the same dropdown.
+                gDropdown.items[DDIDX_LED] = Dropdown::ToggleOption(STR_LED);
+                numItems = DDIDX_LED + 1;
             }
 
             WindowDropdownShowText(
@@ -780,6 +804,21 @@ namespace OpenRCT2::Ui::Windows
 #ifdef ENABLE_PERFORMANCE_PROFILER
                     ContextOpenWindow(WindowClass::performanceProfiler);
 #endif
+                    break;
+                // OPENRCT2MINI gamepad-plan 1.11: open the Haptics
+                // control window. Always available when debuggingTools
+                // is on, regardless of whether the profiler build flag
+                // is set — both surface from the same dropdown.
+                case DDIDX_HAPTICS:
+                    ContextOpenWindow(WindowClass::haptics);
+                    break;
+                // OPENRCT2MINI gamepad-plan 1.11b: open Rumble Editor.
+                case DDIDX_RUMBLE_EDITOR:
+                    ContextOpenWindow(WindowClass::rumbleEditor);
+                    break;
+                // OPENRCT2MINI input-plan Track 2 §4.2: open LED panel.
+                case DDIDX_LED:
+                    ContextOpenWindow(WindowClass::led);
                     break;
                 case DDIDX_TILE_INSPECTOR:
                     ContextOpenWindow(WindowClass::tileInspector);

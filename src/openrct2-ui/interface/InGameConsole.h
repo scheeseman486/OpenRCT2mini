@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <deque>
 #include <openrct2/core/StringTypes.h>
 #include <openrct2/interface/InteractiveConsole.h>
@@ -47,6 +48,15 @@ namespace OpenRCT2::Ui
 
         size_t _selectionStart = 0;
         int32_t _caretScreenPosX = 0;
+
+        // OPENRCT2MINI gamepad-plan 1.6c.5: token returned from
+        // InputManager::pushModalHooks in Open(), passed back to
+        // popModalHooks in Close(). Stack-based so the OSK that
+        // OskOpenForConsole spawns can layer ITS hooks on top of
+        // ours and pop independently. Stored as the underlying
+        // uint32_t alias to avoid pulling InputManager.h into this
+        // header.
+        uint32_t _modalHooksToken = 0;
 
     public:
         InGameConsole() = default;

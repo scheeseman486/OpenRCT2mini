@@ -244,6 +244,13 @@ namespace OpenRCT2::Ui::Windows
         WIDX_GAMEPAD_DEADZONE,
         WIDX_GAMEPAD_SENSITIVITY_LABEL,
         WIDX_GAMEPAD_SENSITIVITY,
+        // OPENRCT2MINI focus-mode-plan / Phase F.7: checkbox bound
+        // to Config::General::widgetFocusAlwaysOn. Lives in the
+        // Gamepad group because it's a gamepad-ergonomics knob
+        // (the focus ring is what makes D-pad navigation visible).
+        // Mouse-only users on the host build can untick it to
+        // suppress the ring everywhere.
+        WIDX_GAMEPAD_FOCUS_ALWAYS_ON,
 
         // Misc
         WIDX_TITLE_SEQUENCE_GROUP = WIDX_PAGE_START,
@@ -415,12 +422,17 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({ 25, kControlsGroupStart + 105}, {275, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_TOUCH_ENHANCEMENTS,         STR_TOUCH_ENHANCEMENTS_TIP        ),
         makeWidget({155, kControlsGroupStart + 120}, {144, 13}, WidgetType::button,   WindowColour::secondary, STR_HOTKEY,                     STR_HOTKEY_TIP                    ), // Set hotkeys buttons
 
-        // Gamepad group
-        makeWidget({  5, kGamepadGroupStart +  0},   {300, 46}, WidgetType::groupbox, WindowColour::secondary, STR_GAMEPAD_GROUP                                                 ), // Gamepad group
+        // Gamepad group — expanded from 46 px to 62 px to fit the
+        // OPENRCT2MINI Phase F.7 widgetFocusAlwaysOn checkbox at +45.
+        // The deadzone/sensitivity rows stay where they were so users
+        // who memorised their positions don't have to relearn.
+        makeWidget({  5, kGamepadGroupStart +  0},   {300, 62}, WidgetType::groupbox, WindowColour::secondary, STR_GAMEPAD_GROUP                                                 ), // Gamepad group
         makeWidget({ 10, kGamepadGroupStart + 13},   { 90, 12}, WidgetType::label,    WindowColour::secondary, STR_GAMEPAD_DEADZONE_LABEL,     STR_GAMEPAD_DEADZONE_TIP          ), // Deadzone label
         makeWidget({105, kGamepadGroupStart + 13},   {190, 13}, WidgetType::scroll,   WindowColour::secondary, SCROLL_HORIZONTAL,              STR_GAMEPAD_DEADZONE_TOOLTIP_FORMAT), // Deadzone slider
         makeWidget({ 10, kGamepadGroupStart + 28},   { 90, 12}, WidgetType::label,    WindowColour::secondary, STR_GAMEPAD_SENSITIVITY_LABEL,  STR_GAMEPAD_SENSITIVITY_TIP       ), // Sensitivity label
-        makeWidget({105, kGamepadGroupStart + 28},   {190, 13}, WidgetType::scroll,   WindowColour::secondary, SCROLL_HORIZONTAL,              STR_GAMEPAD_SENSITIVITY_TOOLTIP_FORMAT)  // Sensitivity slider
+        makeWidget({105, kGamepadGroupStart + 28},   {190, 13}, WidgetType::scroll,   WindowColour::secondary, SCROLL_HORIZONTAL,              STR_GAMEPAD_SENSITIVITY_TOOLTIP_FORMAT), // Sensitivity slider
+        // OPENRCT2MINI focus-mode-plan / Phase F.7: focus mode toggle.
+        makeWidget({ 10, kGamepadGroupStart + 45},   {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_WIDGET_FOCUS_ALWAYS_ON,     STR_WIDGET_FOCUS_ALWAYS_ON_TIP    )  // Focus mode always on
     );
 
     constexpr int32_t kThemesGroupStart = 53;
@@ -1071,6 +1083,13 @@ namespace OpenRCT2::Ui::Windows
             //   Behaviour: minimize-on-focus-loss (we never lose focus on
             //     OnionUI) and disable-screensaver (the device is always-on
             //     while powered).
+            // host-restoration-plan §2a: Mini-only disable. On host the
+            // user owns the display, so they get the upstream interactive
+            // controls (fullscreen/resolution/scale/drawing-engine/frame-
+            // rate-limit/multi-threading/focus-loss/screensaver). The
+            // multi-threading config force-off in Config.cpp is gated
+            // the same way so the checkbox honours saved state on host.
+#ifdef OPENRCT2MINI
             for (auto idx : { WIDX_FULLSCREEN_LABEL, WIDX_FULLSCREEN, WIDX_FULLSCREEN_DROPDOWN,
                               WIDX_RESOLUTION_LABEL, WIDX_RESOLUTION, WIDX_RESOLUTION_DROPDOWN,
                               WIDX_SCALE_LABEL, WIDX_SCALE, WIDX_SCALE_UP, WIDX_SCALE_DOWN,
@@ -1081,6 +1100,7 @@ namespace OpenRCT2::Ui::Windows
             {
                 widgetSetEnabled(*this, idx, false);
             }
+#endif
 
             // Dropdown captions for straightforward strings.
             widgets[WIDX_FULLSCREEN].text = FullscreenModeNames[Config::Get().general.fullscreenMode];
@@ -1740,9 +1760,12 @@ namespace OpenRCT2::Ui::Windows
             // app is always foreground (OnionUI doesn't multitask). Disable
             // audio device selection (no choice to make) and the
             // disable-audio-on-focus-loss checkbox (no focus loss).
+            // host-restoration-plan §2b: Mini-only.
+#ifdef OPENRCT2MINI
             widgetSetEnabled(*this, WIDX_SOUND, false);
             widgetSetEnabled(*this, WIDX_SOUND_DROPDOWN, false);
             widgetSetEnabled(*this, WIDX_AUDIO_FOCUS_CHECKBOX, false);
+#endif
 
             // Initialize only on first frame, otherwise the scrollbars won't be able to be modified
             if (currentFrame == 0)
@@ -1808,6 +1831,18 @@ namespace OpenRCT2::Ui::Windows
                     Config::Save();
                     invalidate();
                     break;
+                // OPENRCT2MINI focus-mode-plan / Phase F.7: toggle
+                // Config::General::widgetFocusAlwaysOn. The flip takes
+                // effect on the next process() frame — bootstrap re-
+                // evaluates `shouldBeFocused` every tick and either
+                // snaps to the topmost focusable window (newly true)
+                // or lets the explicit-toggle path own activation
+                // (newly false).
+                case WIDX_GAMEPAD_FOCUS_ALWAYS_ON:
+                    Config::Get().general.widgetFocusAlwaysOn ^= 1;
+                    Config::Save();
+                    invalidate();
+                    break;
             }
         }
 
@@ -1817,15 +1852,28 @@ namespace OpenRCT2::Ui::Windows
             setCheckboxValue(WIDX_TRAP_CURSOR, Config::Get().general.trapCursor);
             // OPENRCT2MINI: trap-mouse-cursor is meaningless on a 640x480
             // fullscreen device with no real mouse. Disable the checkbox.
+            // host-restoration-plan §2c: Mini-only.
+#ifdef OPENRCT2MINI
             widgetSetEnabled(*this, WIDX_TRAP_CURSOR, false);
-            // OPENRCT2MINI: disable the "Shortcut Keys..." button. The
-            // device's gamepad controls are fixed by the build-deps.sh
-            // SDL2 patch + UiContext intercepts and aren't user-rebindable
-            // — the upstream ShortcutKeys window doesn't surface those
-            // intercepts, so editing it does nothing useful here.
-            widgetSetEnabled(*this, WIDX_HOTKEY_DROPDOWN, false);
+#endif
+            // OPENRCT2MINI gamepad-plan 1.5/1.6: re-enable Shortcut
+            // Keys. The earlier disable rationale (gamepad controls
+            // were hardcoded in UiContext intercepts and the rebind UI
+            // didn't surface them) no longer applies — every cursor /
+            // click / cancel / shade / Z-lock / fast-modifier / shift
+            // / view-rotate / zoom / construction-rotate behaviour is
+            // now driven by user-rebindable shortcut bindings, and the
+            // ShortcutKeys window is the canonical entry point to
+            // change them. The window covers both keyboard (default
+            // device-friendly defaults via registerKeyboardDefault) and
+            // gamepad (PAD * tokens via registerPadDefault) bindings.
             setCheckboxValue(WIDX_INVERT_DRAG, Config::Get().general.invertViewportDrag);
             setCheckboxValue(WIDX_ZOOM_TO_CURSOR, Config::Get().general.zoomToCursor);
+            // OPENRCT2MINI focus-mode-plan / Phase F.7: reflect the
+            // current focus-mode toggle state. The bound config field
+            // is the source of truth — InputManager's process()
+            // bootstrap reads it every frame.
+            setCheckboxValue(WIDX_GAMEPAD_FOCUS_ALWAYS_ON, Config::Get().general.widgetFocusAlwaysOn);
             setCheckboxValue(WIDX_WINDOW_BUTTONS_ON_THE_LEFT, Config::Get().interface.windowButtonsOnTheLeft);
             setCheckboxValue(WIDX_ENLARGED_UI, Config::Get().interface.enlargedUi);
             setCheckboxValue(WIDX_TOUCH_ENHANCEMENTS, Config::Get().interface.touchEnhancements);

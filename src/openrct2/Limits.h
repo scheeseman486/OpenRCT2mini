@@ -20,7 +20,14 @@ namespace OpenRCT2::Limits
     // load (cut 10) which technically breaks vanilla save compatibility. Reverted per
     // project policy: no game-limit cuts that risk vanilla compatibility.
     constexpr uint16_t kMaxRidesInPark = 255;
-    constexpr uint16_t kMaxStationsPerRide = 4;   // OPENRCT2MINI: was 255; RCT2 original limit
+    // OPENRCT2MINI host-restoration-plan §1a: 4 on Mini (cut L2 — RCT2's
+    // original limit, saves ride-struct footprint), 255 on host (OpenRCT2
+    // upstream value, V2 .park format supports up to 255).
+#ifdef OPENRCT2MINI
+    constexpr uint16_t kMaxStationsPerRide = 4;
+#else
+    constexpr uint16_t kMaxStationsPerRide = 255;
+#endif
     constexpr uint8_t kCustomerHistorySize = RCT12::Limits::kCustomerHistorySize;
     constexpr uint8_t kMaxGolfHoles = std::numeric_limits<uint8_t>::max();
     constexpr uint8_t kMaxHelices = std::numeric_limits<uint8_t>::max();

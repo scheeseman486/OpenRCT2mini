@@ -67,6 +67,24 @@ namespace OpenRCT2::Ui::Windows
     WindowBase* PerformanceProfilerOpen();
 #endif
 
+    // OPENRCT2MINI gamepad-plan 1.11: Haptics control window.
+    // Reachable from the Cheats / Debug dropdown (under Performance
+    // Profiler when debuggingTools is on). Toggles rumble globally,
+    // adjusts intensity, and exposes a Test Rumble button so the
+    // user can verify the pad actually buzzes.
+    WindowBase* HapticsOpen();
+
+    // OPENRCT2MINI gamepad-plan 1.11b: Rumble Editor window.
+    // Per-SoundId envelope editor reachable from the same dropdown.
+    WindowBase* RumbleEditorOpen();
+
+    // OPENRCT2MINI input-plan Track 2 §4.2: LED Options window.
+    // Reachable from the same Cheats / Debug dropdown. Toggles the
+    // DualShock-style lightbar globally, adjusts brightness, and
+    // exposes a Test LED button so the user can verify the pad's
+    // lightbar responds.
+    WindowBase* LedOpen();
+
     // ClearScenery
     WindowBase* ClearSceneryOpen();
     void ToggleClearSceneryWindow();

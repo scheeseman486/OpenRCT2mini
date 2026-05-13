@@ -69,6 +69,27 @@ namespace OpenRCT2::Ui::Windows
 
     int32_t DropdownIndexFromPoint(const ScreenCoordsXY& loc, WindowBase* w);
 
+    // OPENRCT2MINI focus-mode-plan §F.10: focus-mode helpers for the
+    // dropdown window. The dropdown stores item state in gDropdown
+    // (highlightedIndex + items[]); the mouse-input path drives
+    // selection via per-frame cursor-over-item hit-testing. Focus
+    // mode bypasses the cursor by walking highlightedIndex with
+    // focus.up/down and selecting via a synthetic dispatch.
+    //
+    // WindowDropdownMoveHighlight(direction): adjust highlightedIndex
+    // by direction (+1/-1), skipping disabled items and separators,
+    // wrapping at the ends. If highlightedIndex is -1 (initial state)
+    // the first call lands on item 0 (forward) or last (backward).
+    //
+    // WindowDropdownSelectIndex(index): commit `index` as the
+    // selected item — closes the dropdown and dispatches to the
+    // parent window's onDropdown handler (the parent is captured
+    // from gPressedWidget which the click-time onMouseDown chain
+    // populated). Mirrors the rightPress block in MouseInput.cpp
+    // (the path real mouse clicks use to close + dispatch).
+    void WindowDropdownMoveHighlight(int32_t direction);
+    void WindowDropdownSelectIndex(int32_t index);
+
     void WindowDropdownShowColour(
         WindowBase* w, Widget* widget, ColourWithFlags dropdownColour, Drawing::Colour selectedColour,
         bool alwaysHideSpecialColours = false);
@@ -205,6 +226,27 @@ namespace OpenRCT2::Dropdown
         return Item{ .type = ItemType::image, .image = image, .tooltip = tooltip };
     }
 
+    // OPENRCT2MINI focus-mode-plan §F.14: dropdown navigation source.
+    // The dropdown highlight (gDropdown.highlightedIndex) can be
+    // driven by EITHER:
+    //   - cursor: mouse hover via MouseInput::ProcessMouseOver. The
+    //     cursor position decides the highlight each frame.
+    //   - focus: D-pad / arrow keys via WindowDropdownMoveHighlight,
+    //     which steps the highlight ±1 explicitly.
+    // Without an explicit source flag the two paths fight each
+    // other: ProcessMouseOver runs every frame and clobbers the
+    // focus-driven highlight by re-deriving from cursor position.
+    // The source flag flips whenever a real input event of either
+    // kind arrives (SDL_MOUSEMOTION → cursor;
+    // WindowDropdownMoveHighlight → focus) and gates the per-frame
+    // ProcessMouseOver mutation. Each path wins exactly when its
+    // input was last used; switching modes is a single event away.
+    enum class NavigationSource : uint8_t
+    {
+        cursor = 0,
+        focus,
+    };
+
     struct DropdownState
     {
         int32_t numItems{};
@@ -213,6 +255,7 @@ namespace OpenRCT2::Dropdown
         int32_t lastTooltipHover{};
         int32_t highlightedIndex{};
         int32_t defaultIndex{};
+        NavigationSource navigationSource{ NavigationSource::cursor };
 
         std::optional<CellDrawFunction> cellDrawFunction;
     };

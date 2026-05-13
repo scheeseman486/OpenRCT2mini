@@ -187,6 +187,20 @@ else ()
     message(STATUS "OpenRCT2mini diagnostic logging: OFF (release build)")
 endif ()
 
+# OPENRCT2MINI host-restoration-plan Phase 0: the OPENRCT2MINI compile-time
+# flag. Default OFF on every fresh build; the Mini cross-compile in
+# Packaging/miyoo_mini/build.sh sets it ON. When OFF, host gets upstream
+# OpenRCT2 feature parity for the gated cuts (engine caps, UI disables,
+# sprite paging, etc.). See host-restoration-plan.md for the gate-by-gate
+# inventory.
+option(OPENRCT2MINI "Build as the OpenRCT2mini Miyoo-targeted variant" OFF)
+if (OPENRCT2MINI)
+    add_compile_definitions(OPENRCT2MINI)
+    message(STATUS "OpenRCT2mini build variant: ON (Miyoo Mini target — all OPENRCT2MINI cuts active)")
+else ()
+    message(STATUS "OpenRCT2mini build variant: OFF (host / desktop — upstream parity for gated cuts)")
+endif ()
+
 
 if (FORCE32)
     set(TARGET_M "-m32")

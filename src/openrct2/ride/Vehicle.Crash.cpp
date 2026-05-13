@@ -111,6 +111,14 @@ void Vehicle::UpdateCollisionSetup()
     curRide->windowInvalidateFlags.set(RideInvalidateFlag::main, RideInvalidateFlag::list);
     KillAllPassengersInTrain();
 
+    // OPENRCT2MINI gamepad-plan 1.11b: ride-crash haptic moved to the
+    // SoundId::crash envelope in rumble.json (default profile in
+    // HapticDefaults). The per-car SFX loop below plays
+    // SoundId::crash, which Audio::Play forwards to
+    // Haptic::onSoundPlayed; the engine pushes a one-shot envelope
+    // playhead and the per-frame tick handles the rest. Same felt
+    // result, fully user-editable from the Rumble Editor window.
+
     Vehicle* lastVehicle = this;
     for (Vehicle* train = getGameState().entities.GetEntity<Vehicle>(Id); train != nullptr;
          train = getGameState().entities.GetEntity<Vehicle>(train->next_vehicle_on_train))

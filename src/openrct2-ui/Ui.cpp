@@ -144,6 +144,14 @@ int main(int argc, const char** argv)
         // SaveGameWithName allocates / opens files / takes locks, none
         // of which is async-signal-safe. The handler does not re-raise:
         // letting the loop exit cleanly is the goal, not crashing.
+        //
+        // host-restoration-plan §1d: Mini-only. On host SIGINT is the
+        // developer's Ctrl-C and SIGTERM is normal process shutdown —
+        // we don't want to silently coerce a park save out of either.
+        // The OOM handler and SIGSEGV/SIGBUS/SIGFPE/SIGABRT/SIGILL
+        // backtrace handlers above stay unconditional; they're useful
+        // diagnostics on any platform.
+#ifdef OPENRCT2MINI
         struct PowerOffHandler {
             static void Handle(int /*sig*/)
             {
@@ -153,6 +161,7 @@ int main(int argc, const char** argv)
         ::signal(SIGTERM, PowerOffHandler::Handle);
         ::signal(SIGHUP, PowerOffHandler::Handle);
         ::signal(SIGINT, PowerOffHandler::Handle);
+#endif
     }
     kpt("signal handlers installed");
 #endif
@@ -165,9 +174,13 @@ int main(int argc, const char** argv)
     // own free-list and reserves heap pages. Worker threads (audio, network, jobpool) each
     // grab one, so anonymous heap balloons by tens of MB even at idle. 2 arenas matches
     // the device's actual core count and saves ~27 MB of anonymous RSS at the title screen.
-#if defined(__GLIBC__)
+#if defined(__GLIBC__) && defined(OPENRCT2MINI)
+    // host-restoration-plan §1d: Mini-only. On host the default 8×ncores
+    // arenas are fine — desktop has plenty of address space.
     mallopt(M_ARENA_MAX, 2);
     kpt("mallopt arena_max=2 ok");
+#endif
+#if defined(__GLIBC__)
     // OPENRCT2MINI: cut 24 reverted. Lowering M_MMAP_THRESHOLD made [heap] look smaller
     // by routing medium allocations through mmap, but anonymous total stayed identical
     // — memory just moved between accounting buckets. Keep glibc default (128 KiB).

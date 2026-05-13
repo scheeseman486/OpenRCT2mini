@@ -19,6 +19,56 @@ namespace OpenRCT2::Ui::ShortcutId
     constexpr std::string_view kInterfaceRotateConstruction = "interface.general.rotate_construction";
     constexpr std::string_view kInterfaceCancelConstruction = "interface.general.cancel_construction";
     constexpr std::string_view kInterfacePause = "interface.general.pause";
+
+    // OPENRCT2MINI focus-mode-plan / Phase F.1: focus-mode activator
+    // (formerly "caret browse"). When the user fires this shortcut,
+    // and a window with focusable widgets is on top, the InputManager
+    // promotes the active context to `widgetFocus`. D-pad then steps
+    // spatially between buttons / checkboxes / textboxes / scroll
+    // widgets; A presses the focused widget; B exits. Only relevant
+    // when Config::General::widgetFocusAlwaysOn is false — when it's
+    // true (default), focus mode auto-activates without this gesture.
+    // Default keyboard binding empty; default gamepad binding PAD BACK
+    // 500ms hold (via task #373's HOLD mechanism). Mini-compatible.
+    // See focus-mode-plan.md for the full design.
+    constexpr std::string_view kInterfaceEnterFocusMode = "interface.general.enter_focus_mode";
+    // OPENRCT2MINI cursor-selector-modal-plan §CS-R1: explicit
+    // "show cursor" shortcut. Wakes the mouse cursor regardless of
+    // current SelectorMode. The Mini handheld never sees
+    // SDL_MOUSEMOTION (the virtual cursor writes _cursorState
+    // directly, not through SDL events) and the §5 modal-switch
+    // filter drops shared-binding cursor.* events while in
+    // SelectorMode::active — so Mini users with widgetFocusAlwaysOn
+    // = true would otherwise be stuck in selector mode. This
+    // shortcut is the documented escape hatch. Default keyboard
+    // binding empty (host PC users can leave widgetFocusAlwaysOn
+    // = false if they prefer cursor-first); Mini users can bind it
+    // through the rebind UI to whatever they like.
+    constexpr std::string_view kInterfaceShowCursor = "interface.general.show_cursor";
+    // OPENRCT2MINI focus-mode-plan §F.8: cycle the focus ring between
+    // windows that have focusable widgets. The bootstrap auto-picks
+    // the topmost qualifying window; these two shortcuts let the
+    // user walk forward/backward through the rest of the stack
+    // (z-order, wraps around). Default SHIFT+TAB for forward, CTRL+
+    // TAB for backward — keyboard-conventional even if not the most
+    // common Tab-as-next convention. Gamepad bindings TBD.
+    constexpr std::string_view kInterfaceCycleNextWindow = "interface.general.cycle_next_window";
+    constexpr std::string_view kInterfaceCyclePreviousWindow = "interface.general.cycle_previous_window";
+    // OPENRCT2MINI focus-mode-plan §F.9: focus-ring directional moves,
+    // namespaced separately from cursor.* so the two concepts (mouse
+    // cursor position vs. yellow focus selector) can be rebound
+    // independently. User report: the original cursor.* bindings
+    // drove both, which made it impossible to have D-pad move only
+    // focus or only cursor. The strategy's onShortcut now matches
+    // focus.up/down/left/right instead of cursor.up/down/left/right.
+    // Defaults overlap with cursor.* on purpose so first-launch
+    // behaviour is preserved (D-pad / arrows still navigate the
+    // focus ring); users who want non-overlapping behaviour can
+    // unbind one side via the Shortcut Keys window.
+    constexpr std::string_view kFocusUp = "focus.up";
+    constexpr std::string_view kFocusDown = "focus.down";
+    constexpr std::string_view kFocusLeft = "focus.left";
+    constexpr std::string_view kFocusRight = "focus.right";
     constexpr std::string_view kInterfaceDecreaseSpeed = "interface.misc.decrease_speed";
     constexpr std::string_view kInterfaceIncreaseSpeed = "interface.misc.increase_speed";
     constexpr std::string_view kInterfaceToggleToolbars = "interface.misc.toggle_toolbars";
@@ -62,6 +112,18 @@ namespace OpenRCT2::Ui::ShortcutId
     constexpr std::string_view kViewGeneralZoomIn = "view.general.zoom_in";
     constexpr std::string_view kViewGeneralRotateClockwise = "view.general.rotate_clockwise";
     constexpr std::string_view kViewGeneralRotateAnticlockwise = "view.general.rotate_anticlockwise";
+
+    // OPENRCT2MINI mouse-input refactor: context-sensitive wheel
+    // shortcuts. Default-bound to MOUSE WHEEL UP / DOWN. Their action
+    // lambdas zoom the main viewport ONLY when the cursor is over a
+    // viewport-class window. When the cursor is over a scroll widget
+    // or another wheel-handling widget, these no-op so the existing
+    // _cursorState.wheel-driven WindowAllWheelInput dispatch can
+    // handle the widget-local scroll without doubling up with zoom.
+    // kViewGeneralZoomIn/Out remain unconditional zoom shortcuts —
+    // the user can still bind them to any input for force-zoom.
+    constexpr std::string_view kViewZoomScrollUp = "view.general.zoom_scroll_up";
+    constexpr std::string_view kViewZoomScrollDown = "view.general.zoom_scroll_down";
 
     // View / scroll
     constexpr std::string_view kViewScrollUp = "view.scroll.up";
@@ -123,4 +185,63 @@ namespace OpenRCT2::Ui::ShortcutId
     constexpr std::string_view kDebugToggleConsole = "debug.console";
     constexpr std::string_view kDebugTogglePaintDebugWindow = "debug.toggle_paint_debug_window";
     constexpr std::string_view kDebugAdvanceTick = "debug.advance_tick";
+
+    // OPENRCT2MINI gamepad-plan 1.5: virtual cursor + click + chord
+    // shortcuts. These migrate the existing _vKb*-driven behaviours
+    // (rev W*/cuts 38b/43/44/60/61) from scancode synthesis + direct
+    // controller polling to the unified ShortcutManager pipeline. Each
+    // shortcut here has a corresponding entry in the migration table
+    // in gamepad-plan.md §1.5.
+    constexpr std::string_view kCursorUp           = "cursor.up";
+    constexpr std::string_view kCursorDown         = "cursor.down";
+    constexpr std::string_view kCursorLeft         = "cursor.left";
+    constexpr std::string_view kCursorRight        = "cursor.right";
+    constexpr std::string_view kCursorClick        = "cursor.click";          // primary, mouse-left equivalent
+    constexpr std::string_view kCursorCancel       = "cursor.cancel";         // secondary, mouse-right equivalent
+    constexpr std::string_view kCursorFastModifier = "cursor.fast_modifier";  // held → 2.5x cursor speed
+    constexpr std::string_view kInterfaceConstructionZLock
+        = "interface.general.construction_z_lock"; // held → ride/scenery Z-axis lock
+    constexpr std::string_view kInterfaceShadeWindowUnderCursor
+        = "interface.general.shade_window_under_cursor"; // tap → toggle shade on window under cursor
+    constexpr std::string_view kInterfaceToggleShadeAllWindows
+        = "interface.general.shade_all_windows"; // 500ms hold → shade-all / unshade-all toggle
+    constexpr std::string_view kInterfaceCloseWindowUnderCursor
+        = "interface.general.close_window_under_cursor"; // chord → close window at cursor
+
+    // OPENRCT2MINI gamepad-plan 1.5g: generic shift-modifier shortcut.
+    // Held-state ORs into InputManager's synthetic ModifierKey::shift
+    // bit so OpenRCT2's KMOD_SHIFT-driven behaviours (vertical track
+    // stack, scenery vertical-step, vertical track piece in maze, etc.)
+    // become accessible to host gamepad users without a real keyboard.
+    // Default keyboard binding is empty (real Shift already works
+    // through SDL mod state); default PAD binding is empty (user picks).
+    constexpr std::string_view kInterfaceShiftModifier
+        = "interface.general.shift_modifier";
+
+    // OPENRCT2MINI gamepad-plan 1.6c: generic dismiss / confirm
+    // shortcuts. Each modal context (OSK, LoadSave, OverwritePrompt,
+    // TextInput modal, in-game console, chat, in-place widget
+    // textbox) registers a ModalHooks callback pair with
+    // InputManager on activate. When dismiss / confirm fires, the
+    // registered callback is invoked — replacing the seven separate
+    // hardcoded SDLK_ESCAPE / SDLK_RETURN scancode checks the audit
+    // documented. Defaults: ESCAPE + PAD BACK for dismiss; RETURN +
+    // PAD START for confirm. Outside any modal these fire no-op
+    // action lambdas, so world-context behaviour (rotate camera on
+    // RETURN, cancel tool on ESCAPE via kInterfaceCancelConstruction)
+    // is unchanged.
+    constexpr std::string_view kInterfaceDismiss = "interface.general.dismiss";
+    constexpr std::string_view kInterfaceConfirm = "interface.general.confirm";
+
+    // OPENRCT2MINI mouse-input refactor: camera drag.
+    // Held over the main viewport → camera pans with cursor motion.
+    // Released within ~500ms → fires the context-sensitive right-click
+    // action (delete tile element / etc.) at the cursor position. Used
+    // to be hardcoded to the right mouse button in MouseInput.cpp's
+    // rightPress handler — now bindable like every other input.
+    // Default keyboard binding empty, default mouse binding RMB,
+    // default gamepad binding PAD B. cursor.cancel still owns the
+    // "right-click action without drag" channel via its own polling;
+    // this shortcut owns the press-and-hold camera-drag gesture.
+    constexpr std::string_view kInterfaceCameraDrag = "interface.general.camera_drag";
 } // namespace OpenRCT2::Ui::ShortcutId

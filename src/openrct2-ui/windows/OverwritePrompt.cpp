@@ -8,6 +8,8 @@
  *****************************************************************************/
 
 #include <SDL_keycode.h>
+#include <openrct2-ui/UiContext.h>
+#include <openrct2-ui/input/InputManager.h>
 #include <openrct2-ui/interface/FileBrowser.h>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2-ui/windows/Windows.h>
@@ -63,7 +65,35 @@ namespace OpenRCT2::Ui::Windows
         void onOpen() override
         {
             setWidgets(window_overwrite_prompt_widgets);
+            // OPENRCT2MINI gamepad-plan 1.6c.4: ESC / RETURN /
+            // PAD BACK / PAD START all route through the modal hooks
+            // now. Replaces the hardcoded keycode switch in
+            // WindowLoadSaveOverwritePromptInputKey below (kept as a
+            // legacy entry point for callers that still pass keycodes
+            // directly, but in practice unreachable while hooks are
+            // installed — the InputManager dispatch fires first).
+            _modalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
+                /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                    onMouseUp(WIDX_OVERWRITE_CANCEL);
+                    return true;
+                },
+                /*confirm=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                    onMouseUp(WIDX_OVERWRITE_OVERWRITE);
+                    return true;
+                },
+            });
         }
+
+        void onClose() override
+        {
+            OpenRCT2::Ui::GetInputManager().popModalHooks(_modalHooksToken);
+        }
+
+    private:
+        // OPENRCT2MINI gamepad-plan 1.6c.4: token from pushModalHooks.
+        OpenRCT2::Ui::InputManager::ModalHooksToken _modalHooksToken{};
+
+    public:
 
         void onMouseUp(WidgetIndex widgetIndex) override
         {
@@ -115,20 +145,17 @@ namespace OpenRCT2::Ui::Windows
 
     void WindowLoadSaveOverwritePromptInputKey(WindowBase* w, uint32_t keycode)
     {
-        if (w->classification != WindowClass::loadsaveOverwritePrompt)
-        {
-            return;
-        }
-
-        auto promptWindow = static_cast<OverwritePromptWindow*>(w);
-
-        if (keycode == SDLK_RETURN || keycode == SDLK_KP_ENTER)
-        {
-            promptWindow->onMouseUp(WIDX_OVERWRITE_OVERWRITE);
-        }
-        else if (keycode == SDLK_ESCAPE)
-        {
-            promptWindow->onMouseUp(WIDX_OVERWRITE_CANCEL);
-        }
+        // OPENRCT2MINI gamepad-plan 1.6c.7: ESC/RETURN/KP_ENTER cases
+        // deleted. Both keys now route through InputManager's
+        // ModalHooks dispatch (installed by onOpen, popped by
+        // onClose) and fire WIDX_OVERWRITE_OVERWRITE / _CANCEL via
+        // the registered callbacks before reaching this entry point.
+        // The InputManager keyboard-branch gate that calls this
+        // function still early-returns on any keyboard event while
+        // the prompt is up, swallowing non-confirm/dismiss keys
+        // (preventing e.g. RETURN-bound camera rotate from firing).
+        // Function body becomes a no-op.
+        (void)w;
+        (void)keycode;
     }
 } // namespace OpenRCT2::Ui::Windows

@@ -335,13 +335,22 @@ namespace OpenRCT2
                             const auto wType = widget != nullptr ? widget->type : WidgetType::empty;
                             const bool isUndraggableShell = w->flags.hasAny(
                                 WindowFlag::stickToBack, WindowFlag::noBackground, WindowFlag::noTitleBar);
+                            // OPENRCT2MINI mouse-input refactor: the
+                            // camera-drag-on-viewport branch is gone.
+                            // Camera drag is now driven by the
+                            // kInterfaceCameraDrag shortcut poll
+                            // (UiContext::ProcessWorldCursor) which
+                            // calls InputViewportDragBeginAtCursor /
+                            // InputViewportDragEndCurrent on rising /
+                            // falling edge. The other right-click
+                            // drag types (scroll-drag, window-drag)
+                            // stay here; they aren't bindable yet
+                            // and the rightPress event is still the
+                            // right entry point for them.
                             if (wType == WidgetType::viewport && isUndraggableShell)
                             {
-                                if (!(gLegacyScene == LegacyScene::trackDesignsManager
-                                      || gLegacyScene == LegacyScene::titleSequence))
-                                {
-                                    InputViewportDragBegin(*w);
-                                }
+                                // intentional no-op — camera drag
+                                // handled by polling. Falls through.
                             }
                             else if (wType == WidgetType::scroll && [&] {
                                          // OPENRCT2MINI: only do drag-scroll if
@@ -403,18 +412,17 @@ namespace OpenRCT2
                 }
                 break;
             case InputState::ViewportRight:
+                // OPENRCT2MINI mouse-input refactor: camera drag end /
+                // short-press right-click is owned by the
+                // kInterfaceCameraDrag poll now (handles non-mouse
+                // bindings like PAD B). Motion-continue stays here;
+                // it's driven by the per-frame "no events queued"
+                // released fallback the same way regardless of which
+                // input started the drag. RMB-specific rightRelease
+                // is no longer special-cased.
                 if (state == MouseState::released)
                 {
                     InputViewportDragContinue();
-                }
-                else if (state == MouseState::rightRelease)
-                {
-                    InputViewportDragEnd();
-                    if (_ticksSinceDragStart.has_value() && gCurrentRealTimeTicks - _ticksSinceDragStart.value() < 500)
-                    {
-                        // If the user pressed the right mouse button for less than 500 ticks, interpret as right click
-                        ViewportInteractionRightClick(screenCoords);
-                    }
                 }
                 break;
             case InputState::DropdownActive:
@@ -700,6 +708,62 @@ namespace OpenRCT2
     {
         _inputState = InputState::Reset;
         ContextShowCursor();
+    }
+
+    // OPENRCT2MINI mouse-input refactor: public entry points for the
+    // kInterfaceCameraDrag shortcut poll. The poll lives in
+    // UiContext::ProcessWorldCursor; calling it from here would
+    // require pulling in shortcut headers, so the polling owns the
+    // edge detection and we just expose Begin / End / state queries.
+    void InputViewportDragBeginAtCursor()
+    {
+        // Don't start while another drag is already in progress
+        // (e.g. user already initiated scroll-drag via right-click on
+        // a list, then pressed PAD B). The state machine assumes
+        // single-source drags — re-entering would corrupt
+        // _dragWidget bookkeeping.
+        if (_inputState != InputState::Reset && _inputState != InputState::Normal)
+            return;
+        // Same scene-gating as the legacy rightPress path.
+        if (gLegacyScene == LegacyScene::trackDesignsManager || gLegacyScene == LegacyScene::titleSequence)
+            return;
+
+        auto cursorPosition = ContextGetCursorPosition();
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindFromPoint(cursorPosition);
+        if (w == nullptr)
+            return;
+        // Only the main viewport / extra-viewport class — narrow
+        // viewports embedded in regular dialog windows (Park / Ride /
+        // Guest details) didn't camera-pan in the legacy path either.
+        const bool isUndraggableShell = w->flags.hasAny(
+            WindowFlag::stickToBack, WindowFlag::noBackground, WindowFlag::noTitleBar);
+        if (!isUndraggableShell)
+            return;
+        WidgetIndex widgetIndex = windowMgr->FindWidgetFromPoint(*w, cursorPosition);
+        if (widgetIndex == kWidgetIndexNull)
+            return;
+        if (w->widgets[widgetIndex].type != WidgetType::viewport)
+            return;
+
+        InputViewportDragBegin(*w);
+    }
+
+    void InputViewportDragEndCurrent()
+    {
+        if (_inputState == InputState::ViewportRight)
+            InputViewportDragEnd();
+    }
+
+    bool CameraDragWasShortPress()
+    {
+        return _ticksSinceDragStart.has_value()
+            && gCurrentRealTimeTicks - _ticksSinceDragStart.value() < 500;
+    }
+
+    bool CameraDragInProgress()
+    {
+        return _inputState == InputState::ViewportRight;
     }
 
 #pragma endregion
@@ -1193,7 +1257,13 @@ namespace OpenRCT2
             case WidgetType::custom:
                 if (!widgetIsDisabled(*w, widgetIndex))
                 {
-                    OpenRCT2::Audio::Play(Audio::SoundId::click1, 0, w->windowPos.x + widget.midX());
+                    // OPENRCT2MINI v2.17: widgets can opt out of the
+                    // framework click sound via WidgetFlag::
+                    // suppressClickSound (e.g. the Rumble Editor's
+                    // Play button, where the click1 sample would
+                    // mask the rumble preview audio).
+                    if (!widget.flags.has(WidgetFlag::suppressClickSound))
+                        OpenRCT2::Audio::Play(Audio::SoundId::click1, 0, w->windowPos.x + widget.midX());
 
                     // Set new cursor down widget
                     gPressedWidget.windowClassification = windowClass;
@@ -1417,6 +1487,35 @@ namespace OpenRCT2
                         }
                         else
                         {
+                            // OPENRCT2MINI focus-mode-plan §F.13: honour
+                            // InputFlag::dropdownStayOpen regardless of
+                            // whether the physical cursor still sits on
+                            // the press widget. Upstream only checked
+                            // stayOpen inside the cursor-matches branch,
+                            // which works for real mouse clicks (cursor
+                            // is naturally on the chevron when you let
+                            // go) but breaks focus-mode synthesised
+                            // clicks — the virtual cursor is wherever
+                            // the user last left it, so the release
+                            // falls into dropdownCleanup and the popup
+                            // closes the instant the activating button
+                            // is released. Hoisting the stayOpen latch
+                            // above the cursor-match check makes the
+                            // first release after any stayOpen dropdown
+                            // a no-op (sets dropdownMouseUp, returns)
+                            // regardless of cursor position. Real mouse
+                            // workflows still work: a press-drag-release
+                            // into a dropdown ITEM lands in the
+                            // dropdown-window branch above, which
+                            // processes selection and closes; the
+                            // stayOpen swallow only fires when the
+                            // release is on a non-dropdown widget.
+                            if (gInputFlags.has(InputFlag::dropdownStayOpen)
+                                && !gInputFlags.has(InputFlag::dropdownMouseUp))
+                            {
+                                gInputFlags.set(InputFlag::dropdownMouseUp);
+                                return;
+                            }
                             if (cursor_w_class != w->classification || cursor_w_number != w->number
                                 || widgetIndex != cursor_widgetIndex)
                             {
@@ -1425,14 +1524,6 @@ namespace OpenRCT2
                             else
                             {
                                 dropdown_index = -1;
-                                if (gInputFlags.has(InputFlag::dropdownStayOpen))
-                                {
-                                    if (!gInputFlags.has(InputFlag::dropdownMouseUp))
-                                    {
-                                        gInputFlags.set(InputFlag::dropdownMouseUp);
-                                        return;
-                                    }
-                                }
                             }
                         }
 
@@ -1487,8 +1578,15 @@ namespace OpenRCT2
                     break;
 
                 {
-                    int32_t mid_point_x = widget->midX() + w->windowPos.x;
-                    OpenRCT2::Audio::Play(Audio::SoundId::click2, 0, mid_point_x);
+                    // OPENRCT2MINI v2.17: opt-out via
+                    // WidgetFlag::suppressClickSound (release-side
+                    // click2; same rationale as the press-side
+                    // click1 above).
+                    if (!widget->flags.has(WidgetFlag::suppressClickSound))
+                    {
+                        int32_t mid_point_x = widget->midX() + w->windowPos.x;
+                        OpenRCT2::Audio::Play(Audio::SoundId::click2, 0, mid_point_x);
+                    }
                 }
                 if (cursor_w_class != w->classification || cursor_w_number != w->number || widgetIndex != cursor_widgetIndex)
                     break;
@@ -1497,6 +1595,17 @@ namespace OpenRCT2
                     break;
 
                 windowMgr->InvalidateWidgetByNumber(cursor_w_class, cursor_w_number, widgetIndex);
+                // OPENRCT2MINI cursor-selector-modal-plan v2: we used
+                // to pump realMouseClick here, but ProcessWorldCursor
+                // synthesises identical MouseInput events for
+                // virtual cursor clicks (PAD A / D-pad). That
+                // would clobber the virtualUserInput flag the
+                // cursor.click shortcut just set, breaking the
+                // new-window auto-wake. The realMouseMotion
+                // transition (gated to non-zero delta) is the only
+                // reliable "real mouse" signal we need — real-
+                // mouse users move the cursor before clicking,
+                // virtual users don't.
                 // OPENRCT2MINI W6: shade button is framework-level — every
                 // window with the standard caption+closeBox prefix gets one
                 // appended by resizeFrame(). The click toggles isShaded
@@ -1533,6 +1642,18 @@ namespace OpenRCT2
             InputUpdateTooltip(w, widgetIndex, screenCoords);
         }
 
+        // OPENRCT2MINI focus-mode-plan §F.14: only the cursor source
+        // drives the per-frame highlight reset + re-derive. When the
+        // dropdown is in `focus` mode (WindowDropdownMoveHighlight set
+        // it), leave gDropdown.highlightedIndex alone — D-pad nav
+        // owns it until SDL_MOUSEMOTION flips back to `cursor`. The
+        // first real mouse motion event sets navigationSource = cursor
+        // and the next ProcessMouseOver tick resumes the hover-driven
+        // behaviour, exactly matching upstream.
+        if (gDropdown.navigationSource != Dropdown::NavigationSource::cursor)
+        {
+            return;
+        }
         gDropdown.highlightedIndex = -1;
         windowMgr->InvalidateByClass(WindowClass::dropdown);
         if (w == nullptr)

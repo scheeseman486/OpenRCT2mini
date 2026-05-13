@@ -22,26 +22,9 @@
 using namespace OpenRCT2;
 using namespace OpenRCT2::Ui;
 
-// OPENRCT2MINI gamepad-plan 1.2: encoding for axis-as-button entries in
-// the held-set and as ShortcutInput::chordModifiers entries. SDL only
-// defines ~21 controller buttons (indices 0-20 inclusive in modern SDL2
-// headers); kPadAxisAsButtonBase = 64 is comfortably past that, leaves
-// room for future SDL additions, and is small enough that std::set
-// element values stay in single-byte hash territory. Encoding:
-//
-//   axis-as-button-index = kPadAxisAsButtonBase + (axis * 2) + (direction == +1 ? 0 : 1)
-//
-// where `axis` is the SDL_CONTROLLER_AXIS_* index (0-5) and `direction`
-// is +1 (positive) or -1 (negative). LEFTTRIGGER (axis 4, +1 dir only)
-// and RIGHTTRIGGER (axis 5, +1 dir only) take indices 72 and 74. Stick
-// directions use the negative-direction slot too: e.g. STICK_L UP is
-// (axis 1 LEFTY, direction -1) → 64 + 2 + 1 = 67.
-constexpr uint32_t kPadAxisAsButtonBase = 64;
-
-static uint32_t encodeAxisAsButton(int32_t axis, int8_t direction)
-{
-    return kPadAxisAsButtonBase + (static_cast<uint32_t>(axis) * 2) + (direction == 1 ? 0u : 1u);
-}
+// OPENRCT2MINI gamepad-plan 1.2: kPadAxisAsButtonBase + encodeAxisAsButton
+// now live in ShortcutManager.h as inline constexpr / inline. See that
+// header for the encoding contract.
 
 // OPENRCT2MINI gamepad-plan 1.2: name<->index tables for SDL_GameController
 // buttons and axes, used by the PAD-token string parser/serializer.
@@ -96,6 +79,13 @@ static const PadAxisEntry kPadAxisTable[] = {
 // (50% press / 30% release) is applied in InputManager when computing
 // the joyAxis state-transition events that feed into matches.
 constexpr int32_t kPadAxisPressThreshold = 16384;
+
+// OPENRCT2MINI mouse-input refactor: scroll-wheel events ride on the
+// existing mouse kind with magic button values past SDL's defined
+// range. SDL_BUTTON_LEFT..SDL_BUTTON_X2 are 1..5 (storage 0..4); 8 / 9
+// are guaranteed clear and easy to remember as "wheel up / wheel down".
+constexpr uint32_t kMouseWheelUpButton = 8;
+constexpr uint32_t kMouseWheelDownButton = 9;
 
 // Try to parse a "PAD ..." token (without the leading "PAD " prefix
 // already stripped by the caller). Returns true on match and fills the
@@ -250,6 +240,18 @@ static size_t FindPlus(std::string_view s, size_t index)
 
 ShortcutInput::ShortcutInput(std::string_view value)
 {
+    // OPENRCT2MINI hold-binding refactor: "HOLD " prefix marks the
+    // binding as fire-after-500ms-held instead of fire-on-press.
+    // Strip the prefix, set holdMs, and parse the remainder as a
+    // normal binding string. Composes with PAD-prefix below — the
+    // user can write "HOLD PAD Y" or "HOLD C". Default 500 ms; we
+    // don't yet support custom hold times.
+    if (String::startsWith(value, "HOLD ", true))
+    {
+        holdMs = 500;
+        value = value.substr(5);
+    }
+
     // OPENRCT2MINI gamepad-plan 1.2: PAD-token branch. If the binding
     // starts with "PAD ", treat the entire remainder as a gamepad
     // chord — multiple `+`-joined PAD tokens, where the LAST one is the
@@ -361,6 +363,26 @@ ShortcutInput::ShortcutInput(std::string_view value)
             }
         }
     }
+    // OPENRCT2MINI mouse-input refactor: scroll wheel as a bindable
+    // input. Tokens "MOUSE WHEEL UP" / "MOUSE WHEEL DOWN" map onto the
+    // mouse kind with magic button values 8 (up) and 9 (down) — comfortably
+    // past the SDL_BUTTON_X1/X2 range (4/5), so they don't collide with
+    // any real mouse button. getState's `_mouseState & (1 << button)` for
+    // button=8 / 9 returns false (those bits are never set in
+    // SDL_GetMouseState's bitmask), which is exactly the behaviour we
+    // want: wheel events fire once on press, with no held-state.
+    else if (String::iequals(rem, "MOUSE WHEEL UP"))
+    {
+        kind = InputDeviceKind::mouse;
+        modifiers = newModifiers;
+        button = kMouseWheelUpButton;
+    }
+    else if (String::iequals(rem, "MOUSE WHEEL DOWN"))
+    {
+        kind = InputDeviceKind::mouse;
+        modifiers = newModifiers;
+        button = kMouseWheelDownButton;
+    }
     else if (String::startsWith(rem, "MOUSE ", true))
     {
         rem = rem.substr(6);
@@ -378,17 +400,51 @@ ShortcutInput::ShortcutInput(std::string_view value)
         modifiers = newModifiers;
         button = 0;
     }
+    // OPENRCT2MINI mouse-input refactor: RMB numbering bug-fix. SDL's
+    // SDL_BUTTON_RIGHT is 3 (1-based); after the SDL handler converts
+    // events to 0-based we expect button=2 for RMB. The legacy code
+    // stored RMB as button=1, which would have collided with the
+    // middle-button slot — but mouse bindings weren't actually firing
+    // before the loosened isSuitableInputEvent filter, so the
+    // mismatch was inert.
     else if (String::iequals(rem, "RMB"))
     {
         kind = InputDeviceKind::mouse;
         modifiers = newModifiers;
-        button = 1;
+        button = 2;
     }
     else
     {
         kind = InputDeviceKind::keyboard;
         modifiers = newModifiers;
         button = ParseKey(rem);
+
+        // OPENRCT2MINI shift/ctrl-modifier refactor: standalone
+        // modifier-key tokens ("LSHIFT", "RSHIFT", "LCTRL", "RCTRL",
+        // "LALT", "RALT") with no following key are now bindable as
+        // KEYBOARD-KEY shortcuts on their own, not chord prefixes.
+        // SDL_GetKeyFromName doesn't recognise the abbreviated form,
+        // so ParseKey would otherwise return 0 and the binding would
+        // silently no-op. The chord syntax ("SHIFT+P") still routes
+        // through the modifier loop above and is unaffected — that
+        // branch hits a value of `rem` that's the trailing key
+        // ("P"), so this fallback only fires when the modifier is
+        // the entire token.
+        if (button == 0 && newModifiers == 0)
+        {
+            if (String::iequals(rem, "LSHIFT"))
+                button = SDLK_LSHIFT;
+            else if (String::iequals(rem, "RSHIFT"))
+                button = SDLK_RSHIFT;
+            else if (String::iequals(rem, "LCTRL"))
+                button = SDLK_LCTRL;
+            else if (String::iequals(rem, "RCTRL"))
+                button = SDLK_RCTRL;
+            else if (String::iequals(rem, "LALT"))
+                button = SDLK_LALT;
+            else if (String::iequals(rem, "RALT"))
+                button = SDLK_RALT;
+        }
     }
 }
 
@@ -487,6 +543,15 @@ std::string ShortcutInput::toString(bool localised) const
 {
     std::string result;
 
+    // OPENRCT2MINI hold-binding refactor: prepend "HOLD " for hold
+    // bindings so shortcuts.json round-trips and the rebind UI
+    // displays the binding as "HOLD C" / "HOLD PAD Y" etc. Goes
+    // before everything else — composes with PAD / chord prefixes.
+    if (holdMs > 0)
+    {
+        result += "HOLD ";
+    }
+
     // OPENRCT2MINI gamepad-plan 1.2: PAD bindings serialise to a single
     // "PAD <chord>" string with chord modifiers `+`-joined before the
     // action token. Sample outputs:
@@ -548,7 +613,28 @@ std::string ShortcutInput::toString(bool localised) const
     {
         if (button != 0)
         {
-            if (localised)
+            // OPENRCT2MINI shift/ctrl-modifier refactor: round-trip
+            // standalone modifier-key bindings to their canonical
+            // tokens ("LSHIFT" etc.) instead of SDL's localised
+            // names ("Left Shift") — the parser only recognises
+            // the abbreviated form, and writing them in the long
+            // form would not parse back. Keeps shortcuts.json
+            // serialise-then-load idempotent.
+            const char* modName = nullptr;
+            switch (button)
+            {
+                case SDLK_LSHIFT: modName = "LSHIFT"; break;
+                case SDLK_RSHIFT: modName = "RSHIFT"; break;
+                case SDLK_LCTRL:  modName = "LCTRL";  break;
+                case SDLK_RCTRL:  modName = "RCTRL";  break;
+                case SDLK_LALT:   modName = "LALT";   break;
+                case SDLK_RALT:   modName = "RALT";   break;
+            }
+            if (modName != nullptr && modifiers == 0 && !localised)
+            {
+                result += modName;
+            }
+            else if (localised)
             {
                 auto name = getLocalisedKeyName(button);
                 if (!name.empty())
@@ -573,8 +659,18 @@ std::string ShortcutInput::toString(bool localised) const
             case 0:
                 result += localised ? FormatStringID(STR_SHORTCUT_MOUSE_LEFT, button + 1) : "LMB";
                 break;
-            case 1:
+            // OPENRCT2MINI mouse-input refactor: RMB now maps to
+            // button = 2 (== SDL_BUTTON_RIGHT - 1). Was 1 in legacy
+            // code; bug was inert before the binding filter loosened.
+            case 2:
                 result += localised ? FormatStringID(STR_SHORTCUT_MOUSE_RIGHT, button + 1) : "RMB";
+                break;
+            // OPENRCT2MINI mouse-input refactor: scroll-wheel tokens.
+            case kMouseWheelUpButton:
+                result += "MOUSE WHEEL UP";
+                break;
+            case kMouseWheelDownButton:
+                result += "MOUSE WHEEL DOWN";
                 break;
             default:
                 result += localised ? FormatStringID(STR_SHORTCUT_MOUSE_NUMBER, button + 1)
@@ -625,6 +721,30 @@ bool ShortcutInput::appendModifier(std::string& s, uint32_t left, uint32_t right
     return false;
 }
 
+// OPENRCT2MINI shift/ctrl-modifier refactor + chord-click fix:
+//
+// When the shortcut REQUIRES this modifier (left|right), accept only if
+// the corresponding side is actually held — that part is unchanged.
+//
+// When the shortcut does NOT require this modifier, the legacy upstream
+// behaviour was to REJECT if the modifier was held anyway (so plain `Z`
+// would not fire while Shift was down — the user "must" have meant a
+// Shift+Z chord). That worked in the old hardcoded-modifier world, but
+// it breaks our bindable modifier-shortcut model: kInterfaceShift-
+// Modifier and kInterfaceConstructionZLock have keyboard defaults
+// LSHIFT/RSHIFT and LCTRL/RCTRL, so holding the bound input sets
+// KMOD_SHIFT / KMOD_CTRL in SDL_GetModState — which would then block
+// the bare cursor.click binding (modifiers=0) from matching, making
+// modifier+click silently no-op. The user sees vertical placement on
+// hover, but clicking does nothing because the click event itself is
+// filtered out at matches() time.
+//
+// New behaviour: when the shortcut doesn't require this modifier, ACCEPT
+// even if the actual state has it. Differentiation between "plain Z"
+// and "Shift+Z" as separate shortcuts is now done by the largest-match-
+// wins cardinality scan in ShortcutManager::processEvent, which adds
+// the keyboard-modifier count into the cardinality so an explicit
+// Shift+Z binding (card 2) outranks plain Z (card 1) when both match.
 static bool HasModifier(uint32_t shortcut, uint32_t actual, uint32_t left, uint32_t right)
 {
     if (shortcut & (left | right))
@@ -637,10 +757,6 @@ static bool HasModifier(uint32_t shortcut, uint32_t actual, uint32_t left, uint3
         {
             return true;
         }
-        return false;
-    }
-    if (actual & (left | right))
-    {
         return false;
     }
     return true;
@@ -750,5 +866,39 @@ std::optional<ShortcutInput> ShortcutInput::fromInputEvent(const InputEvent& e)
     result.kind = e.deviceKind;
     result.modifiers = modifiers;
     result.button = e.button;
+
+    // OPENRCT2MINI shift/ctrl-modifier refactor: when the captured
+    // key IS a bare modifier (LSHIFT/RSHIFT/LCTRL/RCTRL/LALT/RALT),
+    // strip the modifier flags from the binding. Otherwise the
+    // SDL_KEYDOWN for Shift would store {kind=keyboard,
+    // modifiers=KMOD_SHIFT, button=SDLK_LSHIFT} — a self-modified
+    // binding that toString would render as "SHIFT+LSHIFT" and
+    // InputManager::getState's bare-modifier fast path wouldn't
+    // recognise (because modifiers != 0). Clearing modifiers
+    // produces a clean bare-modifier binding instead.
+    if (e.deviceKind == InputDeviceKind::keyboard)
+    {
+        const auto b = e.button;
+        const bool isBareModifierKey
+            = (b == SDLK_LSHIFT || b == SDLK_RSHIFT || b == SDLK_LCTRL || b == SDLK_RCTRL
+               || b == SDLK_LALT || b == SDLK_RALT);
+        if (isBareModifierKey)
+            result.modifiers = 0;
+    }
+    // OPENRCT2MINI gamepad-plan 1.7c: joyAxis (trigger / stick-direction)
+    // bindings need axisDirection and axisThreshold for matches() to fire
+    // and for toString() to serialise as "PAD L2" / "PAD STICK_L UP" /
+    // etc. InputManager synthesises e.axisValue as ±kPadAxisPressThreshold
+    // on threshold-cross — so we can derive both fields directly: sign of
+    // axisValue gives direction, magnitude is the press threshold.
+    // Without this, captured trigger bindings end up with axisDirection=0
+    // and matches() returns false unconditionally; the binding also
+    // serialises as an empty string because padAxisName(idx, 0) misses
+    // the table.
+    if (e.deviceKind == InputDeviceKind::joyAxis)
+    {
+        result.axisDirection = (e.axisValue >= 0) ? +1 : -1;
+        result.axisThreshold = kPadAxisPressThreshold;
+    }
     return result;
 }

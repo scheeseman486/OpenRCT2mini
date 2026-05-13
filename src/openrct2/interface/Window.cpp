@@ -22,6 +22,7 @@
 #include "../interface/Cursors.h"
 #include "../ride/RideAudio.h"
 #include "../ui/UiContext.h"
+#include "../ui/WidgetFocusBridge.h"
 #include "../ui/WindowManager.h"
 #include "../world/Map.h"
 #include "../world/MapSelection.h"
@@ -657,6 +658,16 @@ static constexpr float kWindowScrollLocations[][2] = {
             w.drawShadedChrome(copy);
         else
             w.onDraw(copy);
+
+        // OPENRCT2MINI focus-mode-plan / Phase F.5: focus-ring overlay.
+        // Drawn AFTER onDraw / drawShadedChrome so the yellow inset
+        // outline sits on top of whatever the window rendered. The
+        // bridge function is a no-op unless (a) the active context is
+        // widgetFocus and (b) this window's class matches the focused
+        // class — so the cost in non-focus-mode frames is two
+        // accessor calls and an early return. See WidgetFocusBridge.h
+        // for the cross-library wiring rationale.
+        Ui::drawFocusOutlineIfActive(copy, w);
     }
 
     bool isToolActive(WindowClass cls)

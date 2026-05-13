@@ -85,10 +85,96 @@ namespace OpenRCT2::Config
         bool trapCursor;
         bool invertViewportDrag;
         bool zoomToCursor;
+        // OPENRCT2MINI focus-mode-plan / Phase F.3: when true, the
+        // widget-focus context is implicitly active in every window that
+        // contains at least one focusable widget — the user can D-pad
+        // through buttons / checkboxes / dropdowns without first
+        // pressing the kInterfaceEnterFocusMode shortcut. When false,
+        // focus mode is entered explicitly on shortcut press and exits
+        // on the kInterfaceDismiss binding. Defaults to true on the
+        // handheld build because gamepad is the primary input. See
+        // focus-mode-plan.md §F.3 and the Options Phase F.7 UI hookup.
+        bool widgetFocusAlwaysOn;
+
+        // OPENRCT2MINI host-restoration-plan Phase 0: runtime knobs that
+        // let host developers reproduce Mini-style behaviour for a
+        // single field without recompiling the binary. The compile-time
+        // OPENRCT2MINI flag still takes precedence; these only matter
+        // on host (OPENRCT2MINI undefined). Phase 0 scaffolds them;
+        // later phases wire them into the actual cut sites.
+        //
+        // mapSizeOverride: 0 means use the compiled-in
+        // kMaximumMapSizeTechnical default. Non-zero values clamp the
+        // effective max map size for testing (e.g. set to 257 on a
+        // host build to reproduce the Mini 256-tile cap behaviour
+        // without flipping the compile flag).
+        uint16_t mapSizeOverride;
+
+        // disableMultiThreadedRendering: on Mini this defaults to true
+        // (cut U2 force-off). On host it defaults to false (the
+        // Options > Display checkbox is honoured). Either build can
+        // flip it at runtime via config.ini if a developer needs to
+        // reproduce the opposite behaviour for testing.
+        bool disableMultiThreadedRendering;
 
         // Gamepad
         int32_t gamepadDeadzone;
         float gamepadSensitivity;
+        // OPENRCT2MINI gamepad-plan 1.9: analog right-stick → camera
+        // pan. CameraDeadzone is the stick deflection magnitude
+        // (0..32767) below which input is ignored — defaults to 8000
+        // (~24%) to filter out resting drift on worn sticks.
+        // CameraSensitivity is a linear multiplier on the resulting
+        // pan velocity. InvertCameraY swaps the vertical axis sign,
+        // for users who prefer flight-sim-style "up = pitch back".
+        int32_t gamepadCameraDeadzone;
+        float gamepadCameraSensitivity;
+        bool gamepadInvertCameraY;
+        // OPENRCT2MINI gamepad-plan 1.11: haptic (rumble) global gates.
+        // gamepadRumbleEnabled (default true) is the master kill-switch
+        // — when off, every UiContext::RumbleControllers call is a
+        // silent no-op even with a rumble-capable pad plugged in.
+        // gamepadRumbleIntensity (default 1.0) is a 0.0–1.0 multiplier
+        // applied to both motor magnitudes before SDL submission, so
+        // users can soften the felt strength without re-authoring per-
+        // event profiles. Phase 1.11b layers a per-SoundId mapping
+        // and editor on top; these two knobs remain the global gate.
+        bool gamepadRumbleEnabled;
+        float gamepadRumbleIntensity;
+        // OPENRCT2MINI gamepad-plan 1.13: DualShock-style LED indicator
+        // global gates. gamepadLedEnabled (default true) is the master
+        // kill-switch — when off, UiContext::SetControllerLED is a
+        // silent no-op even with a lightbar-capable pad plugged in,
+        // and the Led::tickEngine fade is short-circuited.
+        // gamepadLedBrightness (default 0.5) is a 0.0–1.0 multiplier
+        // applied to each colour channel before SDL submission, so
+        // users can dim the bright DualShock 4/5 lightbar without
+        // re-authoring per-severity colours. 0.5 chosen because at
+        // full strength a DS4 lightbar is uncomfortably bright in
+        // dim rooms; 0.5 is still visible at arm's length.
+        bool gamepadLedEnabled;
+        float gamepadLedBrightness;
+        // OPENRCT2MINI input-plan Track 2 §4.3: per-event haptic and
+        // LED gates. Sit alongside the master enable / intensity
+        // knobs. Each defaults to true so the v0.2 behaviour is
+        // preserved on first launch; users who find a particular
+        // event annoying (e.g. the critical-news rumble pulse) can
+        // disable it without nuking the entire haptic / LED system
+        // and without diving into the per-SoundId Rumble Editor.
+        // Crash and ConstructionRefusal route through SoundId-mapped
+        // envelopes (SoundId::crash and SoundId::error respectively);
+        // the gate lives in Haptic::onSoundPlayed. CriticalNews fires
+        // directly via Haptic::pulse from NewsItem::TickCurrent; the
+        // gate lives at the call site. LED toggles gate per-severity
+        // at the same TickCurrent call site that fires Led::setActive,
+        // so the Test LED button in the LED Options window is
+        // unaffected.
+        bool gamepadRumbleOnCrash;
+        bool gamepadRumbleOnCriticalNews;
+        bool gamepadRumbleOnConstructionRefusal;
+        bool gamepadLedOnCritical;
+        bool gamepadLedOnWarning;
+        bool gamepadLedOnMoney;
 
         // Miscellaneous
         bool playIntro;

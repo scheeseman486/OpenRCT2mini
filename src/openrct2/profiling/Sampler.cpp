@@ -444,6 +444,15 @@ namespace OpenRCT2::Profiling::Sampler
         }
     }
 
+    void cancelFrame()
+    {
+        // Drop the in-flight frame that onFrameStart began so a matching
+        // onFrameEnd does NOT write a slot in the ring. Called from
+        // Context::RunFixedFrame's "_ticksAccumulator < kGameUpdateTimeMS"
+        // sleep+return pacing path. See Sampler.h declaration for why.
+        _frameInFlight = false;
+    }
+
     void onFrameEnd()
     {
         if (!_enabled.load(std::memory_order_relaxed))

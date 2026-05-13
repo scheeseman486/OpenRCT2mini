@@ -33,4 +33,18 @@ namespace OpenRCT2
     void InputScrollViewport(const ScreenCoordsXY& screenCoords);
     void InputScrollViewportSmooth(const ScreenCoordsXY& screenCoords);
     void InputScrollViewportSmooth(const ScreenCoordsXY& screenCoords, WindowBase* targetWindow);
+
+    // OPENRCT2MINI mouse-input refactor: viewport (camera) drag entry
+    // points exposed for the kInterfaceCameraDrag shortcut poll. The
+    // poll lives in UiContext::ProcessWorldCursor and drives begin /
+    // end on rising / falling edge of the bound shortcut. Continue is
+    // still routed through the existing state machine in MouseInput
+    // (motion events while _inputState == ViewportRight). Returns
+    // true from CameraDragWasShortPress only if the press was held
+    // for less than ~500ms — used to fire the context-sensitive
+    // right-click action at end-of-drag (delete tile element / etc.).
+    void InputViewportDragBeginAtCursor();
+    void InputViewportDragEndCurrent();
+    bool CameraDragWasShortPress();
+    bool CameraDragInProgress();
 } // namespace OpenRCT2

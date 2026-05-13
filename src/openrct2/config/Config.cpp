@@ -240,14 +240,48 @@ namespace OpenRCT2::Config
             model->windowScale = reader->GetFloat("window_scale", Platform::GetDefaultScale());
             model->inferDisplayDPI = reader->GetBoolean("infer_display_dpi", kInferDisplayDPIDefault);
             model->showFPS = reader->GetBoolean("show_fps", false);
+            // host-restoration-plan Phase 0 / §2a: the runtime
+            // disableMultiThreadedRendering knob is read first so the
+            // multiThreading branch below can consult it. Mini defaults
+            // true (force-off); host defaults false. The field is
+            // exposed in Config::General for documentation purposes
+            // and so a host dev can flip it via config.ini to reproduce
+            // Mini's force-off behaviour without recompiling.
+#ifdef OPENRCT2MINI
+            model->disableMultiThreadedRendering = reader->GetBoolean("disable_multithreaded_rendering", true);
+#else
+            model->disableMultiThreadedRendering = reader->GetBoolean("disable_multithreaded_rendering", false);
+#endif
             // OPENRCT2MINI: multi-threaded rendering is a net performance
             // regression on the Miyoo Mini's single-issue ARM core (cache /
             // sync overhead beats the parallelism win). Force off
             // unconditionally — ignore any "multithreading=true" left over
             // in user config.ini files from earlier builds.
+            //
+            // host-restoration-plan §2a: Mini-only. On host, honour the
+            // saved value (default false to match upstream) and let the
+            // Options > Display checkbox drive it.
+#ifdef OPENRCT2MINI
             (void)reader->GetBoolean("multithreading", false); // discard
             model->multiThreading = false;
+#else
+            model->multiThreading = reader->GetBoolean("multithreading", false)
+                && !model->disableMultiThreadedRendering;
+#endif
             model->trapCursor = reader->GetBoolean("trap_cursor", false);
+            // OPENRCT2MINI focus-mode-plan / Phase F.3: gamepad-driven
+            // widget focus. Default true — on the handheld build the
+            // gamepad is the primary input, so the user expects to
+            // tab through buttons / checkboxes / dropdowns without
+            // a mode-switch gesture. Host (mouse) users who don't
+            // want the focus ring can toggle this off in Options.
+            model->widgetFocusAlwaysOn = reader->GetBoolean("widget_focus_always_on", true);
+
+            // OPENRCT2MINI host-restoration-plan Phase 0: mapSizeOverride
+            // runtime knob (the disableMultiThreadedRendering sibling is
+            // read earlier so the multiThreading branch can consult it).
+            model->mapSizeOverride = static_cast<uint16_t>(reader->GetInt32("map_size_override", 0));
+
             model->autoOpenShops = reader->GetBoolean("auto_open_shops", false);
 
             // OPENRCT2MINI cut 58: these two config slots were repurposed
@@ -258,6 +292,33 @@ namespace OpenRCT2::Config
             // the previous hard-coded behaviour.
             model->gamepadDeadzone = reader->GetInt32("gamepad_deadzone", 16000);
             model->gamepadSensitivity = reader->GetFloat("gamepad_sensitivity", 1.5f);
+            // OPENRCT2MINI gamepad-plan 1.9: analog right-stick camera.
+            model->gamepadCameraDeadzone = reader->GetInt32("gamepad_camera_deadzone", 8000);
+            model->gamepadCameraSensitivity = reader->GetFloat("gamepad_camera_sensitivity", 1.0f);
+            model->gamepadInvertCameraY = reader->GetBoolean("gamepad_invert_camera_y", false);
+            // OPENRCT2MINI gamepad-plan 1.11: rumble defaults — on at
+            // full intensity. Users can mute via the boolean or soften
+            // via the float without re-authoring per-event profiles.
+            model->gamepadRumbleEnabled = reader->GetBoolean("gamepad_rumble_enabled", true);
+            model->gamepadRumbleIntensity = reader->GetFloat("gamepad_rumble_intensity", 1.0f);
+            // OPENRCT2MINI gamepad-plan 1.13: LED defaults — on at
+            // half brightness. Users can mute via the boolean or dim
+            // / brighten via the float without re-authoring severity
+            // colours. Half brightness because the DS4 lightbar is
+            // uncomfortably bright in dim rooms at full strength.
+            model->gamepadLedEnabled = reader->GetBoolean("gamepad_led_enabled", true);
+            model->gamepadLedBrightness = reader->GetFloat("gamepad_led_brightness", 0.5f);
+            // OPENRCT2MINI input-plan Track 2 §4.3: per-event haptic +
+            // LED gates. Default all true — first launch preserves the
+            // existing v0.2 behaviour. Users can toggle individual
+            // events via the Haptics / LED Options windows.
+            model->gamepadRumbleOnCrash = reader->GetBoolean("gamepad_rumble_on_crash", true);
+            model->gamepadRumbleOnCriticalNews = reader->GetBoolean("gamepad_rumble_on_critical_news", true);
+            model->gamepadRumbleOnConstructionRefusal
+                = reader->GetBoolean("gamepad_rumble_on_construction_refusal", true);
+            model->gamepadLedOnCritical = reader->GetBoolean("gamepad_led_on_critical", true);
+            model->gamepadLedOnWarning = reader->GetBoolean("gamepad_led_on_warning", true);
+            model->gamepadLedOnMoney = reader->GetBoolean("gamepad_led_on_money", true);
             model->scenarioUnlockingEnabled = reader->GetBoolean("scenario_unlocking_enabled", true);
             model->scenarioHideMegaPark = reader->GetBoolean("scenario_hide_mega_park", true);
             model->lastSaveGameDirectory = reader->GetString("last_game_directory", "");
@@ -350,11 +411,32 @@ namespace OpenRCT2::Config
         writer->WriteBoolean("show_fps", model->showFPS);
         writer->WriteBoolean("multithreading", model->multiThreading);
         writer->WriteBoolean("trap_cursor", model->trapCursor);
+        writer->WriteBoolean("widget_focus_always_on", model->widgetFocusAlwaysOn);
+        // OPENRCT2MINI host-restoration-plan Phase 0 runtime knobs.
+        writer->WriteInt32("map_size_override", static_cast<int32_t>(model->mapSizeOverride));
+        writer->WriteBoolean("disable_multithreaded_rendering", model->disableMultiThreadedRendering);
         writer->WriteBoolean("auto_open_shops", model->autoOpenShops);
 
         // Gamepad settings
         writer->WriteInt32("gamepad_deadzone", model->gamepadDeadzone);
         writer->WriteFloat("gamepad_sensitivity", model->gamepadSensitivity);
+        // OPENRCT2MINI gamepad-plan 1.9: analog right-stick camera.
+        writer->WriteInt32("gamepad_camera_deadzone", model->gamepadCameraDeadzone);
+        writer->WriteFloat("gamepad_camera_sensitivity", model->gamepadCameraSensitivity);
+        writer->WriteBoolean("gamepad_invert_camera_y", model->gamepadInvertCameraY);
+        // OPENRCT2MINI gamepad-plan 1.11: rumble persistence.
+        writer->WriteBoolean("gamepad_rumble_enabled", model->gamepadRumbleEnabled);
+        writer->WriteFloat("gamepad_rumble_intensity", model->gamepadRumbleIntensity);
+        // OPENRCT2MINI gamepad-plan 1.13: LED persistence.
+        writer->WriteBoolean("gamepad_led_enabled", model->gamepadLedEnabled);
+        writer->WriteFloat("gamepad_led_brightness", model->gamepadLedBrightness);
+        // OPENRCT2MINI input-plan Track 2 §4.3: per-event toggles.
+        writer->WriteBoolean("gamepad_rumble_on_crash", model->gamepadRumbleOnCrash);
+        writer->WriteBoolean("gamepad_rumble_on_critical_news", model->gamepadRumbleOnCriticalNews);
+        writer->WriteBoolean("gamepad_rumble_on_construction_refusal", model->gamepadRumbleOnConstructionRefusal);
+        writer->WriteBoolean("gamepad_led_on_critical", model->gamepadLedOnCritical);
+        writer->WriteBoolean("gamepad_led_on_warning", model->gamepadLedOnWarning);
+        writer->WriteBoolean("gamepad_led_on_money", model->gamepadLedOnMoney);
         writer->WriteBoolean("scenario_unlocking_enabled", model->scenarioUnlockingEnabled);
         writer->WriteBoolean("scenario_hide_mega_park", model->scenarioHideMegaPark);
         writer->WriteString("last_game_directory", model->lastSaveGameDirectory);
@@ -422,7 +504,15 @@ namespace OpenRCT2::Config
             // most a few seconds before clicking through to the menu — and
             // the empty-park pan is what we tuned the title scene around.
             // Existing config.ini files keep their stored value.
+            // host-restoration-plan §2i: on host, fresh-install default
+            // is the upstream *OPENRCT2 sequence (no_title_sequence=false);
+            // on Mini, the (none) grass-pan fallback wins since the
+            // full sequences are RAM-prohibitive.
+#ifdef OPENRCT2MINI
             model->noTitleSequence = reader->GetBoolean("no_title_sequence", true);
+#else
+            model->noTitleSequence = reader->GetBoolean("no_title_sequence", false);
+#endif
             model->objectSelectionFilterFlags = reader->GetInt32("object_selection_filter_flags", 0x3FFF);
             model->scenarioSelectLastTab = reader->GetInt32("scenarioselect_last_tab", 0);
             model->scenarioPreviewScreenshots = reader->GetBoolean("scenario_preview_screenshots", true);
