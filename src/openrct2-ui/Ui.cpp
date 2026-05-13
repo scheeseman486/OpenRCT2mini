@@ -64,10 +64,11 @@ static std::shared_ptr<T> ToShared(std::unique_ptr<T>&& src)
     char buf[2048] = {};
     if (auto* f = std::fopen("/proc/self/status", "r"))
     {
-        // Cast to (void) to satisfy -Werror=unused-result on GCC >=11
-        // (Ubuntu 22.04 AppImage builder). Short reads are fine — the
+        // Capture-then-discard pattern: GCC's warn_unused_result is not
+        // suppressed by (void)-cast (long-standing PR 66425), so we have
+        // to assign to a [[maybe_unused]] variable. Short reads are fine —
         // buffer is zero-initialised and we _Exit immediately afterwards.
-        (void)std::fread(buf, 1, sizeof(buf) - 1, f);
+        [[maybe_unused]] auto got = std::fread(buf, 1, sizeof(buf) - 1, f);
         std::fclose(f);
     }
     std::fputs("\n[OPENRCT2MINI] Out of memory!\n", stderr);
@@ -109,11 +110,14 @@ int main(int argc, const char** argv)
         struct SegvHandler {
             static void Handle(int sig)
             {
-                // Async-signal-safe writes; we're best-effort here and
-                // about to re-raise the signal anyway, so we (void)-cast
-                // away GCC >=11's -Wunused-result on ::write.
+                // Async-signal-safe best-effort writes. Capture into a
+                // [[maybe_unused]] variable because (void)-cast does NOT
+                // suppress GCC's warn_unused_result on ::write (PR 66425).
+                // We're about to re-raise the signal anyway — failure to
+                // write a few diagnostic bytes is irrelevant.
+                [[maybe_unused]] ssize_t wr;
                 static const char prefix[] = "\n[OPENRCT2MINI] *** signal ";
-                (void)::write(STDERR_FILENO, prefix, sizeof(prefix) - 1);
+                wr = ::write(STDERR_FILENO, prefix, sizeof(prefix) - 1);
                 char num[8] = {0};
                 int n = sig;
                 int len = 0;
@@ -123,12 +127,13 @@ int main(int argc, const char** argv)
                     while (n > 0 && t < 7) { tmp[t++] = '0' + (n % 10); n /= 10; }
                     while (t > 0) num[len++] = tmp[--t];
                 }
-                (void)::write(STDERR_FILENO, num, len);
-                (void)::write(STDERR_FILENO, " — backtrace:\n", 14);
+                wr = ::write(STDERR_FILENO, num, len);
+                wr = ::write(STDERR_FILENO, " — backtrace:\n", 14);
                 void* frames[40];
                 int got = ::backtrace(frames, 40);
                 ::backtrace_symbols_fd(frames, got, STDERR_FILENO);
-                (void)::write(STDERR_FILENO, "[OPENRCT2MINI] *** end backtrace\n", 32);
+                wr = ::write(STDERR_FILENO, "[OPENRCT2MINI] *** end backtrace\n", 32);
+                (void)wr;
                 // Re-raise with default action so the kernel still dumps
                 // a core (subject to ulimit) and the parent shell sees the
                 // same exit status it would have without the handler.
