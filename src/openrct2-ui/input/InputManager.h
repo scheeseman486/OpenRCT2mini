@@ -216,7 +216,16 @@ namespace OpenRCT2::Ui
         // the commented-out listScroll stub. Phase 3.G's tool entries
         // reach index 14; bump to 16 for headroom.
         static constexpr size_t kInputContextCount = 16;
-        std::array<std::unique_ptr<IInputContext>, kInputContextCount> _contextRegistry{};
+        // No NSDMI brace-init `{}` here on purpose. GCC 8.3 (OnionUI
+        // toolchain) instantiates `unique_ptr<IInputContext>::~unique_ptr`
+        // at the NSDMI site when `{}` is present, which then requires
+        // `IInputContext` to be complete in every TU that includes this
+        // header — UiContext.cpp and WindowManager.cpp don't include
+        // InputContextStrategy.h and break. The members default-construct
+        // each unique_ptr to nullptr without the brace-init, and the
+        // out-of-line ~InputManager() in InputManager.cpp (where the
+        // strategy header IS included) handles the actual destruction.
+        std::array<std::unique_ptr<IInputContext>, kInputContextCount> _contextRegistry;
         std::unique_ptr<IInputContext> _worldContext;
         // Cached previous frame's _activeContext so we can detect the
         // transition edge and fire onDeactivate/onActivate exactly

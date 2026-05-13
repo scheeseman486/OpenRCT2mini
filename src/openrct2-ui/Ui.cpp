@@ -64,7 +64,10 @@ static std::shared_ptr<T> ToShared(std::unique_ptr<T>&& src)
     char buf[2048] = {};
     if (auto* f = std::fopen("/proc/self/status", "r"))
     {
-        std::fread(buf, 1, sizeof(buf) - 1, f);
+        // Cast to (void) to satisfy -Werror=unused-result on GCC >=11
+        // (Ubuntu 22.04 AppImage builder). Short reads are fine — the
+        // buffer is zero-initialised and we _Exit immediately afterwards.
+        (void)std::fread(buf, 1, sizeof(buf) - 1, f);
         std::fclose(f);
     }
     std::fputs("\n[OPENRCT2MINI] Out of memory!\n", stderr);
@@ -106,8 +109,11 @@ int main(int argc, const char** argv)
         struct SegvHandler {
             static void Handle(int sig)
             {
+                // Async-signal-safe writes; we're best-effort here and
+                // about to re-raise the signal anyway, so we (void)-cast
+                // away GCC >=11's -Wunused-result on ::write.
                 static const char prefix[] = "\n[OPENRCT2MINI] *** signal ";
-                ::write(STDERR_FILENO, prefix, sizeof(prefix) - 1);
+                (void)::write(STDERR_FILENO, prefix, sizeof(prefix) - 1);
                 char num[8] = {0};
                 int n = sig;
                 int len = 0;
@@ -117,12 +123,12 @@ int main(int argc, const char** argv)
                     while (n > 0 && t < 7) { tmp[t++] = '0' + (n % 10); n /= 10; }
                     while (t > 0) num[len++] = tmp[--t];
                 }
-                ::write(STDERR_FILENO, num, len);
-                ::write(STDERR_FILENO, " — backtrace:\n", 14);
+                (void)::write(STDERR_FILENO, num, len);
+                (void)::write(STDERR_FILENO, " — backtrace:\n", 14);
                 void* frames[40];
                 int got = ::backtrace(frames, 40);
                 ::backtrace_symbols_fd(frames, got, STDERR_FILENO);
-                ::write(STDERR_FILENO, "[OPENRCT2MINI] *** end backtrace\n", 32);
+                (void)::write(STDERR_FILENO, "[OPENRCT2MINI] *** end backtrace\n", 32);
                 // Re-raise with default action so the kernel still dumps
                 // a core (subject to ulimit) and the parent shell sees the
                 // same exit status it would have without the handler.
