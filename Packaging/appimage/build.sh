@@ -139,7 +139,10 @@ docker run --rm --user "$(id -u):$(id -g)" \
         fi
 
         echo '==[ make ]====================================================='
-        make -j\$(nproc) openrct2 openrct2-cli g2
+        # 'graphics' is the umbrella target that builds g2.dat + fonts.dat +
+        # palettes.dat + tracks.dat — see CMakeLists.txt 'add_custom_target(graphics ...)'.
+        # There is no bare 'g2' target.
+        make -j\$(nproc) openrct2 openrct2-cli graphics
 
         echo '==[ make install DESTDIR=AppDir ]=============================='
         rm -rf AppDir
