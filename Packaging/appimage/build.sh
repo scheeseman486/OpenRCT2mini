@@ -67,10 +67,11 @@ fi
 # The CMake flag set: APPIMAGE=ON enables the install-rpath that linuxdeploy
 # needs. OPENRCT2MINI=OFF (explicit) selects the host-restoration paths.
 # DISABLE_NETWORK/ICU/DISCORD_RPC + ENABLE_SOFTWARE_CURSOR are preserved
-# from the Mini baseline per host-restoration-plan. OpenGL / Scripting /
-# FLAC / Vorbis flip back on for desktop. DOWNLOAD_* stays OFF — the
-# AppImage payload is the engine; supplementary content packs are fetched
-# by package.sh and zip-bundled alongside.
+# from the Mini baseline per host-restoration-plan. OpenGL / FLAC / Vorbis
+# flip back on for desktop. ENABLE_SCRIPTING stays OFF — the plugin API
+# isn't in scope for this fork. DOWNLOAD_* flips ON so CMake fetches the
+# upstream title sequences / objects / OpenSFX / OpenMusic at install
+# time; linuxdeploy then bundles them into the AppImage payload.
 if [ "$DEBUG_BUILD" = "1" ]; then
     BUILD_TYPE=Debug
     MINI_DEBUG_FLAG="-DOPENRCT2MINI_DEBUG=ON"
@@ -90,7 +91,13 @@ CMAKE_FLAGS=(
     -DDISABLE_GOOGLE_BENCHMARK=ON
     -DDISABLE_VERSION_CHECKER=ON
     -DENABLE_SOFTWARE_CURSOR=ON
-    -DENABLE_SCRIPTING=ON
+    # Scripting stays OFF on host too. The plugin API isn't a goal for this
+    # fork (no user mods expected), and ENABLE_SCRIPTING=ON pulls in code
+    # that wasn't carried through the C++17 backport (cut 33) — the Mini
+    # build doesn't hit it because scripting is OFF there. Re-enabling on
+    # host would mean either restoring C++20 or backporting the scripting
+    # surface; both are out of scope.
+    -DENABLE_SCRIPTING=OFF
     -DDISABLE_OPENGL=OFF
     -DDISABLE_FLAC=OFF
     -DDISABLE_VORBIS=OFF
