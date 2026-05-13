@@ -224,6 +224,51 @@ namespace OpenRCT2
         virtual void onScrollDraw(int32_t scrollIndex, Drawing::RenderTarget& rt)
         {
         }
+        // OPENRCT2MINI list-focus-plan §2.1: optional per-window
+        // protocol for D-pad navigation of scrollable list / grid
+        // items. Returns 0 to opt OUT (default) — the framework then
+        // treats the scroll widget itself as non-focusable. A positive
+        // count opts the scroll widget IN as a container of `n` items,
+        // and focus mode steps the ring through individual items via
+        // the four functions below.
+        virtual int32_t scrollFocusGetItemCount(int32_t scrollIndex)
+        {
+            return 0;
+        }
+        // Column count for 2D grids. Default 1 (1D list). Directional
+        // input translates to ±1 / ±columnCount; horizontals exit at
+        // the row edges when cols > 1.
+        virtual int32_t scrollFocusGetColumnCount(int32_t scrollIndex)
+        {
+            return 1;
+        }
+        // Item rectangle in CONTENT-LOCAL coordinates (i.e., relative
+        // to the scroll content origin, NOT screen coordinates and
+        // NOT including the live scroll offset). The framework
+        // translates to on-screen coords for the focus ring by
+        // adding windowPos + scroll widget origin - scroll offset.
+        // Same content-local space the existing onScrollMouseDown
+        // already uses, so windows can mirror their per-row layout
+        // math here. Empty rect means the index is out of range.
+        virtual ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex)
+        {
+            return {};
+        }
+        // Activate the item (equivalent of a click on it). Default
+        // synthesises an onScrollMouseDown at the item's centre in
+        // content-local coords, which covers most windows' existing
+        // per-row dispatch. Windows override to do something cleaner.
+        virtual void scrollFocusActivate(int32_t scrollIndex, int32_t itemIndex)
+        {
+            const auto rect = scrollFocusGetItemRect(scrollIndex, itemIndex);
+            if (rect.GetLeft() >= rect.GetRight() || rect.GetTop() >= rect.GetBottom())
+                return;
+            const ScreenCoordsXY centre{
+                (rect.GetLeft() + rect.GetRight()) / 2,
+                (rect.GetTop() + rect.GetBottom()) / 2,
+            };
+            onScrollMouseDown(scrollIndex, centre);
+        }
         virtual void onToolUpdate(WidgetIndex widgetIndex, const ScreenCoordsXY& screenCoords)
         {
         }

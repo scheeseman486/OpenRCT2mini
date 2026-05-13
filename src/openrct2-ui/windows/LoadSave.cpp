@@ -1052,6 +1052,24 @@ namespace OpenRCT2::Ui::Windows
             return { 0, numListItems * kScrollableRowHeight };
         }
 
+        // OPENRCT2MINI list-focus-plan §3.10: 1D list opt-in. Items
+        // are file / directory entries; activation either descends a
+        // directory or selects a file via the default scrollFocusActivate
+        // path (which synthesises onScrollMouseDown at the row centre).
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            return static_cast<int32_t>(numListItems);
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            if (itemIndex < 0 || itemIndex >= numListItems)
+                return {};
+            const int32_t y = itemIndex * kScrollableRowHeight;
+            const int32_t w = widgets[WIDX_SCROLL].width() - 1;
+            return ScreenRect{ { 0, y }, { w - 1, y + kScrollableRowHeight - 1 } };
+        }
+
         void onScrollMouseOver(int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override
         {
             int32_t selectedItem = screenCoords.y / kScrollableRowHeight;

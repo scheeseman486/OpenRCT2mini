@@ -19,6 +19,8 @@
 #include <openrct2/drawing/Colour.h>
 #include <openrct2/drawing/Drawing.h>
 #include <openrct2/drawing/Rectangle.h>
+#include <openrct2-ui/interface/Widget.h>
+#include <openrct2/interface/Window.h>
 #include <openrct2/interface/WindowBase.h>
 #include <openrct2/ui/UiContext.h>
 #include <openrct2/ui/WidgetFocusBridge.h>
@@ -57,6 +59,17 @@ namespace OpenRCT2::Ui::WidgetFocus
             case WidgetType::scroll:
             case WidgetType::textBox:
             case WidgetType::tab:
+                return true;
+            // OPENRCT2MINI list-focus-plan §6.7: tableHeader is the
+            // OpenRCT2 widget type for clickable column headers above
+            // a scroll list (e.g. RideList's WIDX_HEADER_NAME /
+            // WIDX_HEADER_OTHER sort buttons). They fire onMouseUp on
+            // click — same dispatch the focus path uses via
+            // pressWidgetByIndex — so they should be reachable as
+            // focus stops. Decorative-only consumers of tableHeader
+            // (if any) won't break: pressing a header with no
+            // onMouseUp case is a silent no-op.
+            case WidgetType::tableHeader:
                 return true;
             default:
                 return false;
@@ -239,6 +252,10 @@ namespace OpenRCT2::Ui::WidgetFocus
             // the rationale.
             if (isDropdownChevron(window, static_cast<WidgetIndex>(i)))
                 continue;
+            // OPENRCT2MINI list-focus-plan §2.1: skip opt-out scrolls.
+            if (w.type == WidgetType::scroll
+                && !isListModeScroll(window, static_cast<WidgetIndex>(i)))
+                continue;
             const auto cand = centreOf(w);
             // If we have a real `from`, filter to "in direction" only.
             // For the no-current-focus case (from == kWidgetIndexNull),
@@ -274,6 +291,9 @@ namespace OpenRCT2::Ui::WidgetFocus
                 continue;
             if (isDropdownChevron(window, static_cast<WidgetIndex>(i)))
                 continue;
+            if (w.type == WidgetType::scroll
+                && !isListModeScroll(window, static_cast<WidgetIndex>(i)))
+                continue;
             const auto cand = centreOf(w);
             // The wrap-around cost prefers candidates on the opposite
             // side (negative cost values for the desired side). We
@@ -299,6 +319,204 @@ namespace OpenRCT2::Ui::WidgetFocus
             // preceding dropdownMenu and shouldn't be a separate
             // landing spot for first-focus.
             if (isDropdownChevron(window, static_cast<WidgetIndex>(i)))
+                continue;
+            // OPENRCT2MINI list-focus-plan §2.1 / C2: scroll widgets
+            // are only focus stops when the window opts in to list-
+            // mode focus. Opt-out scroll widgets are skipped.
+            if (window.widgets[i].type == WidgetType::scroll
+                && !isListModeScroll(window, static_cast<WidgetIndex>(i)))
+                continue;
+            return static_cast<WidgetIndex>(i);
+        }
+        return kWidgetIndexNull;
+    }
+
+    // OPENRCT2MINI: purely visual / non-interactive window classes.
+    // The tooltip pop-up (rendered when the cursor hovers over an
+    // interactive widget) and the map tooltip (hover-identification
+    // text over rides / peeps / entrances) both spawn and despawn on
+    // cursor motion, and neither contains anything the user can
+    // activate. Focusing them would jitter the ring every time the
+    // cursor moves and would leave the user stranded with no clicks
+    // available; the window switcher likewise mustn't stop on them.
+    //
+    // Add new classes here as they're identified; this is the single
+    // central filter, consulted by the focus bootstrap, snap, and
+    // cycle paths in InputManager.cpp.
+    // OPENRCT2MINI list-focus-plan §2.1: predicate for list-mode
+    // scroll widgets. Mode-aware — a scroll widget is "in list mode"
+    // (per-item focus) iff the window has opted in by overriding
+    // scrollFocusGetItemCount to return > 0. Opt-out scroll widgets
+    // are NOT focus stops at all post-list-focus (the framework
+    // default drops them) — see C2 in list-focus-plan.md.
+    bool isListModeScroll(const WindowBase& window, WidgetIndex idx)
+    {
+        if (idx == kWidgetIndexNull || static_cast<size_t>(idx) >= window.widgets.size())
+            return false;
+        const auto& w = window.widgets[idx];
+        if (w.type != WidgetType::scroll)
+            return false;
+        const auto scrollIdx = WindowGetScrollDataIndex(window, idx);
+        return const_cast<WindowBase&>(window).scrollFocusGetItemCount(scrollIdx) > 0;
+    }
+
+    ScreenRect contentRectToOnScreen(
+        const WindowBase& window, WidgetIndex scrollWidget, const ScreenRect& contentRect)
+    {
+        if (scrollWidget == kWidgetIndexNull || static_cast<size_t>(scrollWidget) >= window.widgets.size())
+            return {};
+        const auto& wd = window.widgets[scrollWidget];
+        if (wd.type != WidgetType::scroll)
+            return {};
+        const auto scrollIdx = WindowGetScrollDataIndex(window, scrollWidget);
+        const auto& s = window.scrolls[scrollIdx];
+        // Scroll widget's content area excludes the bar regions
+        // (kBarWidth typically 11 px). For ring rendering we accept
+        // a small overpaint into the bar if the item rect is at the
+        // edge — clipping is the renderer's job. The content origin
+        // sits at (widget.left + 1, widget.top + 1) by convention;
+        // live scroll offset is subtracted to translate from
+        // content-local to on-screen.
+        const int32_t baseX = window.windowPos.x + wd.left + 1 - s.contentOffsetX;
+        const int32_t baseY = window.windowPos.y + wd.top + 1 - s.contentOffsetY;
+        return {
+            { baseX + contentRect.GetLeft(), baseY + contentRect.GetTop() },
+            { baseX + contentRect.GetRight(), baseY + contentRect.GetBottom() },
+        };
+    }
+
+    void ensureScrollItemVisible(WindowBase& window, WidgetIndex scrollWidget, int32_t itemIndex)
+    {
+        if (scrollWidget == kWidgetIndexNull || static_cast<size_t>(scrollWidget) >= window.widgets.size())
+            return;
+        const auto& wd = window.widgets[scrollWidget];
+        if (wd.type != WidgetType::scroll)
+            return;
+        const auto rect = window.scrollFocusGetItemRect(
+            WindowGetScrollDataIndex(window, scrollWidget), itemIndex);
+        if (rect.GetLeft() >= rect.GetRight() || rect.GetTop() >= rect.GetBottom())
+            return;
+        const auto scrollIdx = WindowGetScrollDataIndex(window, scrollWidget);
+        auto& s = window.scrolls[scrollIdx];
+        // OPENRCT2MINI list-focus-plan fix: only adjust the axis the
+        // scroll widget can actually scroll along. WidgetScrollDraw
+        // applies BOTH contentOffsetX and contentOffsetY to the
+        // scroll render target (Widget.cpp:803-804) regardless of
+        // whether the widget has HSCROLLBAR_VISIBLE / VSCROLLBAR_VISIBLE
+        // — so blindly setting contentOffsetX on a SCROLL_VERTICAL-only
+        // widget shifts its content off-screen. Item rects from
+        // scrollFocusGetItemRect frequently span the full conceptual
+        // row width (which can exceed the viewport), so without this
+        // gate a vertical step would trigger a phantom horizontal
+        // scroll and the entire list would appear blank.
+        const bool canScrollH = (s.flags & HSCROLLBAR_VISIBLE) != 0;
+        const bool canScrollV = (s.flags & VSCROLLBAR_VISIBLE) != 0;
+        if (canScrollH)
+        {
+            const int32_t viewW = std::max(0, wd.right - wd.left - 2);
+            const int32_t maxX = std::max(0, static_cast<int32_t>(s.contentWidth) - viewW);
+            if (rect.GetLeft() < s.contentOffsetX)
+                s.contentOffsetX = rect.GetLeft();
+            else if (rect.GetRight() > s.contentOffsetX + viewW)
+                s.contentOffsetX = rect.GetRight() - viewW;
+            s.contentOffsetX = std::clamp(s.contentOffsetX, 0, maxX);
+        }
+        if (canScrollV)
+        {
+            const int32_t viewH = std::max(0, wd.bottom - wd.top - 2);
+            const int32_t maxY = std::max(0, static_cast<int32_t>(s.contentHeight) - viewH);
+            if (rect.GetTop() < s.contentOffsetY)
+                s.contentOffsetY = rect.GetTop();
+            else if (rect.GetBottom() > s.contentOffsetY + viewH)
+                s.contentOffsetY = rect.GetBottom() - viewH;
+            s.contentOffsetY = std::clamp(s.contentOffsetY, 0, maxY);
+        }
+        // OPENRCT2MINI list-focus-plan fix: recompute scrollbar thumb
+        // geometry to match the new contentOffset. The thumb position
+        // (hThumbLeft/Right, vThumbTop/Bottom) is cached in the
+        // ScrollArea — WidgetVScrollbarDraw / WidgetHScrollbarDraw
+        // read those cached values directly, so without this call the
+        // bar stays at the old position visually while the content
+        // scrolls underneath. Same call mouse drag / wheel paths
+        // make after modifying contentOffset (Window.cpp:114,
+        // MouseInput.cpp:223, etc.).
+        widgetScrollUpdateThumbs(window, scrollWidget);
+        window.invalidate();
+    }
+
+    int32_t nearestScrollItemTo(
+        WindowBase& window, WidgetIndex scrollWidget, const ScreenCoordsXY& reference)
+    {
+        if (scrollWidget == kWidgetIndexNull || static_cast<size_t>(scrollWidget) >= window.widgets.size())
+            return -1;
+        const auto scrollIdx = WindowGetScrollDataIndex(window, scrollWidget);
+        const int32_t n = window.scrollFocusGetItemCount(scrollIdx);
+        if (n <= 0)
+            return -1;
+        int32_t best = 0;
+        int64_t bestCost = std::numeric_limits<int64_t>::max();
+        for (int32_t i = 0; i < n; ++i)
+        {
+            const auto cr = window.scrollFocusGetItemRect(scrollIdx, i);
+            if (cr.GetLeft() >= cr.GetRight() || cr.GetTop() >= cr.GetBottom())
+                continue;
+            const auto onScreen = contentRectToOnScreen(window, scrollWidget, cr);
+            const int64_t cx = (onScreen.GetLeft() + onScreen.GetRight()) / 2;
+            const int64_t cy = (onScreen.GetTop() + onScreen.GetBottom()) / 2;
+            const int64_t dx = cx - reference.x;
+            const int64_t dy = cy - reference.y;
+            const int64_t cost = dx * dx + dy * dy;
+            if (cost < bestCost)
+            {
+                bestCost = cost;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    bool isPurelyVisualWindow(WindowClass cls)
+    {
+        switch (cls)
+        {
+            case WindowClass::tooltip:
+            case WindowClass::mapTooltip:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // OPENRCT2MINI focus-mode-plan §F.cycle: declaration-order
+    // forward step with wrap. Mirrors firstFocusable's filters
+    // (focusable predicate + chevron skip) so any landing spot it
+    // returns is a valid setFocus target.
+    WidgetIndex nextFocusable(const WindowBase& window, WidgetIndex from)
+    {
+        const auto count = window.widgets.size();
+        if (count == 0)
+            return kWidgetIndexNull;
+        // No current focus → behave like firstFocusable. Cheaper than
+        // duplicating its loop here and keeps the two functions in
+        // lock-step if the focusable rules ever change.
+        if (from == kWidgetIndexNull || static_cast<size_t>(from) >= count)
+            return firstFocusable(window);
+
+        // Two-phase walk: [from+1, count) then [0, from]. Visiting
+        // `from` itself in phase two means a window with exactly one
+        // focusable widget returns that same widget — caller treats
+        // it as a no-op cycle.
+        for (size_t step = 1; step <= count; step++)
+        {
+            const size_t i = (static_cast<size_t>(from) + step) % count;
+            if (!isFocusable(window.widgets[i]))
+                continue;
+            if (isDropdownChevron(window, static_cast<WidgetIndex>(i)))
+                continue;
+            // OPENRCT2MINI list-focus-plan §2.1: opt-out scroll widgets
+            // aren't focus stops.
+            if (window.widgets[i].type == WidgetType::scroll
+                && !isListModeScroll(window, static_cast<WidgetIndex>(i)))
                 continue;
             return static_cast<WidgetIndex>(i);
         }
@@ -424,6 +642,57 @@ namespace OpenRCT2::Ui::WidgetFocus
             OpenRCT2::Drawing::Rectangle::FillMode::none);
     }
 
+    void drawListItemFocusOutline(
+        OpenRCT2::Drawing::RenderTarget& rt, const WindowBase& window,
+        WidgetIndex scrollWidget, int32_t itemIndex)
+    {
+        // OPENRCT2MINI list-focus-plan §2.4: list-item ring. Defensive
+        // bounds + opt-in check first — if anything is off, silently
+        // bail so the render path doesn't crash on a stale focus
+        // state. The widget index must be in range, point at a
+        // WidgetType::scroll, and the host window must have opted in
+        // by overriding scrollFocusGetItemCount.
+        if (scrollWidget == kWidgetIndexNull
+            || static_cast<size_t>(scrollWidget) >= window.widgets.size())
+            return;
+        if (itemIndex < 0)
+            return;
+        const auto& wd = window.widgets[scrollWidget];
+        if (wd.type != WidgetType::scroll)
+            return;
+        const auto scrollIdx = WindowGetScrollDataIndex(window, scrollWidget);
+        const int32_t itemCount = const_cast<WindowBase&>(window).scrollFocusGetItemCount(scrollIdx);
+        if (itemCount <= 0 || itemIndex >= itemCount)
+            return;
+        const auto contentRect = const_cast<WindowBase&>(window).scrollFocusGetItemRect(scrollIdx, itemIndex);
+        if (contentRect.GetLeft() >= contentRect.GetRight()
+            || contentRect.GetTop() >= contentRect.GetBottom())
+            return;
+        // Map content-local → on-screen via the shared helper that
+        // owns the (windowPos + widget origin - live scroll offset)
+        // arithmetic. Clip to the scroll viewport so an item that
+        // scrolled off-screen doesn't paint a ring over the bar
+        // chrome (the framework's clip rect would also cull this,
+        // but trimming up front avoids overpaint cost).
+        const auto onScreen = contentRectToOnScreen(window, scrollWidget, contentRect);
+        const int32_t viewLeft = window.windowPos.x + wd.left + 1;
+        const int32_t viewTop = window.windowPos.y + wd.top + 1;
+        const int32_t viewRight = window.windowPos.x + wd.right - 1;
+        const int32_t viewBottom = window.windowPos.y + wd.bottom - 1;
+        const int32_t rectLeft = std::max<int32_t>(onScreen.GetLeft(), viewLeft);
+        const int32_t rectTop = std::max<int32_t>(onScreen.GetTop(), viewTop);
+        const int32_t rectRight = std::min<int32_t>(onScreen.GetRight(), viewRight);
+        const int32_t rectBottom = std::min<int32_t>(onScreen.GetBottom(), viewBottom);
+        if (rectLeft >= rectRight || rectTop >= rectBottom)
+            return;
+        const auto rect = ScreenRect{ { rectLeft, rectTop }, { rectRight, rectBottom } };
+        OpenRCT2::Drawing::Rectangle::fillInset(
+            rt, rect, ColourWithFlags{ OpenRCT2::Drawing::Colour::brightYellow },
+            OpenRCT2::Drawing::Rectangle::BorderStyle::outset,
+            OpenRCT2::Drawing::Rectangle::FillBrightness::light,
+            OpenRCT2::Drawing::Rectangle::FillMode::none);
+    }
+
     // ────────────────────────────────────────────────────────────────
     // OPENRCT2MINI focus-mode-plan §F.17 / window-set-plan.md:
     // WindowSet registry. Static, populated at link time. Two seeded
@@ -439,8 +708,21 @@ namespace OpenRCT2::Ui::WidgetFocus
             WindowClass::topToolbar,
             WindowClass::bottomToolbar,
         };
-        constexpr std::array<WindowClass, 2> kTitleSceneMembers{
+        // Title scene opens five windows in TitleScene.cpp (~lines 302-306):
+        //   titleMenu     — main button row (New Game, Load, Multiplayer, …)
+        //   titleExit     — Quit icon (single imgBtn, WIDX_EXIT)
+        //   titleOptions  — Options icon (single button, WIDX_OPTIONS)
+        //   titleLogo     — clickable logo, opens About (single imgBtn, WIDX_LOGO)
+        //   titleVersion  — decorative version footer, no focusable widgets
+        // All four interactive windows belong in the set; without that
+        // findNearestInSetDirection / cycle-window / bootstrap can't see
+        // anything outside titleMenu's button row. titleVersion stays out
+        // since it has no focusable widgets and would just bloat the
+        // candidate pool on every directional step.
+        constexpr std::array<WindowClass, 4> kTitleSceneMembers{
             WindowClass::titleMenu,
+            WindowClass::titleOptions,
+            WindowClass::titleExit,
             WindowClass::titleLogo,
         };
 
@@ -666,6 +948,125 @@ namespace OpenRCT2::Ui::WidgetFocus
         return best->idx;
     }
 
+    // OPENRCT2MINI focus-mode-plan §F.cycle (set-aware): forward
+    // tab-order walker. Steps through widgets in the current member's
+    // declaration order, then advances through set members (in the
+    // order registered in kRegisteredSets), wrapping back to the
+    // first member. For non-set classes, falls back to single-window
+    // nextFocusable.
+    WidgetIndex nextFocusableInSet(
+        WindowClass fromClass, WidgetIndex fromWidget, WindowClass* outClass)
+    {
+        if (outClass != nullptr)
+            *outClass = fromClass;
+
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return kWidgetIndexNull;
+
+        const auto* set = findSetFor(fromClass);
+        if (set == nullptr)
+        {
+            // Not part of a set — cycle within the single window with
+            // wrap, exactly like the non-set TAB path.
+            auto* w = windowMgr->FindByClass(fromClass);
+            if (w == nullptr)
+                return kWidgetIndexNull;
+            return nextFocusable(*w, fromWidget);
+        }
+
+        // Locate fromClass within members[]. Cycle order matches the
+        // declaration order in kRegisteredSets, which is hand-picked
+        // (e.g. titleMenu → titleOptions → titleExit → titleLogo).
+        std::size_t startMember = 0;
+        bool startMemberFound = false;
+        for (std::size_t i = 0; i < set->memberCount; i++)
+        {
+            if (set->members[i] == fromClass)
+            {
+                startMember = i;
+                startMemberFound = true;
+                break;
+            }
+        }
+        if (!startMemberFound)
+        {
+            // findSetFor said fromClass is in this set, so this branch
+            // shouldn't fire. Defensive fallback so a registry edit
+            // can't crash this path.
+            auto* w = windowMgr->FindByClass(fromClass);
+            if (w == nullptr)
+                return kWidgetIndexNull;
+            return nextFocusable(*w, fromWidget);
+        }
+
+        // Local helper: first focusable widget in `cls`'s window
+        // STRICTLY after `afterIdx`. Returns kWidgetIndexNull if
+        // none; does NOT wrap. afterIdx == kWidgetIndexNull means
+        // "start from 0" (i.e. firstFocusable).
+        const auto firstAfter = [windowMgr](WindowClass cls, WidgetIndex afterIdx) -> WidgetIndex {
+            auto* w = windowMgr->FindByClass(cls);
+            if (w == nullptr || w->flags.has(WindowFlag::dead))
+                return kWidgetIndexNull;
+            const auto count = w->widgets.size();
+            const std::size_t start = (afterIdx == kWidgetIndexNull)
+                ? 0
+                : static_cast<std::size_t>(afterIdx) + 1;
+            for (std::size_t i = start; i < count; i++)
+            {
+                if (!isFocusable(w->widgets[i]))
+                    continue;
+                if (isDropdownChevron(*w, static_cast<WidgetIndex>(i)))
+                    continue;
+                return static_cast<WidgetIndex>(i);
+            }
+            return kWidgetIndexNull;
+        };
+        const auto firstInMember = [windowMgr](WindowClass cls) -> WidgetIndex {
+            auto* w = windowMgr->FindByClass(cls);
+            if (w == nullptr || w->flags.has(WindowFlag::dead))
+                return kWidgetIndexNull;
+            return firstFocusable(*w);
+        };
+
+        // Step 1: continue inside the current member past fromWidget.
+        if (auto idx = firstAfter(fromClass, fromWidget); idx != kWidgetIndexNull)
+        {
+            if (outClass != nullptr)
+                *outClass = fromClass;
+            return idx;
+        }
+
+        // Step 2: walk forward through subsequent members, skipping
+        // dead / unloaded ones and members with zero focusable
+        // widgets. Continue past the end and wrap, but stop one short
+        // of the starting member — that wraps back to its first
+        // focusable in Step 3.
+        for (std::size_t step = 1; step < set->memberCount; step++)
+        {
+            const auto memberCls = set->members[(startMember + step) % set->memberCount];
+            if (auto idx = firstInMember(memberCls); idx != kWidgetIndexNull)
+            {
+                if (outClass != nullptr)
+                    *outClass = memberCls;
+                return idx;
+            }
+        }
+
+        // Step 3: wrap inside the starting member. Returns the first
+        // focusable up to and including fromWidget — covers the case
+        // where fromWidget is the last focusable in its window and no
+        // sibling member has any focusable widgets either.
+        if (auto idx = firstInMember(fromClass); idx != kWidgetIndexNull)
+        {
+            if (outClass != nullptr)
+                *outClass = fromClass;
+            return idx;
+        }
+
+        return kWidgetIndexNull;
+    }
+
 } // namespace OpenRCT2::Ui::WidgetFocus
 
 // OPENRCT2MINI focus-mode-plan / Phase F.5: cross-library bridge.
@@ -713,6 +1114,20 @@ namespace OpenRCT2::Ui
         // Dropdown.cpp onDraw) is the navigation cue.
         if (window.classification == WindowClass::dropdown)
             return;
-        WidgetFocus::drawFocusOutline(rt, window, mgr.getFocusedWidget());
+        // OPENRCT2MINI list-focus-plan §2.4: list-item ring. When the
+        // focused widget is a list-mode scroll widget AND a specific
+        // item is selected, draw the ring around that item's on-screen
+        // rect rather than around the whole scroll widget. The widget-
+        // level ring would just paint a yellow rectangle around the
+        // scroll viewport — useless as a "which item am I on" cue.
+        const auto focusedWidget = mgr.getFocusedWidget();
+        const auto focusedItem = mgr.getFocusedScrollItem();
+        if (focusedItem >= 0
+            && WidgetFocus::isListModeScroll(window, focusedWidget))
+        {
+            WidgetFocus::drawListItemFocusOutline(rt, window, focusedWidget, focusedItem);
+            return;
+        }
+        WidgetFocus::drawFocusOutline(rt, window, focusedWidget);
     }
 } // namespace OpenRCT2::Ui

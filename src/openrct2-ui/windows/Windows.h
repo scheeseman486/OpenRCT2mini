@@ -381,6 +381,11 @@ namespace OpenRCT2::Ui::Windows
     // if the OSK consumed the event (caller should NOT propagate).
     // Used by UiContext::InterceptVirtualCursorKey.
     bool OskHandleKey(int32_t sdlScancode, bool down);
+    // OPENRCT2MINI osk-overhaul §1+§2: dispatched from OskContextImpl
+    // (input/InputManager.cpp). cursor.click presses the focus-mode-
+    // selected key; cursor.cancel becomes Backspace.
+    void OskActivateFocusedKey();
+    void OskActivateBackspace();
     // Suppress shortcut chord handlers (X = game speed, Y = rotate
     // construction, L2/R2 = view/zoom) while the OSK is up. Wraps
     // OskIsActive() for callers that want a more readable check.

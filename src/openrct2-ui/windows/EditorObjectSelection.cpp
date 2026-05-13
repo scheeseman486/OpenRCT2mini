@@ -690,6 +690,26 @@ namespace OpenRCT2::Ui::Windows
 
         /**
          *
+        // OPENRCT2MINI list-focus-plan §3.9: 1D list opt-in. Items
+        // are _listItems entries (objects in the currently-selected
+        // category tab). Default scrollFocusActivate synthesises an
+        // onScrollMouseDown at the row centre — the existing per-row
+        // selection / load logic resolves the right object.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            return static_cast<int32_t>(_listItems.size());
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            if (itemIndex < 0 || static_cast<size_t>(itemIndex) >= _listItems.size())
+                return {};
+            const int32_t y = itemIndex * kScrollableRowHeight;
+            const int32_t w = widgets[WIDX_LIST].width() - 1;
+            return ScreenRect{ { 0, y }, { w - 1, y + kScrollableRowHeight - 1 } };
+        }
+
+        /**
          * rct2: 0x006AB079
          */
         void onScrollMouseOver(int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override

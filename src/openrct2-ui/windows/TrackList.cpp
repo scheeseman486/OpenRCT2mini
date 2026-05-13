@@ -400,6 +400,33 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
+        // OPENRCT2MINI list-focus-plan §3.8: 1D list opt-in for the
+        // main design list ONLY (scrollIndex == 0). The stats scroll
+        // (scrollIndex == 1) is purely visual / read-only — it stays
+        // a non-focus stop. Items count matches onScrollGetSize for
+        // scroll 0: filtered designs + one extra "custom design" row
+        // outside the track-designs-manager flow.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            if (scrollIndex != 0)
+                return 0;
+            size_t numItems = _filteredTrackIds.size();
+            if (gLegacyScene != LegacyScene::trackDesignsManager)
+                numItems++;
+            return static_cast<int32_t>(numItems);
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            if (scrollIndex != 0 || itemIndex < 0)
+                return {};
+            const int32_t count = scrollFocusGetItemCount(scrollIndex);
+            if (itemIndex >= count)
+                return {};
+            const int32_t y = itemIndex * kScrollableRowHeight;
+            return ScreenRect{ { 0, y }, { width - 1, y + kScrollableRowHeight - 1 } };
+        }
+
         void onTextInput(const WidgetIndex widgetIndex, std::string_view text) override
         {
             if (widgetIndex != WIDX_FILTER_STRING)

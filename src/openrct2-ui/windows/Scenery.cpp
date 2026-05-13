@@ -1541,6 +1541,41 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
+        // OPENRCT2MINI list-focus-plan §3.2: 2D grid opt-in. Items
+        // are entries in _filteredSceneryTab.Entries, laid out at
+        // kSceneryButtonWidth × kSceneryButtonHeight per cell.
+        // scrollFocusActivate falls back to the default impl
+        // (synthesises onScrollMouseDown at the cell centre) — the
+        // existing GetSceneryIdByCursorPos resolves the content-local
+        // centre back to the right entry, so the default works.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            return static_cast<int32_t>(_filteredSceneryTab.Entries.size());
+        }
+
+        int32_t scrollFocusGetColumnCount(int32_t scrollIndex) override
+        {
+            return std::max(1, GetNumColumns());
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            const auto numColumns = std::max(1, GetNumColumns());
+            const auto totalItems = static_cast<int32_t>(_filteredSceneryTab.Entries.size());
+            if (itemIndex < 0 || itemIndex >= totalItems)
+                return {};
+            const auto row = itemIndex / numColumns;
+            const auto col = itemIndex % numColumns;
+            const int32_t x = col * kSceneryButtonWidth;
+            const int32_t y = row * kSceneryButtonHeight;
+            // Content-local rect (no windowPos / scroll-offset applied —
+            // the framework converts via contentRectToOnScreen).
+            return ScreenRect{
+                { x, y },
+                { x + kSceneryButtonWidth - 1, y + kSceneryButtonHeight - 1 },
+            };
+        }
+
         template<typename TObjectType>
         std::pair<StringId, money64> GetNameAndPriceByType(const ScenerySelection& selectedScenery)
         {

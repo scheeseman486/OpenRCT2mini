@@ -496,6 +496,28 @@ namespace OpenRCT2::Ui::Windows
             invalidate();
         }
 
+        // OPENRCT2MINI list-focus-plan §3.6: 1D list opt-in. Items
+        // are visible rides only — hidden rides (filtered out by
+        // search / hide-broken / etc.) are skipped, mirroring how
+        // CountVisibleItems and GetNthVisibleItemIndex already
+        // arrange the displayed rows. Default scrollFocusActivate
+        // synthesises onScrollMouseDown which fires the existing
+        // open-ride-window / demolish dispatch.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            return static_cast<int32_t>(CountVisibleItems());
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            const auto visibleCount = static_cast<int32_t>(CountVisibleItems());
+            if (itemIndex < 0 || itemIndex >= visibleCount)
+                return {};
+            const int32_t y = itemIndex * kScrollableRowHeight;
+            const int32_t w = widgets[WIDX_LIST].width() - 1;
+            return ScreenRect{ { 0, y }, { w - 1, y + kScrollableRowHeight - 1 } };
+        }
+
         /**
          *
          *  rct2: 0x006B3182

@@ -22,6 +22,7 @@
 
 #include <openrct2/interface/Widget.h> // for WidgetIndex, kWidgetIndexNull
 #include <openrct2/interface/WindowClasses.h> // for WindowClass
+#include <openrct2/world/Location.hpp> // for ScreenCoordsXY, ScreenRect
 
 #include <cstddef>
 #include <cstdint>
@@ -94,6 +95,30 @@ namespace OpenRCT2::Ui::WidgetFocus
     // selection.
     WidgetIndex firstFocusable(const WindowBase& window);
 
+    // OPENRCT2MINI: identify windows that are purely visual chrome —
+    // tooltip pop-ups and the map hover-identification overlay — and
+    // therefore must never be considered by the focus-mode bootstrap
+    // (snap / per-frame auto-track) or the window switcher (cycle
+    // next / prev). These windows have no user-actionable widgets, so
+    // focusing them would just leave the user stranded; they also
+    // appear and disappear constantly on cursor motion, which would
+    // make the focus ring jitter if they qualified for snapping.
+    bool isPurelyVisualWindow(WindowClass cls);
+
+    // OPENRCT2MINI focus-mode-plan §F.cycle: return the next focusable
+    // widget after `from` in declaration order, wrapping back to the
+    // start of the widget list when needed. Same focusable predicate
+    // and dropdown-chevron skip as firstFocusable, so the returned
+    // index is a valid landing spot for setFocus. When `from ==
+    // kWidgetIndexNull` (no current focus), behaves exactly like
+    // firstFocusable. Returns kWidgetIndexNull only when the window
+    // has zero focusable widgets at all; if there is exactly one,
+    // returns that same index (cycling onto itself — caller can no-
+    // op or live with it). Used by the kInterfaceEnterFocusMode
+    // shortcut to cycle through widgets when focus mode is already
+    // active in the topmost window.
+    WidgetIndex nextFocusable(const WindowBase& window, WidgetIndex from);
+
     // Synthesise a press on a specific widget by directly invoking
     // its window's onMouseDown handler. Bypasses cursor hit-testing —
     // useful when the focus state already identifies which widget
@@ -105,6 +130,44 @@ namespace OpenRCT2::Ui::WidgetFocus
     // Safe no-op if `idx` is out of range or kWidgetIndexNull. The
     // strategy calls this from the cursor.click → onPlace path.
     void pressWidgetByIndex(WindowBase& window, WidgetIndex idx);
+
+    // OPENRCT2MINI list-focus-plan §2.1: predicate for list-mode
+    // scroll widgets. Returns true iff the widget at `idx` is a
+    // WidgetType::scroll AND the window has opted in to per-item
+    // focus by overriding scrollFocusGetItemCount to return > 0.
+    // Centralised so multiple call sites (isFocusable, the
+    // directional dispatch in WidgetFocusContextImpl) stay in sync.
+    bool isListModeScroll(const WindowBase& window, WidgetIndex idx);
+
+    // OPENRCT2MINI list-focus-plan §2.3: ensure the focused list
+    // item is inside the visible scroll viewport. Adjusts the
+    // window's scrolls[scrollIdx].contentOffsetX/Y so the item's
+    // content-local rect sits inside the visible area. Clamped to
+    // valid scroll range. Called by the directional dispatch on
+    // every list-item step.
+    void ensureScrollItemVisible(
+        WindowBase& window, WidgetIndex scrollWidget, int32_t itemIndex);
+
+    // OPENRCT2MINI list-focus-plan §2.1: convert a content-local
+    // item rect (as returned by scrollFocusGetItemRect) into the
+    // on-screen rect for the focus-ring renderer — applies window
+    // position, scroll widget origin, and live scroll offset.
+    // ScreenRect and ScreenCoordsXY live in the global namespace
+    // (see world/Location.hpp:70, 885) — no OpenRCT2:: prefix.
+    ::ScreenRect contentRectToOnScreen(
+        const WindowBase& window, WidgetIndex scrollWidget,
+        const ::ScreenRect& contentRect);
+
+    // OPENRCT2MINI list-focus-plan §C1: spatially-nearest entry
+    // point for a list-mode scroll widget. Given a previous on-
+    // screen rect (e.g. the previous focus widget the user is
+    // stepping from), find the item index in `scrollWidget` whose
+    // on-screen position is closest to it. Used when focus first
+    // enters a list-mode scroll widget — gives the user the item
+    // closest to wherever the ring was, not always item 0.
+    int32_t nearestScrollItemTo(
+        WindowBase& window, WidgetIndex scrollWidget,
+        const ::ScreenCoordsXY& reference);
 
     // Draw a focus ring over the widget at `idx` in `window`. Called
     // by the shared window-paint code (WindowDrawSingle) after the
@@ -122,6 +185,21 @@ namespace OpenRCT2::Ui::WidgetFocus
     // current position.
     void drawFocusOutline(
         OpenRCT2::Drawing::RenderTarget& rt, const WindowBase& window, WidgetIndex idx);
+
+    // OPENRCT2MINI list-focus-plan §2.4: draw a focus ring around a
+    // single list item inside a list-mode scroll widget. Used by the
+    // bridge when _focusedScrollItem >= 0; otherwise the bridge calls
+    // drawFocusOutline on the widget itself. Translates the window's
+    // content-local item rect to screen space via contentRectToOnScreen
+    // and applies the same brightYellow/outset/none recipe so the ring
+    // looks identical to the widget-level outline.
+    //
+    // Safe no-op when the widget at `scrollWidget` is not a scroll
+    // type, the window has not opted in (scrollFocusGetItemCount
+    // returns 0), or `itemIndex` is out of range.
+    void drawListItemFocusOutline(
+        OpenRCT2::Drawing::RenderTarget& rt, const WindowBase& window,
+        WidgetIndex scrollWidget, int32_t itemIndex);
 
     // ────────────────────────────────────────────────────────────────
     // OPENRCT2MINI focus-mode-plan §F.17 / window-set-plan.md:
@@ -186,5 +264,26 @@ namespace OpenRCT2::Ui::WidgetFocus
     WidgetIndex findNearestInSetDirection(
         WindowClass fromClass, WidgetIndex fromWidget, Direction dir,
         WindowClass* outClass);
+
+    // OPENRCT2MINI focus-mode-plan §F.cycle (set-aware variant): walk
+    // forward through the focused window's set, advancing past
+    // (fromClass, fromWidget) in declaration order. Steps within the
+    // current member's widget list first; when there are no more
+    // focusable widgets after fromWidget, advances to the next live
+    // set member's firstFocusable. Wraps around to the first member's
+    // first focusable widget when the end of the set is hit. Skips
+    // dead / unloaded members.
+    //
+    // For a class that isn't in any set, behaves exactly like
+    // nextFocusable on the single window (with wrap within that
+    // window).
+    //
+    // `*outClass` receives the winner's class — same as `fromClass`
+    // when the cycle stayed in the current member, a sibling member
+    // otherwise. May be nullptr if the caller doesn't need it.
+    // Returns kWidgetIndexNull only when the entire set has zero
+    // focusable widgets across every live member.
+    WidgetIndex nextFocusableInSet(
+        WindowClass fromClass, WidgetIndex fromWidget, WindowClass* outClass);
 
 } // namespace OpenRCT2::Ui::WidgetFocus

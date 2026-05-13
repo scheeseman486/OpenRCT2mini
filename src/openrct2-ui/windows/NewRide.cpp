@@ -490,6 +490,48 @@ namespace OpenRCT2::Ui::Windows
             invalidate();
         }
 
+        // OPENRCT2MINI list-focus-plan §3.3: 2D grid opt-in for the
+        // ride-type picker. Cells are kScrollItemSize square; columns
+        // come from getNumImagesPerRow(). Items are the entries in
+        // _windowNewRideListItems (terminated by a null sentinel).
+        // Default scrollFocusActivate is fine — it calls onScrollMouse-
+        // Down at the cell centre and the existing ScrollGetRideListItemAt
+        // lookup picks the right ride.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            RideSelection* listItem = _windowNewRideListItems;
+            int32_t count = 0;
+            while (listItem->Type != kRideTypeNull || listItem->EntryIndex != kObjectEntryIndexNull)
+            {
+                count++;
+                listItem++;
+            }
+            return count;
+        }
+
+        int32_t scrollFocusGetColumnCount(int32_t scrollIndex) override
+        {
+            return std::max<int32_t>(1, getNumImagesPerRow());
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            const int32_t cols = std::max<int32_t>(1, getNumImagesPerRow());
+            const int32_t count = scrollFocusGetItemCount(scrollIndex);
+            if (itemIndex < 0 || itemIndex >= count)
+                return {};
+            const int32_t row = itemIndex / cols;
+            const int32_t col = itemIndex % cols;
+            // Content-local rect — the +1 origin matches the per-cell
+            // draw loop's starting coords (ScreenCoordsXY{ 1, 1 }).
+            const int32_t x = 1 + col * kScrollItemSize;
+            const int32_t y = 1 + row * kScrollItemSize;
+            return ScreenRect{
+                { x, y },
+                { x + kScrollItemSize - 1, y + kScrollItemSize - 1 },
+            };
+        }
+
         void onScrollDraw(int32_t scrollIndex, RenderTarget& rt) override
         {
             if (_currentTab == RESEARCH_TAB)

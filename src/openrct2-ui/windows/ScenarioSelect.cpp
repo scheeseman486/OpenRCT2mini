@@ -540,6 +540,77 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
+        // OPENRCT2MINI list-focus-plan §3.1: opt in to per-item focus
+        // for the scenario list. Headings are NOT focus stops — only
+        // Scenario rows. The four virtuals translate between a focus-
+        // item-index (0..numScenarios) and the underlying _listItems
+        // vector by iterating and counting headings, matching what
+        // the existing onScrollMouseOver/onScrollMouseDown paths
+        // already do.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            int32_t count = 0;
+            for (const auto& listItem : _listItems)
+            {
+                if (listItem.type == ListItemType::Scenario)
+                    count++;
+            }
+            return count;
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            const int32_t scenarioItemHeight = GetScenarioListItemSize();
+            int32_t y = 0;
+            int32_t scenarioCount = 0;
+            for (const auto& listItem : _listItems)
+            {
+                switch (listItem.type)
+                {
+                    case ListItemType::Heading:
+                        y += 18;
+                        break;
+                    case ListItemType::Scenario:
+                        if (scenarioCount == itemIndex)
+                        {
+                            // Content-local rect (no windowPos / scroll-
+                            // offset arithmetic — the framework owns that
+                            // via contentRectToOnScreen).
+                            return ScreenRect{
+                                { 0, y },
+                                { kWindowSize.width, y + scenarioItemHeight },
+                            };
+                        }
+                        scenarioCount++;
+                        y += scenarioItemHeight;
+                        break;
+                }
+            }
+            return {};
+        }
+
+        void scrollFocusActivate(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            int32_t scenarioCount = 0;
+            for (const auto& listItem : _listItems)
+            {
+                if (listItem.type != ListItemType::Scenario)
+                    continue;
+                if (scenarioCount == itemIndex)
+                {
+                    if (listItem.scenario.is_locked)
+                        return;
+                    OpenRCT2::Audio::Play(Audio::SoundId::click1, 0, windowPos.x + (width / 2));
+                    gFirstTimeSaving = true;
+                    // Callback likely closes this window — return
+                    // immediately afterwards (mirrors onScrollMouseDown).
+                    _callback(listItem.scenario.scenario->Path);
+                    return;
+                }
+                scenarioCount++;
+            }
+        }
+
         void onScrollDraw(int32_t scrollIndex, RenderTarget& rt) override
         {
             auto paletteIndex = getColourMap(colours[1].colour).midLight;

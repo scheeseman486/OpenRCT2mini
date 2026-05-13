@@ -674,6 +674,28 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
+        // OPENRCT2MINI list-focus-plan §3.15: 1D list opt-in for the
+        // sound profile list (scrollIndex 0). The envelope pane
+        // (scrollIndex 1) is a custom drag surface, not a list — it
+        // intentionally opts out (returns 0). Activation falls back to
+        // the default scrollFocusActivate which synthesises an
+        // onScrollMouseDown at the row centre — handleListClick then
+        // selects the sound profile.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            if (scrollIndex != 0)
+                return 0;
+            return static_cast<int32_t>(kSoundNamesCount);
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            if (scrollIndex != 0 || itemIndex < 0 || static_cast<size_t>(itemIndex) >= kSoundNamesCount)
+                return {};
+            const int32_t y = itemIndex * kListItemHeight;
+            return ScreenRect{ { 0, y }, { kListWidth - 7, y + kListItemHeight - 1 } };
+        }
+
         ScreenSize onScrollGetSize(int32_t scrollIndex) override
         {
             if (scrollIndex == 0)
