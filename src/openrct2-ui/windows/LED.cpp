@@ -54,7 +54,9 @@ namespace OpenRCT2::Ui::Windows
     // 1000 ms matches the plan acceptance criteria.
     static constexpr uint32_t kLedTestDurationMs = 1000;
 
-    enum WidgetIdx : WidgetIndex
+    // ODR-unique tag — LTO whole-program check flags `enum WidgetIdx` clashes
+    // across TUs sharing this namespace (Haptics, RumbleEditor, etc.).
+    enum LEDWidgetIdx : WidgetIndex
     {
         WIDX_BACKGROUND,
         WIDX_TITLE,

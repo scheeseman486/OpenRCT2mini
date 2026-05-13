@@ -89,7 +89,8 @@ namespace OpenRCT2::Ui::Windows
             kPageCount,
         };
 
-        enum WidgetIdx : WidgetIndex
+        // ODR-unique tag — see LED.cpp.
+        enum PerformanceProfilerWidgetIdx : WidgetIndex
         {
             WIDX_BACKGROUND,
             WIDX_TITLE,

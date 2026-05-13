@@ -46,7 +46,8 @@ namespace OpenRCT2::Ui::Windows
     // and the status line. Status line shifts from y=88 to y=153.
     static constexpr ScreenSize kHapticsWindowSize = { 280, 175 };
 
-    enum WidgetIdx : WidgetIndex
+    // ODR-unique tag — see LED.cpp for the rationale.
+    enum HapticsWidgetIdx : WidgetIndex
     {
         WIDX_BACKGROUND,
         WIDX_TITLE,

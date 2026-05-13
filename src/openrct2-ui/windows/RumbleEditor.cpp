@@ -317,7 +317,8 @@ namespace OpenRCT2::Ui::Windows
         }
     } // namespace
 
-    enum WidgetIdx : WidgetIndex
+    // ODR-unique tag — see LED.cpp.
+    enum RumbleEditorWidgetIdx : WidgetIndex
     {
         WIDX_BACKGROUND,
         WIDX_TITLE,
