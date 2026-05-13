@@ -528,8 +528,12 @@ if (NOT MACOS_BUNDLE OR (MACOS_BUNDLE AND WITH_TESTS))
     # Don't recurse, grab all *.txt and *.md files
     add_definitions(-DDOCDIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DOCDIR}")
     file(GLOB DOC_FILES "${ROOT_DIR}/distribution/*.txt")
+    # OPENRCT2MINI: PRIVACY.md is not relevant to this port — network and
+    # version-checker are both disabled — so the file was deleted from the
+    # fork tree (commit d4b80c9). Drop it from DOC_FILES so install(FILES)
+    # doesn't error on the missing path. Everything else here is still
+    # present.
     list(APPEND DOC_FILES "${ROOT_DIR}/contributors.md"
-                        "${ROOT_DIR}/PRIVACY.md"
                         "${ROOT_DIR}/licence.txt"
                         "${ROOT_DIR}/distribution/scripting/scripting.md"
                         "${ROOT_DIR}/distribution/scripting/openrct2.d.ts")
