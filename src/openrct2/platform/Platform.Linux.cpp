@@ -103,6 +103,22 @@ namespace OpenRCT2::Platform
                 // output, config, saves all leaking into ~/.config
                 // instead of staying with the binary. Hard requirement
                 // wins.)
+                //
+                // appimage-plan §2: when running from an AppImage, the
+                // AppImageKit runtime sets $APPIMAGE to the absolute
+                // path of the .AppImage file the user ran. The
+                // executable's directory at that point is
+                // /tmp/.mount_xxx/usr/bin/ — the squashfs mount, read-
+                // only, vanishes at process exit. Use $APPIMAGE's
+                // directory instead so saves land next to the AppImage
+                // file on the user's actual filesystem. Bare-binary
+                // host builds (where APPIMAGE is unset) keep the
+                // existing <exeDir>/save behaviour.
+                if (const char* appImagePath = getenv("APPIMAGE");
+                    appImagePath != nullptr && appImagePath[0] != '\0')
+                {
+                    return Path::Combine(Path::GetDirectory(appImagePath), u8"save");
+                }
                 auto exeDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
                 return Path::Combine(exeDir, u8"save");
             }

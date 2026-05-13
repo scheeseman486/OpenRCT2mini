@@ -1,4 +1,4 @@
-name: Build OpenRCT2mini (ARM)
+name: Build OpenRCT2mini
 
 on:
   push:
@@ -129,6 +129,101 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/OpenRCT2mini-*.7z
+          body_path: ${{ steps.relbody.outputs.path }}
+          generate_release_notes: ${{ steps.relbody.outputs.path == '' }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-appimage-x64:
+    name: Build x86_64 Linux AppImage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # AppImage build needs the same .dat files the ARM build needs
+      # (g2 / fonts / palettes / tracks). The CMake install rule for
+      # the AppImage will hit them via the build target, so we build
+      # them here separately first. We duplicate the recipe rather
+      # than depend on the ARM job's output — GHA composite actions
+      # have their own caching cliffs and the two jobs aren't going
+      # to drift apart soon.
+      - name: Install host build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config \
+            libsdl2-dev libpng-dev libzip-dev libzstd-dev \
+            libvorbis-dev libogg-dev nlohmann-json3-dev \
+            p7zip-full python3-pil
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build the AppImage toolchain image with GHA layer cache.
+      # First run downloads Ubuntu 22.04 + apt-installs ~600 MB of dev
+      # deps + downloads linuxdeploy; subsequent runs reuse cached
+      # layers and finish in seconds unless Dockerfile changed.
+      - name: Build AppImage toolchain image
+        uses: docker/build-push-action@v5
+        with:
+          context: Packaging/appimage
+          file: Packaging/appimage/Dockerfile
+          tags: openrctmini-appimage:latest
+          load: true
+          push: false
+          cache-from: type=gha,scope=appimage
+          cache-to: type=gha,mode=max,scope=appimage
+
+      # Run the AppImage build inside the image. build.sh handles cmake
+      # configure + make install DESTDIR=AppDir + linuxdeploy invocation.
+      # It also calls package.sh at the end (which zips the AppImage
+      # with a readme + LICENSE for end-user delivery).
+      - name: Build OpenRCT2mini x86_64 AppImage
+        run: |
+          ./Packaging/appimage/build.sh
+
+      - name: Inspect the produced artifacts
+        run: |
+          ls -la dist/
+          file dist/OpenRCT2mini-*-x86_64.AppImage
+          echo "Portable zip:"
+          ls -la dist/OpenRCT2mini-x86_64-*.zip
+
+      - name: Upload portable zip as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenRCT2mini-x86_64-${{ github.sha }}
+          path: dist/OpenRCT2mini-x86_64-*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      # Same release-on-tag flow as the ARM job. softprops/action-gh-
+      # release is idempotent on the tag — if the release already
+      # exists (created by the ARM job), this appends to its files
+      # list rather than failing.
+      - name: Resolve release body path
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: relbody
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          if [ -f "release-notes-${tag}.md" ]; then
+              echo "path=release-notes-${tag}.md" >> "$GITHUB_OUTPUT"
+              echo "Using release-notes-${tag}.md"
+          else
+              echo "path=" >> "$GITHUB_OUTPUT"
+              echo "No release-notes-${tag}.md — falling back to auto-generated notes."
+          fi
+
+      - name: Create release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/OpenRCT2mini-x86_64-*.zip
           body_path: ${{ steps.relbody.outputs.path }}
           generate_release_notes: ${{ steps.relbody.outputs.path == '' }}
           fail_on_unmatched_files: true
