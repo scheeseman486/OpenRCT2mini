@@ -36,6 +36,12 @@
 # proprietary game data and are not redistributable.
 /ui_art/
 
+# Cursor PNG working set (cut 50). The cursor bitmaps were extracted from
+# OpenRCT2's CursorData.cpp as PNGs to allow round-trip editing; the
+# canonical source of truth is the X-bitmap arrays in CursorData.cpp itself.
+# These PNGs are scratch material — re-extractable, not the build input.
+/cursors/all/
+
 # Build / packaging logs and per-revision dumps generated under dist/.
 # (dist/ itself is excluded by upstream below, but make the intent explicit
 # here so anyone reading just this section sees what's stripped.)
