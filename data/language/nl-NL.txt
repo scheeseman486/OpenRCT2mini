@@ -1784,10 +1784,6 @@ STR_2483    :{WINDOW_COLOUR_2}Wekelijkse winst: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Wekelijkse winst: {RED}{CURRENCY2DP}
 STR_2487    :‘Echte’ namen van bezoekers tonen
 STR_2488    :Wissel tussen het tonen van ‘echte’ namen van bezoekers en bezoekernummers.
-STR_2489    :Sneltoetsen…
-STR_2490    :Sneltoetsen
-STR_2491    :Toetsen herstellen
-STR_2492    :Alle sneltoetsen terugzetten op de standaardinstellingen
 STR_2493    :Sluit bovenste venster
 STR_2494    :Sluit alle openstaande vensters
 STR_2495    :Bouwmodus annuleren
@@ -1933,9 +1929,6 @@ STR_2780    :Extra kijkvenster
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Sneltoets wijzigen
-STR_2785    :{WINDOW_COLOUR_2}Voer een nieuwe sneltoets in voor:{NEWLINE}‘{STRINGID}’
-STR_2786    :Klik op de beschrijving om een nieuwe sneltoets in te stellen
 STR_2787    :{WINDOW_COLOUR_2}Parkwaarde: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Gefeliciteerd!{NEWLINE}{BLACK}Je hebt je doelstelling bereikt met een bedrijfswaarde van {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Je hebt je doelstelling niet bereikt!
@@ -1948,7 +1941,6 @@ STR_2795    :Sorteren
 STR_2796    :Sorteer de lijst met attracties op basis van het aangegeven informatietype
 STR_2797    :Beeld verschuiven als aanwijzer op de rand staat
 STR_2798    :Selecteer of het beeld moet verschuiven als de muisaanwijzer op de rand van het beeld staat
-STR_2799    :Instellingen voor sneltoetsen bekijken of aanpassen
 STR_2800    :{WINDOW_COLOUR_2}Totale bezoeken: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Entree-inkomsten: {BLACK}{CURRENCY2DP}
 STR_2802    :Kaart
@@ -2423,8 +2415,6 @@ STR_5216    :Lijst baanontwerpbeheer
 STR_5217    :Cheats
 STR_5218    :Thema’s
 STR_5219    :Opties
-STR_5220    :Sneltoetsen
-STR_5221    :Sneltoets aanpassen
 STR_5222    :Laden/opslaan
 STR_5223    :Opslagbevestiging
 STR_5224    :Afbraakbevestiging
@@ -3573,8 +3563,6 @@ STR_6577    :Snelh. blokremmen
 STR_6578    :Stelt de doorlaatsnelheid van de blokrem in. Deze snelheid geldt ook voor de remmen die voor deze blokrem geplaatst zijn (als de blokrem open staat).
 STR_6579    :De snelheden van de blokremmen zullen niet worden opgeslagen in het baanontwerp.
 STR_6580    :Toetsen herstellen
-STR_6581    :Weet je zeker dat je alle sneltoetsen op dit tabblad weer wilt terugzetten op de standaardwaarden?
-STR_6582    :Sneltoetsen openen
 STR_6583    :{WINDOW_COLOUR_2}Achterstevoren
 STR_6584    :Keert de trein om, zodat hij achterstevoren over de baan rijdt.
 STR_6585    :Kan dit niet wijzigen…

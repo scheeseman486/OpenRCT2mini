@@ -1783,10 +1783,6 @@ STR_2483    :{WINDOW_COLOUR_2}Lucro semanal: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Lucro semanal: {RED}{CURRENCY2DP}
 STR_2487    :Exibir nomes ‘reais’ para os visitantes
 STR_2488    :Alternar entre exibir nomes ‘reais’ para os visitantes e números de visitantes
-STR_2489    :Teclas de atalho…
-STR_2490    :Atalhos do teclado
-STR_2491    :Redefinir teclas
-STR_2492    :Redefinir todos os atalhos de teclado para as configurações padrão
 STR_2493    :Fechar janela do topo
 STR_2494    :Fechar todas as janelas
 STR_2495    :Cancelar modo construção
@@ -1934,9 +1930,6 @@ STR_2780    :Janela de Exibição Grande
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Alterar atalhos do teclado
-STR_2785    :{WINDOW_COLOUR_2}Pressione uma nova tecla de atalho para:{NEWLINE}“{STRINGID}”
-STR_2786    :Clique na descrição do atalho para selecionar uma nova tecla
 STR_2787    :{WINDOW_COLOUR_2}Valor do parque: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Parabéns!{NEWLINE}{BLACK}Você alcançou seu objetivo com o valor da empresa de {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Você falhou no seu objetivo!
@@ -1949,7 +1942,6 @@ STR_2795    :Ordenar
 STR_2796    :Ordenar a lista de atrações de acordo com o tipo de informação exibido
 STR_2797    :Mover câmera quando o cursor estiver na borda da tela
 STR_2798    :Move a câmera quando o cursor do mouse estiver na borda da tela
-STR_2799    :Visualiza ou muda atribuições de teclas de controle
 STR_2800    :{WINDOW_COLOUR_2}Total de ingressos: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Receita dos ingressos: {BLACK}{CURRENCY2DP}
 STR_2802    :Mapa
@@ -2422,8 +2414,6 @@ STR_5216    :Lista de Gerenciador de Projeto de Pista
 STR_5217    :Trapaças
 STR_5218    :Temas
 STR_5219    :Opções
-STR_5220    :Atalhos de Teclado
-STR_5221    :Mudar Atalhos de Teclado
 STR_5222    :Carregar/Salvar
 STR_5223    :Pop-up de Salvamento
 STR_5224    :Pop-up de Demolição de Atração
@@ -3574,8 +3564,6 @@ STR_6577    :Velocidade dos freios bloqueadores
 STR_6578    :Configure o limite de velocidade dos freios bloqueadores. No modo de seções de bloco, freios adjacentes com uma velocidade mais baixa são conectados ao freio bloqueador.
 STR_6579    :Freios bloqueadores serão configurados para a velocidade padrão quando salvos como um projeto de pista
 STR_6580    :Redefinir
-STR_6581    :Tem certeza que quer redefinir todas as teclas de atalho nessa aba?
-STR_6582    :Abrir janela de atalhos do teclado
 STR_6583    :{WINDOW_COLOUR_2}Trens Invertidos
 STR_6584    :Selecione para que os trens operem de costas
 STR_6585    :Não é possível fazer alterações…

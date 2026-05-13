@@ -1787,10 +1787,6 @@ STR_2483    :{WINDOW_COLOUR_2}Bénéfice hebdomadaire : {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Bénéfice hebdomadaire : {RED}{CURRENCY2DP}
 STR_2487    :Afficher le « vrai » nom des visiteurs
 STR_2488    :Passe du « vrai » nom des visiteurs à leur numéro
-STR_2489    :Raccourcis…
-STR_2490    :Raccourcis clavier
-STR_2491    :Réinitialiser
-STR_2492    :Réinitialise tous les raccourcis
 STR_2493    :Fermer fenêtre supérieure
 STR_2494    :Fermer toutes les fenêtres
 STR_2495    :Annuler mode construction
@@ -1938,9 +1934,6 @@ STR_2780    :Vue supplémentaire
 STR_2781    :{STRINGID} :
 STR_2782    :MAJ + 
 STR_2783    :CTRL + 
-STR_2784    :Modifier raccourci clavier
-STR_2785    :{WINDOW_COLOUR_2}Nouveau raccourci clavier pour :{NEWLINE}{SMALLFONT}{STRINGID}{MEDIUMFONT}
-STR_2786    :Cliquez sur la description du raccourci pour choisir une nouvelle touche
 STR_2787    :{WINDOW_COLOUR_2}Valeur du parc : {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Félicitations !{NEWLINE}{BLACK}Vous avez atteint votre objectif, votre société a une valeur de {CURRENCY} !
 STR_2789    :{WINDOW_COLOUR_2}Vous n’avez pas atteint votre objectif !
@@ -1953,7 +1946,6 @@ STR_2795    :Trier
 STR_2796    :Trie la liste des attractions dans l’ordre avec le type d’informations affiché
 STR_2797    :Défiler la vue quand le curseur est au bord de l’écran
 STR_2798    :Fait défiler la vue quand le curseur atteint le bord de l’écran
-STR_2799    :Voir ou modifier les touches de raccourci
 STR_2800    :{WINDOW_COLOUR_2}Nombre total d’entrées : {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Revenu issu des entrées : {BLACK}{CURRENCY2DP}
 STR_2802    :Carte
@@ -2428,8 +2420,6 @@ STR_5216    :Liste du gestionnaire de conception de voie
 STR_5217    :Triche
 STR_5218    :Thèmes
 STR_5219    :Options
-STR_5220    :Raccourcis clavier
-STR_5221    :Changer raccourcis clavier
 STR_5222    :Charger/Sauvegarder
 STR_5223    :Sauvegarde
 STR_5224    :Démolition d’attraction
@@ -3580,8 +3570,6 @@ STR_6577    :Vitesse des freins de bloc
 STR_6578    :Définit la vitesse maximale aux freins de bloc. En mode blocs de voie, les freins adjacents avec une vitesse plus faible sont liés aux freins de bloc.
 STR_6579    :La vitesse des freins de bloc sera changée à la valeur par défaut quand la conception de voie sera sauvegardée
 STR_6580    :Réinitialiser
-STR_6581    :Voulez-vous vraiment réinitialiser tous les raccourcis claviers de cet onglet ?
-STR_6582    :Ouvrir la fenêtre des raccourcis clavier
 STR_6583    :{WINDOW_COLOUR_2}Trains inversés
 STR_6584    :Fait rouler les trains à l’envers
 STR_6585    :Impossible d’effectuer les changements…

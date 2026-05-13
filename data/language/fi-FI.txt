@@ -1785,10 +1785,6 @@ STR_2483    :{WINDOW_COLOUR_2}Viikottainen tuotto: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Viikottainen tuotto: {RED}{CURRENCY2DP}
 STR_2487    :Käytä kävijöiden ”oikeita” nimiä
 STR_2488    :Tunnista kävijät nimellä numeron sijaan
-STR_2489    :Pikanäppäimet…
-STR_2490    :Näppäimistön pikanäppäimet
-STR_2491    :Palauta näppäinasetukset
-STR_2492    :Aseta kaikki pikanäppäimet takaisin alkuperäisiin asetuksiin
 STR_2493    :Sulje päällimmäinen ikkuna
 STR_2494    :Sulje kaikki ikkunat
 STR_2495    :Poistu rakennustilasta
@@ -1937,9 +1933,6 @@ STR_2780    :Ylimääräinen ikkuna
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Muuta näppäimistön pikanäppäintä
-STR_2785    :{WINDOW_COLOUR_2}Paina uusi näppäinyhdistelmä toiminnolle:{NEWLINE}“{STRINGID}”
-STR_2786    :Paina pikanäppäimen kuvausta valitaksesi uuden näppäinyhdistelmän
 STR_2787    :{WINDOW_COLOUR_2}Puiston arvo: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Onnittelut!{NEWLINE}{BLACK}Saavutit tavoitteesi! Yhtiösi arvo: {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Epäonnistuit tavoitteessasi!
@@ -1952,7 +1945,6 @@ STR_2795    :Järjestä
 STR_2796    :Järjestä laitelistaus valitun tietotyypin mukaan
 STR_2797    :Vieritä näkymää kun osoitin on näytön reunassa
 STR_2798    :Valitse vieritetäänkö näkymää kun osoitin on näytön reunassa
-STR_2799    :Näytä ja aseta näppäinasetukset
 STR_2800    :{WINDOW_COLOUR_2}Kävijöitä yhteensä: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Tulot sisäänpääsyistä: {BLACK}{CURRENCY2DP}
 STR_2802    :Kartta
@@ -2425,8 +2417,6 @@ STR_5216    :Ratamallien hallintalista
 STR_5217    :Huijaukset
 STR_5218    :Teemat
 STR_5219    :Asetukset
-STR_5220    :Näppäimistön pikanäppäimet
-STR_5221    :Muuta näppäimistön pikanäppäimiä
 STR_5222    :Lataa/Tallenna
 STR_5223    :Tallennuskehote
 STR_5224    :Laitteen romutus -kehote
@@ -3579,8 +3569,6 @@ STR_6577    :Lohkojarrujen nopeus
 STR_6578    :Aseta lohkojarruille nopeusrajoitus. Lohkojarrutustilassa vierekkäiset hitaamman nopeuden jarrut yhdistyvät lohkojarruihin.
 STR_6579    :Ratamalleissa lohkojarrujen nopeus palautuu oletusasetukseen
 STR_6580    :Palauta
-STR_6581    :Oletko varma, että haluat palauttaa kaikki pikanäppäimesi alkutilaan?
-STR_6582    :Avaa pikanäppäinten asetukset
 STR_6583    :{WINDOW_COLOUR_2}Käänteiset junat
 STR_6584    :Aseta junat kulkemaan takaperin
 STR_6585    :Muutoksia ei voi tehdä…

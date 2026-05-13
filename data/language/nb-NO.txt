@@ -1777,10 +1777,6 @@ STR_2483    :{WINDOW_COLOUR_2}Ukentlig profitt: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Ukentlig profitt: {RED}{CURRENCY2DP}
 STR_2487    :Vis gjesters 'ekte' navn
 STR_2488    :Veksle mellom å vise gjesters 'ekte' navn og gjestnummer
-STR_2489    :Hurtigtaster…
-STR_2490    :Hurtigtaster
-STR_2491    :Nullstill taster
-STR_2492    :Tilbakestill hurtigtaster til standard innstillinger
 STR_2493    :Lukk øverste vindu
 STR_2494    :Lukke alle flytende vinduer
 STR_2495    :Avbryt byggemodus
@@ -1928,9 +1924,6 @@ STR_2780    :Ekstra visningsvindu
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Endre hurtigtast
-STR_2785    :{WINDOW_COLOUR_2}Trykk ny hurtigtast for:{NEWLINE}“{STRINGID}”
-STR_2786    :Klikk på snarveibeskrivelse for å velge ny tast
 STR_2787    :{WINDOW_COLOUR_2}Parkverdi: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Gratulerer !{NEWLINE}{BLACK}Du oppnådde ditt oppdrag med en bedriftsverdi på {CURRENCY} !
 STR_2789    :{WINDOW_COLOUR_2}Du har feilet ditt oppdrag !
@@ -1943,7 +1936,6 @@ STR_2795    :Sorter
 STR_2796    :Sorter attraksjonslisten med den viste informasjonstypen
 STR_2797    :Beveg kamera når pekeren treffer skjermkanten
 STR_2798    :Beveg kamera når musepekeren treffer skjermkanten
-STR_2799    :Vis eller endre tastebindinger som kan brukes i spillet
 STR_2800    :{WINDOW_COLOUR_2}Totale adganger: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Inntekt fra adganger: {BLACK}{CURRENCY2DP}
 STR_2802    :Kart
@@ -2416,8 +2408,6 @@ STR_5216    :Spordesign Administrererliste
 STR_5217    :Juks
 STR_5218    :Temaer
 STR_5219    :Alternativer
-STR_5220    :Hurtigtaster
-STR_5221    :Endre Hurtigtaster
 STR_5222    :Last/Lagre
 STR_5223    :Lagre-markør
 STR_5224    :Riv Attraksjon-markør
@@ -3569,8 +3559,6 @@ STR_6577    :Blokkbrems hastighet
 STR_6578    :Angi fartsgrense for blokkbremser. I blokkseksjonsmodus, vil bremser med en lavere hastighet ved siden av bli knyttet til blokkbremsen.
 STR_6579    :Blokkbremser vil bli gitt standard hastighet når den blir lagret som spordesign
 STR_6580    :Nullstill
-STR_6581    :Er du sikker på du vil nullstille alle hurtigtaster på denne gruppen?
-STR_6582    :Åpne vindu for hurtigtaster
 STR_6583    :{WINDOW_COLOUR_2}Reverserte Tog
 STR_6584    :Velg for å kjøre tog baklengs
 STR_6585    :Kan ikke gjøre endringer…

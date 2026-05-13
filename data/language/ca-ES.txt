@@ -1786,10 +1786,6 @@ STR_2483    :{WINDOW_COLOUR_2}Benefici setmanal: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Benefici setmanal: {RED}{CURRENCY2DP}
 STR_2487    :Mostra els noms «reals» dels visitants
 STR_2488    :Alterna entre mostrar els noms «reals» dels visitants o el nombre que se li ha assignat.
-STR_2489    :Dreceres de teclat…
-STR_2490    :Dreceres de teclat
-STR_2491    :Reinicia les tecles
-STR_2492    :Canvia totes les dreceres als seus valors predeterminats.
 STR_2493    :Tanca la finestra superior
 STR_2494    :Tanca totes les finestres
 STR_2495    :Cancel·la el mode de construcció
@@ -1937,9 +1933,6 @@ STR_2780    :Vista extra
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Canvia la drecera de teclat
-STR_2785    :{WINDOW_COLOUR_2}Premeu la nova drecera de teclat per:{NEWLINE}«{STRINGID}»
-STR_2786    :Feu clic a la descripció d’una drecera per a canviar-ne les tecles assignades.
 STR_2787    :{WINDOW_COLOUR_2}Valoració del parc: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Felicitats!{NEWLINE}{BLACK}Heu aconseguit el vostre objectiu amb un valor d’empresa de {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}No heu aconseguit els vostres objectius!
@@ -1952,7 +1945,6 @@ STR_2795    :Ordena
 STR_2796    :Ordena la llista d’atraccions segons el criteri seleccionat
 STR_2797    :Desplaça la vista amb punter prop de la vora
 STR_2798    :Desplaça la vista quan el punter del ratolí estigui prop de la vora de la pantalla.
-STR_2799    :Mostra o canvia les dreceres de teclat assignades.
 STR_2800    :{WINDOW_COLOUR_2}Entrades totals: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Ingressos per entrades: {BLACK}{CURRENCY2DP}
 STR_2802    :Mapa
@@ -2427,8 +2419,6 @@ STR_5216    :Gestor del llistat de dissenys de via
 STR_5217    :Trampes
 STR_5218    :Temes
 STR_5219    :Opcions
-STR_5220    :Dreceres de teclat
-STR_5221    :Canvia la drecera de teclat
 STR_5222    :Carrega/Desa
 STR_5223    :Avís de desada
 STR_5224    :Avís de demolició
@@ -3579,8 +3569,6 @@ STR_6577    :Velocitat del fre de bloc
 STR_6578    :Estableix el límit de velocitat per als frens de bloc. En mode de secció de bloc, els frens adjacents amb una velocitat inferior es vinculen amb el fre de bloc.
 STR_6579    :Els frens de bloc s’establiran a la velocitat per defecte quan es desi el disseny de les vies
 STR_6580    :Restableix
-STR_6581    :Esteu segur que voleu restablir totes les dreceres de teclat d’aquesta pestanya?
-STR_6582    :Obre la finestra de dreceres de teclat
 STR_6583    :{WINDOW_COLOUR_2}Inverteix el sentit
 STR_6584    :Trieu-ho per a invertir el sentit de moviment dels cotxes
 STR_6585    :Els canvis no es poden fer…

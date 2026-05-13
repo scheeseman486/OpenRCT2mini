@@ -1784,11 +1784,7 @@ STR_2483    :{WINDOW_COLOUR_2}Wöchentlicher Gewinn: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Wöchentlicher Gewinn: {RED}{CURRENCY2DP}
 STR_2487    :„Echte“ Besuchernamen anzeigen
 STR_2488    :Zwischen „echten“ Besuchernamen und Besucherzahlen umschalten
-STR_2489    :Tastenkürzel …
-STR_2490    :Tastenkürzel
 #new
-STR_2491    :Tasten zurücksetzen
-STR_2492    :Alle Tastenkürzel auf Standardeinstellung zurücksetzen
 STR_2493    :Oberstes Fenster schließen
 STR_2494    :Alle freien Fenster schließen
 STR_2495    :Baumodus abbrechen
@@ -1936,9 +1932,6 @@ STR_2780    :Zusatz-Ansichtsfenster
 STR_2781    :{STRINGID}:
 STR_2782    :UMSCHALT + 
 STR_2783    :STRG + 
-STR_2784    :Tastaturkürzel ändern
-STR_2785    :{WINDOW_COLOUR_2}Drücken Sie die neue Taste für:{NEWLINE}„{STRINGID}“
-STR_2786    :Klicken Sie auf die Kürzelbeschreibung, um eine neue Taste auszuwählen
 STR_2787    :{WINDOW_COLOUR_2}Verkehrswert: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Glückwunsch!{NEWLINE}{BLACK}Sie haben Ihr Ziel mit einem Firmenwert von {CURRENCY} erreicht!
 STR_2789    :{WINDOW_COLOUR_2}Sie haben Ihr Ziel nicht erreicht!
@@ -1951,7 +1944,6 @@ STR_2795    :Sortieren
 STR_2796    :Sortieren Sie die Bahnliste in die richtige Reihenfolge mit Hilfe der angezeigten Informationsart
 STR_2797    :Mauszeiger am Bildschirmrand verschiebt Ansicht
 STR_2798    :Wenn sich der Mauszeiger am Bildschirmrand befindet, wird die Ansicht verschoben
-STR_2799    :Tastenkürzel anzeigen oder ändern
 STR_2800    :{WINDOW_COLOUR_2}Besucher gesamt: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Einkünfte d. Eintrittskarten: {BLACK}{CURRENCY2DP}
 STR_2802    :Karte
@@ -2423,8 +2415,6 @@ STR_5216    :Streckenentwurf-Manager-Liste
 STR_5217    :Cheats
 STR_5218    :Themen
 STR_5219    :Optionen
-STR_5220    :Tastenkürzel
-STR_5221    :Tastenkürzel ändern
 STR_5222    :Laden/Speichern
 STR_5223    :Speichern
 STR_5224    :Attraktion abreißen
@@ -3571,8 +3561,6 @@ STR_6577    :Blockbremsengeschwindigkeit
 STR_6578    :Geschwindigkeitsbegrenzung für Blockbremsen festlegen. Im Blockbereichsmodus werden benachbarte Bremsen mit einer langsameren Geschwindigkeit mit der Blockbremse verknüpft.
 STR_6579    :Blockbremsen werden zur Standardgeschwindigkeit gesetzt, wenn sie als Streckenentwurf gespeichert werden
 STR_6580    :Zurücksetzen
-STR_6581    :Sind Sie sich sicher, dass Sie alle Tastenkürzel in dieser Registerkarte zurücksetzen wollen?
-STR_6582    :Tastenkürzelfenster öffnen
 STR_6583    :{WINDOW_COLOUR_2}Umgekehrte Züge
 STR_6584    :Auswählen, um Züge rückwärts fahren zu lassen
 STR_6585    :Änderungen können nicht ausgeführt werden …

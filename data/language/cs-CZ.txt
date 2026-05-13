@@ -1788,10 +1788,6 @@ STR_2483    :{WINDOW_COLOUR_2}Týdenní zisk: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Týdenní zisk: {RED}{CURRENCY2DP}
 STR_2487    :Zobrazit „skutečná“ jména návštěvníků
 STR_2488    :Přepíná mezi zobrazením „skutečného“ jména a čísla návštěvníka
-STR_2489    :Klávesové zkratky…
-STR_2490    :Klávesové zkratky
-STR_2491    :Obnovit původní nastavení
-STR_2492    :Nastaví všechny klávesové zkratky na jejich výchozí hodnoty
 STR_2493    :Zavřít okno na vrchu
 STR_2494    :Zavřít všechny plovoucí okna
 STR_2495    :Zrušit mód stavění
@@ -1939,9 +1935,6 @@ STR_2780    :Extra pohled
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Změnit klávesovou zkratku
-STR_2785    :{WINDOW_COLOUR_2}Stiskněte novou klávesovou zkratku pro:{NEWLINE}„{STRINGID}“
-STR_2786    :Klikněte na popis klávesové zkratky pro výběr nastavení zkratky
 STR_2787    :{WINDOW_COLOUR_2}Hodnota parku: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Gratulujeme!{NEWLINE}{BLACK}Bylo dosaženo cíle scénáře s hodnotou společnosti {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Nepodařilo se dosáhnout cíle scénáře!
@@ -1954,7 +1947,6 @@ STR_2795    :Seřadit
 STR_2796    :Seřadit seznam podle zobrazené informace
 STR_2797    :Posouvat pohled při najetí myší k okraji
 STR_2798    :Posouvat pohled, když ukazatel myši narazí na hranu displeje
-STR_2799    :Zobrazit a upravit přiřazení klávesy Ctrl
 STR_2800    :{WINDOW_COLOUR_2}Celkem vstupů: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Příjem ze vstupů: {BLACK}{CURRENCY2DP}
 STR_2802    :Mapa
@@ -2427,8 +2419,6 @@ STR_5216    :Správce seznamu návrhů tratí
 STR_5217    :Cheaty
 STR_5218    :Motivy
 STR_5219    :Nastavení
-STR_5220    :Klávesové zkratky
-STR_5221    :Změnit klávesové zkratky
 STR_5222    :Načíst/uložit
 STR_5223    :Výzva k uložení
 STR_5224    :Výzva k odstranění atrakce
@@ -3577,8 +3567,6 @@ STR_6577    :Rychlost blokových brzd
 STR_6578    :Nastaví rychlostní omezení blokových brzd. V módu okruhu rozděleného na bloky jsou přiléhající brzdy s nižší rychlostí spojeny s blokovou brzdou.
 STR_6579    :Při uložení jako návrh tratě se blokové brzdy nastaví na výchozí rychlost
 STR_6580    :Obnovit
-STR_6581    :Opravdu chcete obnovit všechny klávesové zkratky na této záložce?
-STR_6582    :Otevřít okno Klávesové zkratky
 STR_6583    :{WINDOW_COLOUR_2}Obrácené vlaky
 STR_6584    :Zvolte pro vlaky jezdící pozpátku
 STR_6585    :Nelze změnit…

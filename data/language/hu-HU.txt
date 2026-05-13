@@ -1783,10 +1783,6 @@ STR_2483    :{WINDOW_COLOUR_2}Heti nyereség: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Heti nyereség: {RED}{CURRENCY2DP}
 STR_2487    :Vendégek „igazi” nevének mutatása
 STR_2488    :Váltás a vendégek „igazi” nevének és a vendégek számának mutatása között
-STR_2489    :Gyorsbillentyűk…
-STR_2490    :Gyorsbillentyűk
-STR_2491    :Alapértékek visszaállítása 
-STR_2492    :A gyorsbillentyűk alapértékeinek visszaállítása
 STR_2493    :Legfelső ablak bezárása
 STR_2494    :Összes lebegő ablak bezárása
 STR_2495    :Kilépés az építési módból
@@ -1934,9 +1930,6 @@ STR_2780    :Extra nézetablak
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Gyorsbillentyűk beállítása
-STR_2785    :{WINDOW_COLOUR_2}Add meg az új gyorsbillentyűjét:{NEWLINE}„{STRINGID}”
-STR_2786    :Kattints a parancs leírására új gyorsbillentyű megadásához
 STR_2787    :{WINDOW_COLOUR_2}A park értéke: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Gratulálunk !{NEWLINE}{BLACK}Sikeresen teljesítetted a kitűzött célt egy {CURRENCY} értékű vállalattal !
 STR_2789    :{WINDOW_COLOUR_2}Nem sikerült teljesítened a kitűzött célt !
@@ -1949,7 +1942,6 @@ STR_2795    :Rendezés
 STR_2796    :A játékok listájának rendezése a megjelenített információtípus szerint
 STR_2797    :Görgetés, ha a mutató a képernyő szélén van
 STR_2798    :A nézet görgetése, ha a mutató a képernyő szélén van
-STR_2799    :A billentyűparancsok megtekintése vagy módosítása
 STR_2800    :{WINDOW_COLOUR_2}Összes belépő: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Bevétel a belépőkből: {BLACK}{CURRENCY2DP}
 STR_2802    :Térkép
@@ -2422,8 +2414,6 @@ STR_5216    :Játéktervkezelő lista
 STR_5217    :Csalások
 STR_5218    :Témák
 STR_5219    :Beállítások
-STR_5220    :Gyorsbillentyűk 
-STR_5221    :Gyorsbillentyűk megváltoztatása
 STR_5222    :Betöltés/mentés
 STR_5223    :Mentés rákérdezés
 STR_5224    :Játék lerombolása rákérdezés
@@ -3574,8 +3564,6 @@ STR_6577    :Blokkfék sebessége
 STR_6578    :A blokkfékek sebességkorlátjának beállítása. A blokkszakasz üzemmódban a lassabb sebességű szomszédos fékek a blokkfékhez kapcsolódnak.
 STR_6579    :A blokkfékek alapértelmezett sebességre lesznek beállítva, amikor pályatervként elmentésre kerül
 STR_6580    :Visszaállítás
-STR_6581    :Biztosan vissza szeretnéd állítani az összes gyorsbillentyűt ezen a fülön?
-STR_6582    :Gyorsbillentyűk ablak megnyitása
 STR_6583    :{WINDOW_COLOUR_2}Fordított vonatok
 STR_6584    :A vonatok visszafelé történő közlekedésének kiválasztása
 STR_6585    :Nem lehet a változtatásokat végrehajtani…

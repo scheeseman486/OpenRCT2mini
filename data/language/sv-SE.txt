@@ -1784,10 +1784,6 @@ STR_2483    :{WINDOW_COLOUR_2}Veckovis vinst: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Veckovis vinst: {RED}{CURRENCY2DP}
 STR_2487    :Visa ’riktiga’ namn på besökare
 STR_2488    :Byt mellan ’riktiga’ namn och besökarnummer
-STR_2489    :Snabbtangenter…
-STR_2490    :Snabbtangenter
-STR_2491    :Återställ snabbtangenter
-STR_2492    :Återställ alla snabbtangenter till standardinställningar
 STR_2493    :Stäng fönstret som är längst fram
 STR_2494    :Stäng alla fönster
 STR_2495    :Avbryt konstruktionsläget
@@ -1936,9 +1932,6 @@ STR_2780    :Extra bildskärm
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Ändra snabbtangenter
-STR_2785    :{WINDOW_COLOUR_2}Välj ny snabbtangent för:{NEWLINE}”{STRINGID}”
-STR_2786    :Klicka på en beskrivning för att välja en ny snabbtangent
 STR_2787    :{WINDOW_COLOUR_2}Parkvärde: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Grattis!{NEWLINE}{BLACK}Du uppnådde ditt mål med ett företagsvärde på {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Du har misslyckats med ditt mål!
@@ -1951,7 +1944,6 @@ STR_2795    :Sortera
 STR_2796    :Sortera åkturslistan i ordning enligt den valda informationstypen
 STR_2797    :Flytta vyn när muspekaren är vid skärmens kant
 STR_2798    :Välj om vyn ska förflyttas när muspekaren är vid skärmens kant
-STR_2799    :Visa eller ändra kontrollerna
 STR_2800    :{WINDOW_COLOUR_2}Totalt antal inträden: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Inkomst från inträden: {BLACK}{CURRENCY2DP}
 STR_2802    :Karta
@@ -2427,8 +2419,6 @@ STR_5216    :Bandesignlistan
 STR_5217    :Fusk
 STR_5218    :Teman
 STR_5219    :Inställningar
-STR_5220    :Snabbtangenter
-STR_5221    :Ändra snabbtangenter
 STR_5222    :Ladda eller spara
 STR_5223    :Spara inmatning
 STR_5224    :Riv åktur-fönster
@@ -3580,8 +3570,6 @@ STR_6577    :Blockbromshastighet
 STR_6578    :Ställ in hastighetsgräns för blockbromsar. I blockområdesläge kopplas intilliggande bromsar med en lägre hastighet till blockbromsen.
 STR_6579    :Blockbromsar ställs in på standardhastighet när de sparas som bandesign
 STR_6580    :Återställa
-STR_6581    :Är du säker på att du vill återställa alla kortkommandon på den här fliken?
-STR_6582    :Öppna fönstret för kortkommandon
 STR_6583    :{WINDOW_COLOUR_2}Bakvända tåg
 STR_6584    :Välj att köra tåg baklänges
 STR_6585    :Ändringar kan inte göras…

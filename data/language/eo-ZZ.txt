@@ -1783,10 +1783,6 @@ STR_2483    :{WINDOW_COLOUR_2}Profito semajna: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Profito semajna: {RED}{CURRENCY2DP}
 STR_2487    :Montri ‘faktajn’ nomojn de gastoj
 STR_2488    :Baskuligi inter montrado de ‘faktaj’ gastonomoj kaj gastonumeroj
-STR_2489    :Klavarokomandojn…
-STR_2490    :Klavarokomandojn
-STR_2491    :Restarigi klavojn
-STR_2492    :Remeti ĉiujn klavarokomandojn al iliaj defaŭltaj agordoj
 STR_2493    :Fermi plej supran fenestron
 STR_2494    :Fermi ĉiujn glitajn fenestrojn
 STR_2495    :Nuligi reĝimon de konstruado
@@ -1934,9 +1930,6 @@ STR_2780    :Plia vidujo
 STR_2781    :{STRINGID}:
 STR_2782    :MAJ + 
 STR_2783    :STIR + 
-STR_2784    :Ŝanĝi klavararanĝon
-STR_2785    :{WINDOW_COLOUR_2}Premi novan klavarokomandon de:{NEWLINE}“{STRINGID}”
-STR_2786    :Alklaku priskribon de klavarokomando por elekti novan klavon
 STR_2787    :{WINDOW_COLOUR_2}Parkvaloro: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Gratulon!{NEWLINE}{BLACK}Vi sukcesigis vian celon, kun firmvaloro de {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Vi malsukcesigis vian celon!
@@ -1949,7 +1942,6 @@ STR_2795    :Ordigi
 STR_2796    :Ordigi la liston de atrakcioj per la informotipo vidigita
 STR_2797    :Rulumi vidon kiam muskursoro troviĝas ĉe bordo de ekrano
 STR_2798    :Rulumi la vidon kiam la muskursoro troviĝas ĉe bordo de la ekrano
-STR_2799    :Vidigi aŭ ŝanĝi klavarokomandojn
 STR_2800    :{WINDOW_COLOUR_2}Totalaj eniroj: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Enspezo pro eniroj: {BLACK}{CURRENCY2DP}
 STR_2802    :Mapo
@@ -2422,8 +2414,6 @@ STR_5216    :Listo de admin-iloj de trakdesegnaĵoj
 STR_5217    :Trompoj
 STR_5218    :Temoj
 STR_5219    :Agordoj
-STR_5220    :Klavarokomandoj
-STR_5221    :Ŝanĝi klavarokomandon
 STR_5222    :Ŝargi/Konservi
 STR_5223    :Averto por konservi
 STR_5224    :Averto por dekonstrui atrakciojn
@@ -3574,8 +3564,6 @@ STR_6577    :Rapideco de blokparto-bremso
 STR_6578    :Agordi rapidlimon de blokparto-bremsoj. En blokpartoj-reĝimo, apudaj bremsoj kun pli malrapida rapideco estas ligitaj al la blokparto-bremso.
 STR_6579    :Blokparto-bremsoj estos agorditaj al defaŭlta rapideco, kiam konservite kiel trakdesegnaĵo
 STR_6580    :Restarigi
-STR_6581    :Ĉu vi certas, ke vi volas restarigi ĉiujn klavarokomandojn sur ĉi tiu langeto?
-STR_6582    :Malfermi klavarokomandoj-fenestron
 STR_6583    :{WINDOW_COLOUR_2}Inversaj trajnoj
 STR_6584    :Elektu por funkciigi trajnojn inverse
 STR_6585    :Ne eblas ŝanĝi tion…

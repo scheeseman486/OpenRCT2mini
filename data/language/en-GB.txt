@@ -1783,10 +1783,10 @@ STR_2483    :{WINDOW_COLOUR_2}Weekly profit: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Weekly profit: {RED}{CURRENCY2DP}
 STR_2487    :Show ‘real’ names of guests
 STR_2488    :Toggle between showing ‘real’ names of guests and guest numbers
-STR_2489    :Shortcut keys…
-STR_2490    :Keyboard shortcuts
-STR_2491    :Reset keys
-STR_2492    :Set all keyboard shortcuts back to default settings
+STR_2489    :Input Bindings…
+STR_2490    :Input Bindings
+STR_2491    :Restore Defaults
+STR_2492    :Restore all input bindings on this tab to their default settings
 STR_2493    :Close top-most window
 STR_2494    :Close all floating windows
 STR_2495    :Cancel construction mode
@@ -1935,9 +1935,9 @@ STR_2780    :Extra viewport
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Change keyboard shortcut
-STR_2785    :{WINDOW_COLOUR_2}Press new shortcut key for:{NEWLINE}“{STRINGID}”
-STR_2786    :Click on shortcut description to select new key
+STR_2784    :Change input binding
+STR_2785    :{WINDOW_COLOUR_2}Press new input for:{NEWLINE}“{STRINGID}”
+STR_2786    :Click a binding cell to set a new input; click the bin icon to clear it
 STR_2787    :{WINDOW_COLOUR_2}Park value: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Congratulations!{NEWLINE}{BLACK}You achieved your objective with a company value of {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}You have failed your objective!
@@ -1950,7 +1950,7 @@ STR_2795    :Sort
 STR_2796    :Sort the ride list into order using the information type displayed
 STR_2797    :Scroll view when pointer at screen edge
 STR_2798    :Scroll the view when the mouse pointer is at the screen edge
-STR_2799    :View or change control key assignments
+STR_2799    :View or change input bindings
 STR_2800    :{WINDOW_COLOUR_2}Total admissions: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Income from admissions: {BLACK}{CURRENCY2DP}
 STR_2802    :Map
@@ -2423,8 +2423,8 @@ STR_5216    :Track Design Manager List
 STR_5217    :Cheats
 STR_5218    :Themes
 STR_5219    :Options
-STR_5220    :Keyboard Shortcuts
-STR_5221    :Change Keyboard Shortcut
+STR_5220    :Input Bindings
+STR_5221    :Change Input Binding
 STR_5222    :Load/Save
 STR_5223    :Save Prompt
 STR_5224    :Demolish Ride Prompt
@@ -3576,8 +3576,8 @@ STR_6577    :Block brake speed
 STR_6578    :Set speed limit for block brakes. In block section mode, adjacent brakes with a slower speed are linked to the block brake.
 STR_6579    :Block brakes will be set to default speed when saved as track design
 STR_6580    :Reset
-STR_6581    :Are you sure you want to reset all shortcut keys on this tab?
-STR_6582    :Open keyboard shortcuts window
+STR_6581    :Restore all input bindings on this tab to their defaults?
+STR_6582    :Open Input Bindings window
 STR_6583    :{WINDOW_COLOUR_2}Reversed Trains
 STR_6584    :Select to run trains backwards
 STR_6585    :Can’t make changes…
@@ -3884,9 +3884,10 @@ STR_7069    :Confirm dialog / OK
 # OPENRCT2MINI gamepad-plan 1.7c: live capture preview text — wraps the captured chord string and the 5-second countdown so the text inherits the modal's colour scheme.
 STR_7070    :{WINDOW_COLOUR_2}{STRING}
 STR_7071    :{WINDOW_COLOUR_2}{STRING}
-# OPENRCT2MINI gamepad-plan 1.7e: append-mode checkbox in the rebind modal.
-STR_7072    :Add to existing
-STR_7073    :Keep existing bindings and add this new one alongside, instead of replacing them
+# OPENRCT2MINI gamepad-plan 1.7e: append-mode was the rebind modal's "add to existing" toggle.
+# Retired by the Input Bindings rework (always-append) — IDs kept reserved so en-GB string indices don't shift.
+STR_7072    :(unused)
+STR_7073    :(unused)
 # OPENRCT2MINI gamepad-plan 1.7g: rejected-conflict message displayed in the rebind modal when the new binding collides with another shortcut.
 STR_7074    :{WINDOW_COLOUR_2}Already bound to: {STRING}
 # OPENRCT2MINI mouse-column refactor: column header labels in the Shortcut Keys window.
@@ -3935,7 +3936,7 @@ STR_7111    :Reduction:
 STR_7112    :Reduce reduction strength
 STR_7113    :Increase reduction strength
 # OPENRCT2MINI input-plan Track 2 §4.2: LED Options window strings.
-STR_7114    :LED
+STR_7114    :Controller LED
 STR_7115    :Enable LED
 STR_7116    :Brightness
 STR_7117    :{INT32}%
@@ -3968,3 +3969,7 @@ STR_7134    :Move focus left
 STR_7135    :Move focus right
 STR_7136    :Show mouse cursor (exit selector)
 # OPENRCT2MINI W1b: hold to drag any window from any pixel inside it (face X / keyboard C by default).
+
+# OPENRCT2MINI osk-overhaul §8: Options > Controls "Enable on-screen keyboard" tickbox.
+STR_7137    :On-screen keyboard
+STR_7138    :{SMALLFONT}{BLACK}Show the on-screen keyboard when a text field opens. Disable this if you have a hardware keyboard.

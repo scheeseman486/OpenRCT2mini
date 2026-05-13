@@ -1784,10 +1784,6 @@ STR_2483    :{WINDOW_COLOUR_2}Beneficio semanal: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Beneficio semanal: {RED}{CURRENCY2DP}
 STR_2487    :Mostrar nombres ‘reales’ de los visitantes
 STR_2488    :Muestra los nombres ‘reales’ de los visitantes, o sólo su número de visitante
-STR_2489    :Atajos de teclado…
-STR_2490    :Atajos de teclado
-STR_2491    :Reiniciar teclas
-STR_2492    :Cambiar todos los atajos de teclado a los valores por defecto
 STR_2493    :Cerrar ventana más-arriba
 STR_2494    :Cerrar todas las ventanas
 STR_2495    :Cancelar modo de construcción
@@ -1935,9 +1931,6 @@ STR_2780    :Añadir ‘cámara de vigilancia’
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Cambiar atajo de teclado
-STR_2785    :{WINDOW_COLOUR_2}Presiona nueva tecla para:{NEWLINE}“{STRINGID}”
-STR_2786    :Clic en la descripción del atajo para cambiar
 STR_2787    :{WINDOW_COLOUR_2}Valor del parque: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}¡Felicidades!{NEWLINE}{BLACK}¡Has conseguido el objetivo con un valor de la compañía de {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}¡No has conseguido tu objetivo!
@@ -1950,7 +1943,6 @@ STR_2795    :Ordenar
 STR_2796    :Ordenar la lista de atracciones según el criterio seleccionado
 STR_2797    :Desplazar mapa con el ratón al borde de la pantalla
 STR_2798    :Desplazar la vista cuando el puntero del ratón esté en el borde de la ventana
-STR_2799    :Mirar o cambiar los atajos de teclado asignados
 STR_2800    :{WINDOW_COLOUR_2}Entradas: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Beneficios venta entradas: {BLACK}{CURRENCY2DP}
 STR_2802    :Mapa
@@ -2425,8 +2417,6 @@ STR_5216    :Listado de Gestor de Diseño de Vía
 STR_5217    :Trucos
 STR_5218    :Temas
 STR_5219    :Opciones
-STR_5220    :Atajos de teclado
-STR_5221    :Cambiar Atajos de teclado
 STR_5222    :Cargar/Guardar
 STR_5223    :Aviso Guardar
 STR_5224    :Aviso Demoler Attrac.
@@ -3578,8 +3568,6 @@ STR_6577    :Velocidad del freno bloqueante
 STR_6578    :Establece el límite de velocidad para los frenos bloqueantes. En el modo de sección de bloque, los frenos adyacentes con una velocidad más lenta se vinculan al freno bloqueante.
 STR_6579    :Los frenos bloqueantes se establecerán a la velocidad por defecto al guardarlos como diseño de vía.
 STR_6580    :Restablecer
-STR_6581    :¿Estás seguro de que quieres restablecer todos los atajos de teclado en esta pestaña?
-STR_6582    :Abrir ventana de atajos de teclado
 STR_6583    :{WINDOW_COLOUR_2}Trenes Invertidos
 STR_6584    :Selecciona para que los trenes viajen marcha atrás
 STR_6585    :No se puede realizar cambios…

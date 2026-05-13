@@ -1784,10 +1784,6 @@ STR_2483    :{WINDOW_COLOUR_2}Profitto settimanale: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Profitto settimanale: {RED}{CURRENCY2DP}
 STR_2487    :Mostra i “veri” nomi dei visitatori
 STR_2488    :Alterna tra i nomi “veri” dei visitatori e i loro numeri
-STR_2489    :Tasti rapidi
-STR_2490    :Tasti rapidi
-STR_2491    :Ripristina
-STR_2492    :Riporta le scorciatoie alle impostazioni predefinite
 STR_2493    :Chiudi la finestra in cima
 STR_2494    :Chiudi tutte le finestre volanti
 STR_2495    :Annulla la modalità costruzione
@@ -1934,9 +1930,6 @@ STR_2780    :Finestra extra
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Modifica la scorciatoia
-STR_2785    :{WINDOW_COLOUR_2}Premi il nuovo tasto-scorciatoia per : {NEWLINE}“{STRINGID}”
-STR_2786    :Clicca sulla descrizione della scorciatoia per selezionare un nuovo tasto
 STR_2787    :{WINDOW_COLOUR_2}Valore del parco: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Congratulazioni!{NEWLINE}{BLACK}Hai raggiunto il tuo obiettivo: una società del valore di {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Non hai raggiunto il tuo obiettivo!
@@ -1949,7 +1942,6 @@ STR_2795    :Ordina
 STR_2796    :Ordina la lista delle attrazioni secondo il tipo di informazioni visualizzate
 STR_2797    :Sposta la visuale con il puntatore sui bordi
 STR_2798    :Sposta la visuale quando il puntatore tocca i bordi dello schermo
-STR_2799    :Vedi o modifica le funzioni di comando dei tasti
 STR_2800    :{WINDOW_COLOUR_2}Ingressi totali: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Entrate dagli ingressi: {BLACK}{CURRENCY2DP}
 STR_2802    :Mappa
@@ -2425,8 +2417,6 @@ STR_5216    :Lista della gestione design dei circuiti
 STR_5217    :Trucchi
 STR_5218    :Temi
 STR_5219    :Opzioni
-STR_5220    :Scorciatoie da tastiera
-STR_5221    :Modifica scorciatoie da tastiera
 STR_5222    :Carica/Salva
 STR_5223    :Conferma salva
 STR_5224    :Conferma demolizione attrazione
@@ -3579,8 +3569,6 @@ STR_6577    :Velocità freni di blocco
 STR_6578    :Fissa un limite di velocità per i freni di blocco. In modalità sezione a blocchi, freni adiacenti con una velocità inferiore sono collegati con i freni di blocco.
 STR_6579    :I freni di blocco saranno impostati alla velocità predefinita quando salvati come progetto di percorso
 STR_6580    :Ripristina
-STR_6581    :Si è sicuri di voler ripristinare tutte le scorciatorie di questa scheda?
-STR_6582    :Finestra delle scorciatoie da tastiera
 STR_6583    :{WINDOW_COLOUR_2}Treni invertiti
 STR_6584    :Selezionare per far andare i treni al contrario
 STR_6585    :Impossibile effettuare modifiche…

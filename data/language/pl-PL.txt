@@ -1783,10 +1783,6 @@ STR_2483    :{WINDOW_COLOUR_2}Tygodniowy zysk: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Tygodniowy zysk: {RED}{CURRENCY2DP}
 STR_2487    :Pokazuj „prawdziwe” imiona gości
 STR_2488    :Przełącz między pokazywaniem imion gości a numerami
-STR_2489    :Skróty klawiszowe…
-STR_2490    :Przypisanie klawiszy
-STR_2491    :Zresetuj klawisze
-STR_2492    :Przywróć wszystkie skróty klawiszowe do ustawień domyślnych
 STR_2493    :Zamknij okno z wierzchu
 STR_2494    :Zamknij wszystkie dodatkowe okna
 STR_2495    :Wyjdź z trybu budowania
@@ -1934,9 +1930,6 @@ STR_2780    :Dodatkowe okno podglądu
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
-STR_2784    :Zmień skrót klawiszowy
-STR_2785    :{WINDOW_COLOUR_2}Wciśnij nowy klawisz skrótu dla:{NEWLINE}„{STRINGID}”
-STR_2786    :Kliknij opis skrótu, aby wybrać nowy klawisz
 STR_2787    :{WINDOW_COLOUR_2}Wartość parku: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Gratulacje!{NEWLINE}{BLACK}Cel osiągnięty! Wartość twojej spółki wynosi {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Porażka! Cel nie został osiągnięty!
@@ -1949,7 +1942,6 @@ STR_2795    :Sortuj
 STR_2796    :Sortuj listę atrakcji według wyświetlonych informacji
 STR_2797    :Przesuwaj widok, gdy kursor jest na krawędzi okna
 STR_2798    :Włącza przesuwanie widoku, gdy kursor myszy jest na krawędzi okna
-STR_2799    :Przejrzyj lub zmień funkcje przypisane do klawiszy sterujących
 STR_2800    :{WINDOW_COLOUR_2}Całkowita liczba gości: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Wpływy z opłat za wstęp: {BLACK}{CURRENCY2DP}
 STR_2802    :Plan parku
@@ -2422,8 +2414,6 @@ STR_5216    :Lista menedżerów projektów tras
 STR_5217    :Kody
 STR_5218    :Motywy
 STR_5219    :Opcje
-STR_5220    :Skróty klawiszowe
-STR_5221    :Zmień skróty klawiszowe
 STR_5222    :Wczytaj/Zapisz
 STR_5223    :Ostrzeżenie o zapisie
 STR_5224    :Ostrzeżenie o wyburzeniu atrakcji
@@ -3574,8 +3564,6 @@ STR_6577    :Prędkość hamowania blokowego
 STR_6578    :Ustawia limit prędkości dla hamulców blokowych. W trybie sekcyjnym, sąsiednie hamulce o niższej prędkości są powiązane z hamulcem blokowym.
 STR_6579    :Hamulce blokowe zostaną ustawione na domyślną prędkość po zapisaniu jako projekt trasy.
 STR_6580    :Zresetuj
-STR_6581    :Jesteś pewien, że chcesz zresetować wszystkie skróty klawiszowe na tej zakładce?
-STR_6582    :Otwórz okno skrótów klawiszowych
 STR_6583    :{WINDOW_COLOUR_2}Odwrócone wagony
 STR_6584    :Wybierz, aby ustawić wagony w kierunku przeciwnym do kierunku jazdy
 STR_6585    :Nie można wprowadzić zmian…

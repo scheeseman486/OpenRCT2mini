@@ -1784,10 +1784,6 @@ STR_2483    :{WINDOW_COLOUR_2}Beneficio semanal: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Beneficio semanal: {RED}{CURRENCY2DP}
 STR_2487    :Amosar os nomes ‘reais’ dos visitantes
 STR_2488    :Alternar entre amosar nomes ‘reais’ dos visitantes e números
-STR_2489    :Atallos de teclado…
-STR_2490    :Atallos de teclado
-STR_2491    :Restablecer teclas
-STR_2492    :Cambia todos os atallos de teclado aos valores predeterminados
 STR_2493    :Pechar a xanela superior
 STR_2494    :Pechar todas as xanelas
 STR_2495    :Cancelar modo de construción
@@ -1935,9 +1931,6 @@ STR_2780    :Engadir ‘cámara de vixilancia’
 STR_2781    :{STRINGID}:
 STR_2782    :MAIUS +
 STR_2783    :CTRL +
-STR_2784    :Cambiar atallo do teclado
-STR_2785    :{WINDOW_COLOUR_2}Preme a nova tecla de atallo para:{NEWLINE}“{STRINGID}”
-STR_2786    :Fai clic na descrición do atallo para seleccionar unha nova tecla
 STR_2787    :{WINDOW_COLOUR_2}Valor do parque: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Parabéns!{NEWLINE}{BLACK}Conseguiches o obxectivo cun valor da compañia de {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Non acadaches o teu obxectivo!
@@ -1950,7 +1943,6 @@ STR_2795    :Ordenar
 STR_2796    :Ordenar a lista de atraccións segundo os criterios seleccionados
 STR_2797    :Desprazar vista cando o rato estea no borde da pantalla
 STR_2798    :Desprazar a vista cando o punteiro do rato estea no bordo da pantalla
-STR_2799    :Ver ou cambiar os atallos de teclado
 STR_2800    :{WINDOW_COLOUR_2}Total de visitantes: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Ingresos por visitantes: {BLACK}{CURRENCY2DP}
 STR_2802    :Mapa
@@ -2423,8 +2415,6 @@ STR_5216    :Lista do xestor de deseños de vía
 STR_5217    :Trucos
 STR_5218    :Temas
 STR_5219    :Opcións
-STR_5220    :Atallos de teclado
-STR_5221    :Cambiar atallos de teclado
 STR_5222    :Cargar/Gardar
 STR_5223    :Confirmar Gardado
 STR_5224    :Confirmar demolición da atracción
@@ -3575,8 +3565,6 @@ STR_6577    :Velocidade do freo de bloque
 STR_6578    :Establece o límite de velocidade para os freos de bloque. En modo de sección de bloque, os freos adxacentes cunha velocidade menor vincúlanse ao freo de bloque.
 STR_6579    :Os freos de bloque estableceranse á velocidade por defecto ao gardar como deseño de vía
 STR_6580    :Restablecer
-STR_6581    :Estás certo de que queres restablecer todos os atallos de teclado desta lapela?
-STR_6582    :Abrir a xanela de atallos de teclado
 STR_6583    :{WINDOW_COLOUR_2}Trens en sentido inverso
 STR_6584    :Selecciona para que os trens circulen cara atrás
 STR_6585    :Non se poden facer trocos…
