@@ -138,15 +138,16 @@ private:
     // cursor motion / click / cancel via registerKeyboardDefault
     // entries on the new shortcuts (Shortcuts.cpp).
     //
-    // OPENRCT2MINI cut 59 / gamepad-plan 1.5j: _vGamepadMod remains
-    // live with exactly one consumer left — the device R1+C close-
-    // window chord in the SDL_SCANCODE_C handler. Set by the LALT/
-    // RALT handler since the device's vendor SDL2 maps R1 → LALT.
-    // Phase 2 emits real joybutton events from the vendor SDL2;
-    // when that lands, kInterfaceCloseWindowUnderCursor's "PAD R1+Y"
-    // chord fires through ShortcutManager and this flag goes away
-    // entirely.
-    bool _vGamepadMod = false;
+    // OPENRCT2MINI input-rework: _vGamepadMod removed. Was a latch
+    // for the device-specific R1+C close-window chord, which itself
+    // existed only because the LALT/RALT intercept used to scrub
+    // KMOD_LALT/RALT from SDL's mod state — breaking chord-shortcut
+    // matching for ALT+anything, including the registered ALT+C →
+    // kInterfaceCloseWindowUnderCursor binding. The scrub and the
+    // C-handler chord are both gone; ALT+C now fires through
+    // ShortcutManager like any other chord. ALT+RETURN reverts to
+    // SDL's default fullscreen toggle (no-op on the device's
+    // libmi_gfx panel; standard behaviour on host).
     // OPENRCT2MINI gamepad-plan 1.6: _vKbCtrl deleted — every consumer
     // migrated to InputManager::handleModifiers()'s synthetic
     // ModifierKey::ctrl bit (via real KMOD_CTRL + kInterfaceConstruction-
@@ -166,12 +167,13 @@ private:
     // window (now expressed via the "HOLD " prefix on the
     // kInterfaceToggleShadeAllWindows binding).
 
-    // OPENRCT2MINI mouse-input refactor: edge-tracking for the
+    // OPENRCT2MINI cursor-cancel-drag split: edge-tracking for the
     // kInterfaceCameraDrag held-state poll in ProcessWorldCursor.
-    // Rising edge → InputViewportDragBeginAtCursor. Falling edge →
-    // InputViewportDragEndCurrent + short-press right-click. The
-    // legacy rightPress→drag-begin path in MouseInput is gone, so
-    // this poll is the sole source of camera-drag begin/end.
+    // Rising edge → InputContextDragBeginAtCursor (dispatches
+    // camera-pan / scroll-drag / window-drag by cursor location).
+    // Falling edge → InputContextDragEndCurrent + camera-tap
+    // right-click fallback. cursor.cancel no longer drives any drag
+    // begin — this poll is the sole source for all three gestures.
     bool _vCameraDragPrev = false;
 
     // OPENRCT2MINI: per-frame edge-detection state for routing host
@@ -284,39 +286,20 @@ private:
 
     bool InterceptVirtualCursorKey(SDL_Scancode sc, bool down)
     {
-        // OPENRCT2MINI gamepad-plan 1.6b step 4: when the OSK is active,
-        // route every device button to it instead of running the cursor
-        // / shortcut pipeline. The OSK consumes arrows for selection,
-        // A/B/X/Y for edit actions, L1/R1 for caret motion, Start/
-        // Select for commit/cancel. We forward the scancode + down
-        // state and trust the OSK's return value.
+        // OPENRCT2MINI osk-overhaul §1: OSK no longer intercepts raw
+        // scancodes. Navigation / activation / backspace now flow
+        // through bindable shortcuts (kFocus*, kCursorClick, kCursor-
+        // Cancel) into OskContextImpl in InputManager.cpp. Commit /
+        // dismiss still flow through the OSK's modal-hooks. Net effect
+        // for device users is identical — the default keyboard bindings
+        // for those shortcuts cover the same scancodes the OSK was
+        // listening to directly. Host users can rebind.
         //
-        // Asks _inputManager.getActiveContext() == osk rather than
-        // Windows::OskIsActive() directly so this intercept and the
-        // per-frame ProcessOskCursor poll share one source of truth
-        // for "is the OSK driving input right now". The InputManager
-        // resolved the context at the top of this frame's process()
-        // call, so the cached value is current.
-        if (_inputManager.getActiveContext() == InputContext::osk
-            && Windows::OskHandleKey(static_cast<int32_t>(sc), down))
-        {
-            // If OSK closed during this event (Cancel/Commit), record
-            // the scancode so its matching KEYUP gets swallowed too.
-            // We still consult Windows::OskIsActive() here because the
-            // OSK may have closed mid-event (within OskHandleKey),
-            // ahead of the next process() refreshing the cached
-            // context — we need the live "did this event close it?"
-            // signal, not the cached pre-event context.
-            if (down && !Windows::OskIsActive())
-                _oskClosingSwallowKey = sc;
-            return true;
-        }
-        // Pending KEYUP swallow for the key that just closed the OSK.
-        if (!down && sc == _oskClosingSwallowKey)
-        {
-            _oskClosingSwallowKey = SDL_SCANCODE_UNKNOWN;
-            return true;
-        }
+        // The `_oskClosingSwallowKey` pending-KEYUP mechanism is also
+        // gone — without the intercept consuming the KEYDOWN there's
+        // no asymmetric state to clean up on KEYUP.
+        (void)sc;
+        (void)down;
         switch (sc)
         {
             // OPENRCT2MINI gamepad-plan 1.6: SDL_SCANCODE_UP/DOWN/LEFT/
@@ -345,40 +328,26 @@ private:
             // Shortcuts.cpp) ORs into ModifierKey::shift through
             // handleModifiers, covering the same call sites without
             // polluting SDL's chord-shortcut matcher.
-            // OPENRCT2MINI gamepad-plan 1.5j: SDL_SCANCODE_A handler
-            // dropped. Was a host-only test path that mirrored R1's
-            // LALT mapping (so devs without a controller could test
-            // fast-cursor / gamepad-mod). Now that fast-cursor is a
-            // user-rebindable shortcut and gamepad-mod is consumed
-            // only by the device R1+C close-window chord (which is
-            // device-specific anyway), the A test path is redundant.
-            // Host devs use real keyboard or a real gamepad.
+            // OPENRCT2MINI input-rework: SDL_SCANCODE_LALT / RALT
+            // intercept removed. Was scrubbing KMOD_LALT/RALT from
+            // SDL's mod state to suppress SDL2's built-in ALT+RETURN
+            // fullscreen toggle, but the side effect was that no
+            // ALT+anything chord-shortcut binding could ever match —
+            // including the registered ALT+C → kInterfaceCloseWindow-
+            // UnderCursor binding. That forced a hardcoded SDL_SCAN-
+            // CODE_C chord handler below to detect the chord locally
+            // via a private _vGamepadMod latch instead of going
+            // through ShortcutManager, which in turn swallowed every
+            // C event and made C uncapturable in the rebind UI.
             //
-            // OPENRCT2MINI cut 58/59/60/61: R1 = LALT (was RSHIFT in 58, F13
-            // in 59-60). Alt is on every PC keyboard so the dev can test
-            // fast-cursor / gamepad-mod natively. We swallow the event AND
-            // clear KMOD_LALT/RALT from SDL's mod state — without the
-            // clear, subsequent keypresses (e.g. Start = RETURN) would
-            // carry KMOD_ALT into the shortcut matcher and trigger
-            // ALT+RETURN (windowed-mode toggle). OpenRCT2's only default
-            // Alt bindings are ALT+RETURN and CTRL+ALT+C; neither has any
-            // role on the device, and on the host the dev can use Options
-            // for fullscreen toggle.
-            //
-            // OPENRCT2MINI gamepad-plan 1.5j: we no longer set _vKbShift
-            // here. cursor.fast_modifier's default keyboard binding is
-            // LALT (registered via registerKeyboardDefault in
-            // Shortcuts.cpp), so the device's R1=LALT drives fast-cursor
-            // through the new shortcut held-state poll. _vGamepadMod
-            // remains live solely for the device R1+C close-window
-            // chord (in SDL_SCANCODE_C below) until Phase 2 emits real
-            // joybutton events from the vendor SDL2.
-            case SDL_SCANCODE_LALT:
-            case SDL_SCANCODE_RALT:
-                _vGamepadMod = down;    // device R1+C chord prerequisite
-                SDL_SetModState(static_cast<SDL_Keymod>(
-                    SDL_GetModState() & ~(KMOD_LALT | KMOD_RALT)));
-                return true;
+            // Letting ALT/Alt fall through to SDL means ALT+RETURN
+            // now toggles fullscreen via SDL's default handling. On
+            // the device that's a no-op (libmi_gfx panel has no real
+            // windowed mode). On host it's the standard SDL keystroke
+            // most users expect. Trading that handful of pixels of
+            // ergonomics for a working rebind UI and a working ALT+C
+            // close-window chord (which goes through the standard
+            // chord-shortcut path now).
             // OPENRCT2MINI cut 59: L1 (LSHIFT) is the Shift modifier reach,
             // but it no longer activates fast cursor — only R1 (F13) does.
             // We don't swallow LSHIFT/RSHIFT so the modifier still
@@ -421,35 +390,22 @@ private:
             // a chord shortcut to PAD R1+L2 against kViewGeneralZoomOut
             // explicitly. Cleaner generalisation is worth one less
             // baked-in chord behaviour.
-            // OPENRCT2MINI W9 / gamepad-plan 1.5c: face-X (scancode C) on
-            // the device. Tap-shade and shade-all-hold actions are now
-            // driven by the per-frame held-state poll in ProcessShade-
-            // Shortcut() — that handler watches kInterfaceShadeWindow-
-            // UnderCursor's binding (default keyboard "C" + PAD "Y") so
-            // the user can rebind to anything and it still works.
-            //
-            // What stays here: the device-only R1+C close-window chord.
-            // The keyboard path can't fire a "PAD R1+Y" chord, and a
-            // "ALT+C" keyboard chord can't fire either because the
-            // SDL_SCANCODE_LALT handler (above) scrubs KMOD_LALT/RALT
-            // from SDL's mod state to prevent ALT+RETURN double-fires.
-            // So the only way to fire close-window-via-chord on the
-            // device's vendor-SDL2 path is to check _vGamepadMod here on
-            // C-press explicitly. After firing CloseWindow we have to
-            // drop the deferred shade-window tap from ShortcutManager's
-            // _holdPending — otherwise releasing C would still fire
-            // shade-window for the same physical press (since the C
-            // press also matched the kInterfaceShadeWindowUnderCursor
-            // tap binding).
-            case SDL_SCANCODE_C:
-                if (IsTextInputActive())
-                    return false;
-                if (down && _vGamepadMod)
-                {
-                    CloseWindowUnderCursor();
-                    _shortcutManager.cancelPendingHoldForInput(InputDeviceKind::keyboard, SDLK_c);
-                }
-                return true;
+            // OPENRCT2MINI input-rework: SDL_SCANCODE_C intercept
+            // removed. Was hardcoding the device's R1+C close-window
+            // chord by reading the now-deleted _vGamepadMod latch
+            // (only because the LALT scrub above broke real chord-
+            // shortcut matching for ALT+anything). With both gone,
+            // C falls through to the regular SDL → InputManager →
+            // ShortcutManager pipeline:
+            //   * Default shade-window (poll-driven) still works.
+            //   * ALT+C → kInterfaceCloseWindowUnderCursor fires
+            //     through the registered chord binding now that
+            //     KMOD_LALT survives.
+            //   * PAD R1+Y → kInterfaceCloseWindowUnderCursor fires
+            //     through the registered pad chord, same path.
+            //   * The C scancode is visible to the rebind UI's
+            //     keypress capture, so users can bind C to anything
+            //     they want.
             // OPENRCT2MINI gamepad-plan 1.5i: SDL_SCANCODE_V intercept
             // removed. Falls through to ShortcutManager which fires the
             // bound shortcut — by default kInterfaceRotateConstruction
@@ -988,17 +944,6 @@ public:
                 case SDL_MOUSEMOTION:
                     _cursorState.position = { static_cast<int32_t>(e.motion.x / Config::Get().general.windowScale),
                                               static_cast<int32_t>(e.motion.y / Config::Get().general.windowScale) };
-                    // OPENRCT2MINI cursor-selector-modal-plan v2: only
-                    // treat events with non-zero relative motion as
-                    // real user activity. SDL emits an initial
-                    // SDL_MOUSEMOTION with xrel=yrel=0 at startup
-                    // (and after every window-focus change) just to
-                    // report the cursor's current position; firing
-                    // the realMouseMotion transition for that would
-                    // flip an active-selector boot straight to
-                    // cursor mode before the user has touched
-                    // anything. Real motion has at least one non-
-                    // zero delta.
                     if (e.motion.xrel != 0 || e.motion.yrel != 0)
                     {
                         OpenRCT2::Ui::Windows::gDropdown.navigationSource
@@ -1663,50 +1608,75 @@ private:
         // calls ShortcutManager::cancelPendingHoldForInput from its
         // action so the deferred tap doesn't fire on chord release.
 
-        // OPENRCT2MINI mouse-input refactor: kInterfaceCameraDrag held-
-        // state poll. Replaces the hardcoded rightPress→
-        // InputViewportDragBegin path in MouseInput.cpp's mouse-state
-        // switch (the camera-drag-on-viewport branch). Held → camera
-        // pans with cursor motion. Tap-and-release < 500ms → fires the
-        // context-sensitive right-click action at cursor position.
+        // OPENRCT2MINI cursor-cancel-drag split: kInterfaceCameraDrag
+        // held-state poll. This is the SOLE source of begin/end for
+        // every right-click-style drag gesture — camera-pan over a
+        // viewport, scroll-drag over an overflowing list, and window-
+        // position drag over a draggable dialog. cursor.cancel used to
+        // ride along on the same RMB and synthesise rightPress through
+        // the MouseInput state machine (which ran the dispatch), but
+        // that bundling meant any binding of cursor.cancel pulled the
+        // drag gestures along with it. The drag-init dispatch is now
+        // local to InputContextDragBeginAtCursor in MouseInput.cpp,
+        // driven exclusively by this poll, and cursor.cancel keeps
+        // only its cancel-action role.
         //
-        // Begin gates on cursor-over-viewport-class window inside
-        // InputViewportDragBeginAtCursor (matches the legacy
-        // isUndraggableShell + WidgetType::viewport check), so this
-        // poll is safe to run unconditionally — it's a no-op when
-        // the cursor isn't over a pannable viewport.
+        // Begin gates by cursor location inside InputContextDragBegin-
+        // AtCursor (viewport → scroll → window, with isUndraggableShell
+        // filters), so the poll is safe to run unconditionally — it's
+        // a no-op when the cursor isn't over a draggable target.
         //
         // The polling-driven End is split from the state-machine end
-        // (which used to handle MouseState::rightRelease in
-        // InputState::ViewportRight) so the gesture works on inputs
-        // that don't synthesise a rightRelease event — e.g. PAD B
-        // bound to kInterfaceCameraDrag. Motion-continue stays in
-        // the state machine since it's already driven by per-frame
-        // released-fallback mouse events.
+        // (which used to handle MouseState::rightRelease in the three
+        // drag states) so the gesture works on inputs that don't
+        // synthesise a rightRelease event — e.g. PAD B bound to
+        // kInterfaceCameraDrag. Motion-continue stays in the state
+        // machine since it's already driven by per-frame released-
+        // fallback mouse events.
         {
             const auto* dragShortcut = _shortcutManager.getShortcut(
                 ShortcutId::kInterfaceCameraDrag);
-            const bool dragNow = (dragShortcut != nullptr) && _inputManager.getState(*dragShortcut);
+            // Rebind-capture gate (matches the cursor.* held-state poll
+            // below): when the Input Bindings window is capturing an
+            // input, suppress the drag begin/end edge detection so a
+            // user pressing the input currently bound to camera-drag
+            // (RMB / PAD B by default) to capture it doesn't start a
+            // camera-pan / scroll-drag / window-drag mid-capture. The
+            // falling edge logic re-uses _vCameraDragPrev — by clamping
+            // dragNow to false on every frame the modal is open, we
+            // also ensure that if a drag had somehow started just before
+            // the modal popped, it gets cleanly ended on the next frame.
+            bool dragNow = (dragShortcut != nullptr) && _inputManager.getState(*dragShortcut);
+            if (_shortcutManager.isPendingShortcutChange())
+                dragNow = false;
             if (dragNow && !_vCameraDragPrev)
             {
-                InputViewportDragBeginAtCursor();
+                // OPENRCT2MINI cursor-cancel-drag split: this poll now
+                // dispatches ALL three drag gestures (camera-pan,
+                // scroll-drag, window-drag) based on what the cursor is
+                // over at press time. cursor.cancel no longer triggers
+                // drag init — see MouseInput.cpp rightPress comment.
+                InputContextDragBeginAtCursor();
             }
             else if (!dragNow && _vCameraDragPrev)
             {
-                if (CameraDragInProgress())
+                // Capture the camera-tap state BEFORE ending — the end
+                // function clears _inputState and so wipes the short-
+                // press tick. Only camera-pan has the tap fallback; for
+                // a scroll-drag or window-drag, the begin already moved
+                // state and a release just commits.
+                const bool wasCameraDrag = CameraDragInProgress();
+                const bool wasShortPress = wasCameraDrag && CameraDragWasShortPress();
+                InputContextDragEndCurrent();
+                if (wasShortPress)
                 {
-                    const bool wasShortPress = CameraDragWasShortPress();
-                    InputViewportDragEndCurrent();
-                    if (wasShortPress)
-                    {
-                        // Short tap → fire the context-sensitive
-                        // right-click action at the cursor position.
-                        // Mirrors the legacy state-machine path that
-                        // fired ViewportInteractionRightClick on
-                        // rightRelease in InputState::ViewportRight.
-                        const auto cursorPos = ContextGetCursorPosition();
-                        ViewportInteractionRightClick(cursorPos);
-                    }
+                    // Short tap over a viewport → fire the context-
+                    // sensitive right-click action (delete tile etc.).
+                    // Mirrors the legacy state-machine path that fired
+                    // ViewportInteractionRightClick on rightRelease in
+                    // InputState::ViewportRight.
+                    const auto cursorPos = ContextGetCursorPosition();
+                    ViewportInteractionRightClick(cursorPos);
                 }
             }
             _vCameraDragPrev = dragNow;
@@ -1758,6 +1728,24 @@ private:
         // velocity is re-enabled.
         const bool selectorActive
             = _inputManager.getSelectorMode() == InputManager::SelectorMode::active;
+        // OPENRCT2MINI rebind-capture gate: when the Input Bindings
+        // window is in capture mode (user pressed a row to rebind a
+        // shortcut and the modal is waiting for an input), the
+        // ShortcutManager's processEvent path correctly bypasses
+        // action dispatch — but the held-state polls below read
+        // _inputManager.getState() which still reports the literal
+        // physical state of the bound input. Without this gate, a
+        // user pressing the input currently bound to cursor.click
+        // (e.g. Z, LMB, or PAD A) to capture it as a new binding
+        // synthesises a leftPress in handleButton, which the mouse
+        // pump dispatches to whatever widget is under the cursor
+        // (often the rebind modal itself — dismissing it before the
+        // capture commits). Same class of failure for cursor.cancel
+        // (synthetic rightPress), cursor.up/down/left/right (virtual
+        // cursor wandering mid-rebind) and kInterfaceCameraDrag
+        // (drag begins mid-rebind — gated separately below at the
+        // camera-drag poll).
+        const bool capturePending = _shortcutManager.isPendingShortcutChange();
         {
             auto& sm = _shortcutManager;
             if (auto* up = sm.getShortcut(ShortcutId::kCursorUp))
@@ -1776,7 +1764,7 @@ private:
             {
                 dpadRight = _inputManager.getState(*right);
             }
-            if (selectorActive)
+            if (selectorActive || capturePending)
             {
                 dpadUp = dpadDown = dpadLeft = dpadRight = false;
             }
@@ -1798,17 +1786,59 @@ private:
             // state poll, and handleButton below synthesises
             // StoreMouseInput(leftPress) at _cursorState.position —
             // i.e. the click registers on whatever widget sits at the
-            // (hidden) cursor's coords. Suppress only the press edge
-            // so any in-flight release (PAD A held across the
-            // hidden→active transition, e.g. when virtual cursor
-            // input opens a window and auto-wakes the selector) still
-            // fires and we don't leave a widget stuck pressed-down.
+            // (hidden) cursor's coords.
+            //
+            // The earlier revision tried to "suppress only the press
+            // edge so any in-flight release still fires" by gating on
+            // !_vprevA / !_vprevB. That's exactly wrong for the
+            // auto-wake case. Sequence on host with no other windows
+            // when PAD A is mapped to cursor.click:
+            //
+            //   1. Press: selector still hidden, _vprevA=false.
+            //      handleButton sees press edge, synthesises
+            //      leftPress at the virtual cursor's pos. MouseInput
+            //      lights up the Options toolbar widget and opens the
+            //      dropdown.
+            //   2. Auto-wake: the new dropdown is a non-chrome
+            //      topmost window so the selector flips hidden→active
+            //      this frame. _vprevA is now true (handleButton
+            //      promoted it on the press edge).
+            //   3. Release: selectorActive=true, _vprevA=true. The
+            //      "if (!_vprevA) btnA=false" gate does NOT clear
+            //      btnA. handleButton sees a fresh release edge and
+            //      synthesises StoreMouseInput(leftRelease) at the
+            //      virtual cursor's current pos — which still sits
+            //      right under the dropdown's first menu item. Mouse-
+            //      Input's DropdownActive::leftRelease handler then
+            //      runs DropdownIndexFromPoint and commits item 0.
+            //
+            // So when the selector is active, also force-clear the
+            // held-state tracking. Forcing _vprevA=false means
+            // handleButton sees prev=now=false on the release frame
+            // and skips both edge synthesis paths. We don't leave any
+            // widget stuck pressed-down because the leftPress edge
+            // already opened the dropdown — MouseInput's normal
+            // DropdownActive state will tear that down via its own
+            // bottom-toolbar / escape paths, and the selector-driven
+            // focus mode owns dispatch from here on.
             if (selectorActive)
             {
-                if (!_vprevA)
-                    btnA = false;
-                if (!_vprevB)
-                    btnB = false;
+                btnA = false;
+                _vprevA = false;
+                btnB = false;
+                _vprevB = false;
+            }
+            // Rebind capture: suppress click/cancel synthesis entirely,
+            // including releases of presses that started before capture.
+            // The user starts a capture by pressing the Change button —
+            // _vprevA was already false at that point, so there's no
+            // release to honour. Any press-and-hold spanning the modal
+            // popup is the user's input-being-captured, not a real
+            // click intent.
+            if (capturePending)
+            {
+                btnA = false;
+                btnB = false;
             }
             if (auto* fastShortcut = sm.getShortcut(ShortcutId::kCursorFastModifier))
             {
@@ -2051,9 +2081,21 @@ private:
     {
         switch (_inputManager.getActiveContext())
         {
+            // OPENRCT2MINI osk-overhaul bug-fix §D: route the OSK
+            // context through the same ProcessWorldCursor as every
+            // other modal. ProcessOskCursor (now obsolete — it only
+            // ever synthesised OskHandleKey scancodes, which became a
+            // no-op once OSK navigation moved to focus-mode dispatch)
+            // skipped the cursor.click → StoreMouseInput(leftPress)
+            // synthesis that ProcessWorldCursor owns. Without that
+            // synthesis no widget gets clicked: not OSK keys, not the
+            // OK / Cancel / close box on the parent TextInputWindow,
+            // not the textbox below — neither for the gamepad path
+            // (cursor.click ← PAD A) nor for the real-mouse path
+            // (cursor.click ← MOUSE LEFT). Falling through to the
+            // shared handler restores normal click behaviour for
+            // every window underneath / alongside the OSK.
             case InputContext::osk:
-                ProcessOskCursor();
-                return;
             case InputContext::world:
             // OPENRCT2MINI focus-mode-plan / Phase F.7 follow-up:
             // widgetFocus reuses the world cursor handler. The real
@@ -2077,23 +2119,39 @@ private:
             // so widgetFocus only gets the click half is the
             // proper follow-up.
             case InputContext::widgetFocus:
-                _vOskPrevUp = _vOskPrevDown = _vOskPrevLeft = _vOskPrevRight = false;
-                _vOskPrevClick = _vOskPrevCancel = false;
-                ProcessWorldCursor();
-                return;
-            // OPENRCT2MINI gamepad-plan 1.10: typing / list modal
-            // contexts. Neither cursor handler runs — held-state polled
-            // shortcuts (camera drag, cursor velocity, click /
-            // cancel-as-LMB/RMB) are world-only inputs, so polling
-            // them while the user is typing into a console / textbox
-            // / load-save / overwrite-prompt would let RMB start a
-            // camera drag underneath the modal etc. ProcessOskCursor's
-            // edge tracker still gets reset on world re-entry above.
+            // OPENRCT2MINI input-plan fix: modal list/typing contexts
+            // also need the world cursor poll. The poll's job here is
+            // to synthesise widget-level mouse events from the
+            // cursor.click / cursor.cancel held state and to dispatch
+            // camera/scroll/window drags from cursor.cancel (or its
+            // user-bound replacement). Without this, the LoadSave /
+            // overwrite-prompt / TextInput / console / textbox modals
+            // are visually responsive (hover still updates the
+            // _cursorState position via SDL_MOUSEMOTION) but every
+            // click is dead — there's no other code path that turns
+            // an LMB-down into StoreMouseInput(leftPress) → widget
+            // dispatch. Earlier rationale claimed "RMB would start a
+            // camera drag underneath the modal" but InputContextDrag-
+            // BeginAtCursor already routes by cursor target — RMB
+            // over the modal's title bar starts a window-drag on the
+            // modal, never a camera-pan underneath. The earlier skip
+            // was an over-correction that killed clicks.
+            //
+            // The shortcut-allow-list in InputManager::isShortcut-
+            // AllowedInActiveContext stays the narrow allow-list for
+            // these modals — cursor.click / cursor.cancel are
+            // included so the held-state poll's getState() reads
+            // true on the press, and the action lambdas are empty so
+            // no other side effect can leak through.
             case InputContext::textInput:
             case InputContext::loadSaveOverwritePrompt:
             case InputContext::loadSave:
             case InputContext::console:
             case InputContext::widgetTextBox:
+                _vOskPrevUp = _vOskPrevDown = _vOskPrevLeft = _vOskPrevRight = false;
+                _vOskPrevClick = _vOskPrevCancel = false;
+                ProcessWorldCursor();
+                return;
             default:
                 _vOskPrevUp = _vOskPrevDown = _vOskPrevLeft = _vOskPrevRight = false;
                 _vOskPrevClick = _vOskPrevCancel = false;

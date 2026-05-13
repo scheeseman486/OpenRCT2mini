@@ -268,6 +268,14 @@ namespace OpenRCT2::Ui
         // static_assert below.
         WindowClass _focusedWindowClass{ static_cast<WindowClass>(255) };
         WidgetIndex _focusedWidget{ 0xFFFFu };
+        // OPENRCT2MINI list-focus-plan §2.2: when the focused widget is
+        // a list-mode scroll widget (the window opts in via
+        // scrollFocusGetItemCount > 0), this is the highlighted row /
+        // cell index inside that widget. -1 means "the focused widget
+        // is not a list-mode scroll widget" — the regular focus ring
+        // logic applies. Cleared on every setFocus / clearFocus call
+        // and on every step that moves focus to a different widget.
+        int32_t _focusedScrollItem{ -1 };
         // OPENRCT2MINI focus-mode-plan §F.12: remember the topmost
         // focusable class from the previous frame so the bootstrap
         // can detect "a new window opened on top" without forcing
@@ -307,6 +315,28 @@ namespace OpenRCT2::Ui
         // bootstrap behaves selector-friendly on Mini-style
         // launches.
         bool _lastInputWasRealMouse = false;
+        // OPENRCT2MINI cursor-selector-modal-plan v2 follow-up:
+        // "selector just auto-woke during this process() call" flag.
+        // Set true in the per-frame bootstrap whenever it flips
+        // SelectorMode from hidden→active because a new non-chrome
+        // window appeared on top (e.g. a held-state-poll-driven mouse
+        // click in cursor mode opens a dropdown). Cleared at the top
+        // of every process() call.
+        //
+        // Consumed by WidgetFocusContextImpl::onShortcut: when this
+        // is true and the dispatched shortcut is kCursorClick /
+        // kCursorCancel, the queued press came from the SAME
+        // physical button squeeze that opened the new window. The
+        // ProcessWorldCursor held-state poll has already synthesised
+        // a virtual mouse click for it (which is what opened the
+        // window in the first place) — letting the focus context
+        // ALSO commit/cancel against the freshly-focused dropdown
+        // would double-fire on a single press. The symptom: PAD A
+        // on the Options toolbar widget opens the dropdown for one
+        // frame, then immediately commits item 0 (because focus
+        // snapped to dropdown and the same press hit
+        // WidgetFocusContextImpl's dropdown kCursorClick branch).
+        bool _autoWokeThisProcess = false;
         // OPENRCT2MINI focus-mode-plan §F.16: history stack for
         // cancel/back navigation. Every time the selector snaps to
         // a new topmost window (because a button click opened it,
@@ -362,6 +392,42 @@ namespace OpenRCT2::Ui
         void setFocus(WindowClass cls, WidgetIndex widget);
         void clearFocus();
 
+        // OPENRCT2MINI list-focus-plan §2.2: getter / setter for the
+        // list-mode scroll item index. Returns -1 when the focused
+        // widget is not a list-mode scroll widget. setFocusScrollItem
+        // assumes the caller has just set focus to the scroll widget
+        // (via setFocus) — it only writes the item index, doesn't
+        // touch _focusedWindowClass / _focusedWidget.
+        int32_t getFocusedScrollItem() const
+        {
+            return _focusedScrollItem;
+        }
+        void setFocusScrollItem(int32_t item)
+        {
+            _focusedScrollItem = item;
+        }
+        // Convenience: clear list-mode state without disturbing the
+        // widget-level focus. Called when stepping out of a list to
+        // an adjacent widget.
+        void clearFocusScrollItem()
+        {
+            _focusedScrollItem = -1;
+        }
+
+        // OPENRCT2MINI list-focus-plan flicker fix: re-synthesise the
+        // hover event for the focused list item if focus is on a
+        // list-mode scroll widget. Upstream code resets per-window
+        // hover state every input frame (e.g. StaffList's
+        // _highlightedIndex in onScrollGetSize, ShortcutKeys's
+        // _highlightedRow in onUpdate) under the assumption that a
+        // continuous mouse-hover would re-set it next frame. Focus
+        // mode has no continuous hover, so without this restore the
+        // row highlight flickers off and on as the user steps. Called
+        // from InvalidateAllWindowsAfterInput AFTER the reset chain so
+        // the synthesised hover is the LAST write before draw.
+        // Safe no-op when no list-mode scroll item is focused.
+        void restoreFocusedListHover();
+
         // OPENRCT2MINI cursor-selector-modal-plan §3.1: state-machine
         // accessors. Getter is `noexcept`; setter routes through one
         // method so future logging / invalidation can hook once
@@ -373,6 +439,14 @@ namespace OpenRCT2::Ui
         bool lastInputWasRealMouse() const noexcept
         {
             return _lastInputWasRealMouse;
+        }
+        // OPENRCT2MINI cursor-selector-modal-plan v2 follow-up: see
+        // _autoWokeThisProcess field comment. True for the duration
+        // of one process() call after the bootstrap auto-woke the
+        // selector this frame.
+        bool wasAutoWokenThisProcess() const noexcept
+        {
+            return _autoWokeThisProcess;
         }
         void setSelectorMode(SelectorMode mode);
 
@@ -635,7 +709,7 @@ namespace OpenRCT2::Ui
         // accessor. Same allow-list logic as isShortcutAllowedInActive-
         // Context but parameterised on context so callers can ask
         // "is this shortcut meaningful in toolFootpath?" without
-        // pretending that's the active context. The Shortcut Keys
+        // pretending that's the active context. The Input Bindings
         // rebind UI can iterate the InputContext enum to compute an
         // "active in: World, toolFootpath, toolTerrain" tag-list per
         // shortcut. Conflict detection can use this to recognise that
