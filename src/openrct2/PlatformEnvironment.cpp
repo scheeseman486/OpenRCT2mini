@@ -334,7 +334,23 @@ std::unique_ptr<IPlatformEnvironment> OpenRCT2::CreatePlatformEnvironment()
     // The earlier code used OriginalGameDataExists for both, so a valid
     // RCT1 install never matched and the first-run auto-enable below
     // silently no-op'd — user had to set the path manually in Options.
-    auto exeDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
+    // OPENRCT2MINI / appimage-plan: when launched from an AppImage,
+    // GetCurrentExecutablePath() returns the inside-the-mount path
+    // (/tmp/.mount_xxx/usr/bin/openrct2), which is read-only squashfs and
+    // disappears at exit. The user's actual filesystem location is the
+    // directory holding the .AppImage file, exposed by the AppImageKit
+    // runtime via $APPIMAGE. Mirror the same lookup as
+    // Platform::GetFolderPath() for saves: prefer $APPIMAGE-dir when set,
+    // otherwise the binary's directory. Mini and bare-binary host builds
+    // (no $APPIMAGE) keep the existing exe-dir behaviour.
+    auto exeDir = [&]() -> std::string {
+        if (const char* appImagePath = getenv("APPIMAGE");
+            appImagePath != nullptr && appImagePath[0] != '\0')
+        {
+            return Path::GetDirectory(appImagePath);
+        }
+        return Path::GetDirectory(Platform::GetCurrentExecutablePath());
+    }();
     auto isValidInstall = [](const std::string& p, bool isRct1) {
         if (p.empty())
             return false;

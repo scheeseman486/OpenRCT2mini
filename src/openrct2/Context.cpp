@@ -1154,16 +1154,35 @@ namespace OpenRCT2
                 // (i.e. <exe_dir>/rct2). Lets you drop the openrct2 binary
                 // alongside an RCT2 install without editing config.ini or
                 // passing --rct2-data-path.
+                //
+                // appimage-plan: when running from an AppImage, the
+                // binary's actual path is inside the squashfs mount
+                // (/tmp/.mount_xxx/usr/bin/openrct2), which is not where
+                // the user dropped their rct2/ folder. AppImageKit
+                // exposes $APPIMAGE = the .AppImage file's absolute path;
+                // its directory is the user-facing portable root. Prefer
+                // that when set, fall back to exe-dir otherwise. Mirrors
+                // the same lookup used in Platform.Linux.cpp's
+                // GetFolderPath() for saves and PlatformEnvironment.cpp's
+                // initial path resolution.
                 if (!exists)
                 {
-                    auto exePath = Platform::GetCurrentExecutablePath();
-                    auto exeDir = Path::GetDirectory(exePath);
-                    if (!exeDir.empty())
+                    std::string baseDir;
+                    if (const char* appImagePath = getenv("APPIMAGE");
+                        appImagePath != nullptr && appImagePath[0] != '\0')
                     {
-                        auto candidate = Path::Combine(exeDir, u8"rct2");
+                        baseDir = Path::GetDirectory(appImagePath);
+                    }
+                    else
+                    {
+                        baseDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
+                    }
+                    if (!baseDir.empty())
+                    {
+                        auto candidate = Path::Combine(baseDir, u8"rct2");
                         if (Platform::OriginalGameDataExists(candidate))
                         {
-                            MINI_DBG_LOG("  exe-dir fallback found rct2 install at %s\n", candidate.c_str());
+                            MINI_DBG_LOG("  base-dir fallback found rct2 install at %s\n", candidate.c_str());
                             cfgPath = candidate;
                             exists = true;
                         }
@@ -1181,17 +1200,34 @@ namespace OpenRCT2
                     // framebuffer has no native message-box facility —
                     // SDL_ShowSimpleMessageBox crashes there). Instead emit
                     // a clear stderr message and exit.
+                    //
+                    // Tailor the suggested path to whichever portable layout
+                    // is in use (Miyoo SD card / AppImage drop-folder / bare
+                    // binary) by reusing the same base-dir resolution as the
+                    // auto-detect above.
+                    std::string baseDir;
+                    if (const char* appImagePath = getenv("APPIMAGE");
+                        appImagePath != nullptr && appImagePath[0] != '\0')
+                    {
+                        baseDir = Path::GetDirectory(appImagePath);
+                    }
+                    else
+                    {
+                        baseDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
+                    }
+                    auto suggested = baseDir.empty()
+                        ? std::string{ "<directory next to the OpenRCT2mini binary>" }
+                        : Path::Combine(baseDir, u8"rct2");
+                    std::fputs("\n[OPENRCT2MINI] FATAL: RCT2 install not found.\n", stderr);
+                    std::fputs("[OPENRCT2MINI]\n", stderr);
                     std::fputs(
-                        "\n[OPENRCT2MINI] FATAL: RCT2 install not found.\n"
-                        "[OPENRCT2MINI]\n"
-                        "[OPENRCT2MINI] OpenRCT2 expects your legitimate RollerCoaster Tycoon 2\n"
-                        "[OPENRCT2MINI] install at:\n"
-                        "[OPENRCT2MINI]   /mnt/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct2/Data/g1.dat\n"
-                        "[OPENRCT2MINI]   /mnt/SDCARD/Roms/PORTS/Games/OpenRCT2mini/rct2/ObjData/...\n"
-                        "[OPENRCT2MINI]\n"
-                        "[OPENRCT2MINI] Copy your RCT2 install to that folder and relaunch.\n"
-                        "[OPENRCT2MINI] We can't ship g1.dat — it's not free.\n\n",
-                        stderr);
+                        "[OPENRCT2MINI] OpenRCT2 expects your legitimate RollerCoaster Tycoon 2\n", stderr);
+                    std::fputs("[OPENRCT2MINI] install at:\n", stderr);
+                    std::fprintf(stderr, "[OPENRCT2MINI]   %s/Data/g1.dat\n", suggested.c_str());
+                    std::fprintf(stderr, "[OPENRCT2MINI]   %s/ObjData/...\n", suggested.c_str());
+                    std::fputs("[OPENRCT2MINI]\n", stderr);
+                    std::fputs("[OPENRCT2MINI] Copy your RCT2 install to that folder and relaunch.\n", stderr);
+                    std::fputs("[OPENRCT2MINI] We can't ship g1.dat — it's not free.\n\n", stderr);
                     std::fflush(stderr);
                     return std::string();
                 }
