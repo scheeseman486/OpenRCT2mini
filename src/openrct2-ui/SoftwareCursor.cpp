@@ -300,11 +300,13 @@ namespace OpenRCT2::Ui
     {
         if (!_visible || bits == nullptr || bitsW <= 0 || bitsH <= 0)
             return;
-        // OPENRCT2MINI OSK: skip cursor compositing while the on-screen
-        // keyboard is up. The OSK draws its own selection highlight, so
-        // a free-floating cursor would just be confusing.
-        if (OpenRCT2::Ui::Windows::OskIsActive())
-            return;
+        // OPENRCT2MINI osk-overhaul: the OSK-active gate that used to
+        // suppress the cursor here is gone. The OSK now plays by the
+        // same rules as every other window — the selector mode + Phase
+        // F.5 ring-render-hook decide what's visible. When the selector
+        // is hidden (cursor mode), the OS-level cursor shows; when
+        // active (focus mode), the cursor is suppressed via the
+        // selector-mode gate higher up the SoftwareCursor pipeline.
 
         const Sprite* spr = GetOrCreateSprite(_activeCursor);
         if (spr == nullptr)

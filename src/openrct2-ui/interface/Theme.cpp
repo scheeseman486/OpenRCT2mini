@@ -189,6 +189,13 @@ namespace OpenRCT2::Ui
         { WindowClass::keyboardShortcutList,        "WC_KEYBOARD_SHORTCUT_LIST",         STR_THEMES_WINDOW_KEYBOARD_SHORTCUT_LIST,         { opaque(Drawing::Colour::lightBlue),               opaque(Drawing::Colour::lightBlue)                                                                                   } },
         { WindowClass::changeKeyboardShortcut,      "WC_CHANGE_KEYBOARD_SHORTCUT",       STR_THEMES_WINDOW_CHANGE_KEYBOARD_SHORTCUT,       { opaque(Drawing::Colour::lightBlue),               opaque(Drawing::Colour::lightBlue),               opaque(Drawing::Colour::lightBlue)                                          } },
         { WindowClass::resetShortcutKeysPrompt,     "WC_RESET_SHORTCUT_KEYS_PROMPT",     STR_SHORTCUT_ACTION_RESET,                        { translucent(Drawing::Colour::bordeauxRed)                                                                                                                     } },
+        // OPENRCT2MINI input-bindings-rework §5.1: register Haptics +
+        // Controller LED with the same lightBlue family as the Input
+        // Bindings list so they read as a coherent set. Labels in the
+        // Themes picker reuse STR_HAPTICS and STR_LED ("Controller LED"
+        // post-rename) — no new theme-window StringIds needed.
+        { WindowClass::haptics,                     "WC_HAPTICS",                        STR_HAPTICS,                                      { opaque(Drawing::Colour::lightBlue),               opaque(Drawing::Colour::lightBlue)                                                                                   } },
+        { WindowClass::led,                         "WC_LED",                            STR_LED,                                          { opaque(Drawing::Colour::lightBlue),               opaque(Drawing::Colour::lightBlue)                                                                                   } },
         { WindowClass::map,                         "WC_MAP",                            STR_THEMES_WINDOW_MAP,                            { opaque(Drawing::Colour::darkGreen),               opaque(Drawing::Colour::darkBrown)                                                                                   } },
         { WindowClass::banner,                      "WC_BANNER",                         STR_THEMES_WINDOW_BANNER,                         { opaque(Drawing::Colour::darkBrown),               opaque(Drawing::Colour::darkBrown),               opaque(Drawing::Colour::darkBrown)                                          } },
         { WindowClass::editorObjectSelection,       "WC_EDITOR_OBJECT_SELECTION",        STR_THEMES_WINDOW_EDITOR_OBJECT_SELECTION,        { opaque(Drawing::Colour::lightPurple),             opaque(Drawing::Colour::grey),                     opaque(Drawing::Colour::grey)                                                } },
@@ -230,7 +237,7 @@ namespace OpenRCT2::Ui
 
 #pragma region Pre-defined Themes
 
-    static constexpr std::array kPredefinedThemeRCT1Entries = std::array<UIThemeWindowEntry, 23>{{
+    static constexpr std::array kPredefinedThemeRCT1Entries = std::array<UIThemeWindowEntry, 25>{{
         { WindowClass::topToolbar,             { opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::grey),                opaque(Drawing::Colour::grey),     opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::bottomToolbar,          { translucent(Drawing::Colour::grey),        opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::voidBackground),                opaque(Drawing::Colour::yellow),   opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::ride,                   { opaque(Drawing::Colour::bordeauxRed),     opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::saturatedGreen),     opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
@@ -249,6 +256,10 @@ namespace OpenRCT2::Ui
         { WindowClass::assetPacks,             { opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::keyboardShortcutList,   { opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::changeKeyboardShortcut, { opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
+        // OPENRCT2MINI input-bindings-rework §5.1: match Haptics + LED
+        // to the same grey/darkBrown family as the Input Bindings list.
+        { WindowClass::haptics,                { opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
+        { WindowClass::led,                    { opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::recentNews,             { opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::grey),                opaque(Drawing::Colour::voidBackground),     opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::trackDesignList,        { opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::map,                    { opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::grey),                opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },

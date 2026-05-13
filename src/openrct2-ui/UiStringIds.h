@@ -313,7 +313,7 @@ namespace OpenRCT2
         // name with a "Already bound to: " prefix.
         STR_SHORTCUT_CONFLICT_REJECTED = 7074,
         // OPENRCT2MINI mouse-column refactor: column header labels
-        // drawn above the scroll area in the Shortcut Keys window.
+        // drawn above the scroll area in the Input Bindings window.
         // Each header sits over its respective binding column so the
         // user knows which column to click to rebind which device.
         STR_SHORTCUT_COL_KEYBOARD = 7075,
@@ -330,7 +330,7 @@ namespace OpenRCT2
         // Held over main viewport → camera pans with cursor motion.
         STR_SHORTCUT_CAMERA_DRAG = 7080,
         // OPENRCT2MINI overlap-warn: yellow-prefixed colour wrapper used
-        // to render shortcut binding strings in the Shortcut Keys list
+        // to render shortcut binding strings in the Input Bindings list
         // when one or more bindings in that column collide with another
         // shortcut's bindings. Mirrors STR_BLACK_STRING (1191) but tints
         // the wrapped {STRINGID} yellow as a soft "warning" indicator.
@@ -1450,6 +1450,11 @@ namespace OpenRCT2
         STR_TOOLBAR_BUTTONS_GROUP = 5479,
         STR_TOUCH_ENHANCEMENTS = 6644,
         STR_TOUCH_ENHANCEMENTS_TIP = 6639,
+        // OPENRCT2MINI osk-overhaul §8: bindable on-screen keyboard toggle
+        // in Options > Controls. Default true; disabling routes textbox
+        // input straight to the hardware keyboard via SDL_TEXTINPUT.
+        STR_ON_SCREEN_KEYBOARD = 7137,
+        STR_ON_SCREEN_KEYBOARD_TIP = 7138,
         STR_TRANSPARENT_SCREENSHOT = 6327,
         STR_TRANSPARENT_SCREENSHOT_TIP = 6328,
         STR_TRAP_MOUSE = 5582,

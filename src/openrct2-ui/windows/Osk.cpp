@@ -7,13 +7,20 @@
  * OpenRCT2 is licensed under the GNU General Public License version 3.
  *****************************************************************************/
 
-// OPENRCT2MINI: On-Screen Keyboard. See osk-plan.md for the full design.
-//
-// 640×240 strip pinned to the bottom of the screen. Top 24 px is an
-// edit strip; the bottom 216 px is a 5-row × 13-column key grid in
-// either full-QWERTY layout or a 3×4 numpad. Selection is a contrasting
-// outline drawn in onDrawWidget *after* the standard widgetDraw, so the
-// widget's own pressed flag stays free for Caps-Lock-on rendering.
+// OPENRCT2MINI: On-Screen Keyboard. See osk-overhaul-plan.md for the
+// current design. Post-rework summary:
+// - No edit strip; the parent textbox / TextInput / console renders
+//   the buffer above us.
+// - No title bar → not draggable; pinned centre-bottom and repositions
+//   on screen resize.
+// - Navigation driven by Focus mode (kFocus* directional shortcuts +
+//   kCursorClick activation + kCursorCancel mapped to Backspace).
+// - SelectorMode::active is set on open and restored on close, so the
+//   focus ring is the only selection indicator. No more cursor force-
+//   off, no hardcoded scancode dispatch.
+// - Key auto-repeat is driven by ShortcutManager held-state queries
+//   for kCursorClick (re-fire focused key) and kCursorCancel (re-fire
+//   Backspace), at the same 250 ms / 60 ms cadence as before.
 
 #include <SDL.h>
 #include <algorithm>
@@ -22,6 +29,8 @@
 #include <openrct2-ui/UiContext.h>
 #include <openrct2-ui/input/InputManager.h>
 #include <openrct2-ui/input/ShortcutIds.h>
+#include <openrct2-ui/input/ShortcutManager.h>
+#include <openrct2-ui/input/WidgetFocus.h>
 #include <openrct2-ui/interface/InGameConsole.h>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2-ui/interface/Window.h>
@@ -48,17 +57,29 @@ namespace OpenRCT2::Ui::Windows
 {
     namespace
     {
-        constexpr int32_t kOskWidth = 640;
-        // Default height — edit strip + 5 key rows.
-        constexpr int32_t kOskHeight = 240;
-        // Console mode: skip the edit strip (console renders its own
-        // prompt above us, so the strip is redundant). 5 rows × 42 +
-        // small top/bottom padding fits in 214.
-        constexpr int32_t kOskHeightConsole = 214;
-        constexpr int32_t kEditStripH = 26;
+        // osk-overhaul §4: single height for every target. The edit
+        // strip is gone, so console and textbox mode share geometry.
+        // 5 rows × 42 px + 4 px top/bottom padding = 214.
+        constexpr int32_t kOskFullWidth = 640;
+        constexpr int32_t kOskHeight = 214;
         constexpr int16_t kCellW = 49;
         constexpr int16_t kRowH = 42;
         constexpr int16_t kKeyMargin = 2;
+        constexpr int16_t kGridTopPad = 2;
+        // osk-overhaul bug-fix §B: numpad is only 3 cells × 64 px wide
+        // (no fill-the-screen need like QWERTY). Match the side buffer
+        // to the existing top/bottom padding (kGridTopPad) so the
+        // window's visible "frame margin" is uniform on all four sides.
+        constexpr int16_t kNumpadCellW = 64;
+        constexpr int16_t kNumpadCols = 3;
+        constexpr int32_t kOskNumpadWidth = kNumpadCellW * kNumpadCols + kGridTopPad * 2;
+
+        // Window width for a given mode. OpenSkeleton sizes the window
+        // accordingly, BuildLayout fills it.
+        constexpr int32_t modeWidth(OskMode mode)
+        {
+            return (mode == OskMode::full) ? kOskFullWidth : kOskNumpadWidth;
+        }
 
         enum class OskAction : uint8_t
         {
@@ -80,14 +101,16 @@ namespace OpenRCT2::Ui::Windows
         };
 
         // Full QWERTY-ish layout. 5 rows, 13 cells per row max.
+        // Backtick/tilde lives at the end of row 2 (right of '),
+        // freeing the top-right slot for a Backspace key.
         const OskKeyDef kFullRow0[] = {
-            { '`', '~', 1, OskAction::Insert, nullptr }, { '1', '!', 1, OskAction::Insert, nullptr },
-            { '2', '@', 1, OskAction::Insert, nullptr }, { '3', '#', 1, OskAction::Insert, nullptr },
-            { '4', '$', 1, OskAction::Insert, nullptr }, { '5', '%', 1, OskAction::Insert, nullptr },
-            { '6', '^', 1, OskAction::Insert, nullptr }, { '7', '&', 1, OskAction::Insert, nullptr },
-            { '8', '*', 1, OskAction::Insert, nullptr }, { '9', '(', 1, OskAction::Insert, nullptr },
-            { '0', ')', 1, OskAction::Insert, nullptr }, { '-', '_', 1, OskAction::Insert, nullptr },
-            { '=', '+', 1, OskAction::Insert, nullptr },
+            { '1', '!', 1, OskAction::Insert, nullptr }, { '2', '@', 1, OskAction::Insert, nullptr },
+            { '3', '#', 1, OskAction::Insert, nullptr }, { '4', '$', 1, OskAction::Insert, nullptr },
+            { '5', '%', 1, OskAction::Insert, nullptr }, { '6', '^', 1, OskAction::Insert, nullptr },
+            { '7', '&', 1, OskAction::Insert, nullptr }, { '8', '*', 1, OskAction::Insert, nullptr },
+            { '9', '(', 1, OskAction::Insert, nullptr }, { '0', ')', 1, OskAction::Insert, nullptr },
+            { '-', '_', 1, OskAction::Insert, nullptr }, { '=', '+', 1, OskAction::Insert, nullptr },
+            { 0, 0, 1, OskAction::Backspace, "Bksp" },
         };
         const OskKeyDef kFullRow1[] = {
             { 'q', 'Q', 1, OskAction::Insert, nullptr }, { 'w', 'W', 1, OskAction::Insert, nullptr },
@@ -103,7 +126,7 @@ namespace OpenRCT2::Ui::Windows
             { 'g', 'G', 1, OskAction::Insert, nullptr }, { 'h', 'H', 1, OskAction::Insert, nullptr },
             { 'j', 'J', 1, OskAction::Insert, nullptr }, { 'k', 'K', 1, OskAction::Insert, nullptr },
             { 'l', 'L', 1, OskAction::Insert, nullptr }, { ';', ':', 1, OskAction::Insert, nullptr },
-            { '\'', '"', 1, OskAction::Insert, nullptr },
+            { '\'', '"', 1, OskAction::Insert, nullptr }, { '`', '~', 1, OskAction::Insert, nullptr },
         };
         const OskKeyDef kFullRow3[] = {
             { 0, 0, 1, OskAction::Caps, "Cap" },
@@ -149,8 +172,7 @@ namespace OpenRCT2::Ui::Windows
             { '-', 0, 1, OskAction::Insert, nullptr },
         };
         // Action row beneath the digit grid: Backspace on the left, an
-        // empty middle cell, Return on the right. Span widths line up
-        // with the 3-cell-wide digit grid above.
+        // empty middle cell, Return on the right.
         const OskKeyDef kNumRow4[] = {
             { 0, 0, 1, OskAction::Backspace, "Bksp" },
             { 0, 0, 1, OskAction::Spacer, nullptr },
@@ -165,22 +187,19 @@ namespace OpenRCT2::Ui::Windows
         struct OskRuntimeKey
         {
             WidgetIndex widgetIdx;
-            int16_t centreX;
             OskAction action;
             char glyph;
             char shifted;
-            uint8_t span;
         };
 
-        // Per-key label backing store. Single chars need a 2-byte
-        // null-terminated buffer for setString(); keep them inline so
-        // pointers stay valid for the OSK's lifetime.
+        // Per-key label backing store.
         struct GlyphBuffer
         {
             char data[8] = {};
         };
 
-        // Repeat-on-hold cadence (matches the cursor stack's tunables).
+        // Repeat-on-hold cadence — kept identical to pre-rework values
+        // so users feel no change in key-repeat tempo.
         constexpr uint32_t kRepeatInitialMs = 250;
         constexpr uint32_t kRepeatIntervalMs = 60;
 
@@ -203,83 +222,55 @@ namespace OpenRCT2::Ui::Windows
             OskTarget _target = OskTarget::TextInputWindow;
             WidgetIndex _parentWidgetIdx = 0;
             WindowIdentifier _parentId{};
-            std::vector<std::vector<OskRuntimeKey>> _keys;
+            std::vector<OskRuntimeKey> _runtimeKeys;
             std::vector<GlyphBuffer> _labels;
-            int _selRow = 0;
-            int _selKey = 0;
+            WidgetIndex _firstKeyWidget = kWidgetIndexNull;
             bool _caps = false;
             int _pressFlashFrames = 0;
-            // OPENRCT2MINI gamepad-plan 1.6c.3: token returned from
-            // pushModalHooks in onOpen, passed back to popModalHooks
-            // in onClose. Stack pop is by token so the parent
-            // TextInput's hooks aren't accidentally torn down.
+            // OPENRCT2MINI gamepad-plan 1.6c.3: modal-hooks token for
+            // Confirm / Dismiss (Commit / Cancel) wiring. Popped in
+            // onClose by token so console / textbox parent hooks below
+            // are unaffected.
             OpenRCT2::Ui::InputManager::ModalHooksToken _modalHooksToken{};
             WidgetIndex _pressFlashIdx = kWidgetIndexNull;
-            // Edit-strip state.
+            // Edit-buffer state. We still own the buffer to centralise
+            // codepoint trimming on Insert / Backspace; the parent
+            // textbox / TextInput / console renders the visible text.
             u8string _editBuffer;
             size_t _caret = 0;     // byte offset
             size_t _maxLength = 0; // codepoints; 0 = unlimited
-            int _cursorBlink = 0;
-            // Repeat-on-hold tracking. SDL doesn't fire auto-repeat on
-            // device, so we synthesise it ourselves.
-            int32_t _heldScancode = 0;
+            // Repeat-on-hold tracking. Updated in onUpdate via
+            // ShortcutManager held-state queries.
             uint32_t _heldSinceMs = 0;
             uint32_t _lastFireMs = 0;
-            // OPENRCT2MINI Rev 7: rejection flash. When InsertChar
-            // refuses past maxLength, set this to a small frame count;
-            // DrawEditStrip tints the strip red while non-zero;
-            // onUpdate decrements it.
+            std::string_view _heldShortcutId{};
+            // OPENRCT2MINI: insertion-refusal flash. Re-rendered as a
+            // brief red wash over the focused key (formerly painted the
+            // edit strip — that's gone now).
             int _rejectFlashFrames = 0;
 
         public:
             void setMode(OskMode mode)
             {
-                if (_mode == mode && !_keys.empty())
+                if (_mode == mode && !_runtimeKeys.empty())
                     return;
                 _mode = mode;
-                // OnOpen already built the layout using the default
-                // mode; rebuild now that the caller has overridden it.
-                // Skipped if the layout hasn't been built yet (i.e.
-                // setMode called BEFORE onOpen — currently never, but
-                // the guard means it'll work either way).
                 if (!widgets.empty())
                 {
                     BuildLayout();
-                    // Reset selection to the right starting cell for
-                    // the new layout. Per §3.8b: home row leftmost for
-                    // full QWERTY, top-left for numpad.
-                    if (_mode == OskMode::full)
-                    {
-                        _selRow = 2;
-                        _selKey = 0;
-                    }
-                    else
-                    {
-                        _selRow = 0;
-                        _selKey = 0;
-                    }
-                    SyncFocusState(); // Phase F.6
+                    // osk-overhaul bug-fix §A2: clear focus on mode
+                    // switch — the widget indices change and the
+                    // bootstrap will re-snap to the first focusable
+                    // on the next frame, just like for any window.
+                    OpenRCT2::Ui::GetInputManager().clearFocus();
                     invalidate();
                 }
             }
 
             void setTarget(OskTarget target, WidgetIndex widgetIdx)
             {
-                const bool targetChanged = _target != target;
                 _target = target;
                 _parentWidgetIdx = widgetIdx;
-                // BuildLayout reads _target to decide whether to leave
-                // room for the edit strip. onOpen ran with the default
-                // target (TextInputWindow → strip at top) before
-                // OskOpenForConsole could call us, so the grid was
-                // pushed down by 26 px and the bottom row clipped off
-                // the 214 px console-mode window. Rebuild now that we
-                // know we're in Console mode.
-                if (targetChanged && !widgets.empty())
-                {
-                    BuildLayout();
-                    invalidate();
-                }
             }
 
             void setParent(WindowBase* parent)
@@ -315,40 +306,27 @@ namespace OpenRCT2::Ui::Windows
             {
                 BuildLayout();
                 gGamePaused |= GAME_PAUSED_MODAL;
-                // OPENRCT2MINI: stop the engine's SDL text-input
-                // session so device button presses (which map to
-                // keyboard scancodes that SDL would emit as
-                // SDL_TEXTINPUT events) don't leak into the parent's
-                // textbox buffer behind us.
-                ContextStopTextInput();
-                // Sensible initial selection per §3.8b: home row leftmost
-                // for the full keyboard, top-left '1' for the numpad.
-                if (_mode == OskMode::full)
-                {
-                    _selRow = 2;
-                    _selKey = 0;
-                }
-                else
-                {
-                    _selRow = 0;
-                    _selKey = 0;
-                }
-                // Phase F.6: publish initial selection so the generic
-                // focus ring paints the right key from the first frame.
-                SyncFocusState();
 
-                // OPENRCT2MINI gamepad-plan 1.6c.3: route kInterfaceDismiss
-                // / kInterfaceConfirm to OSK Cancel / Commit. Replaces the
-                // hardcoded SDL_SCANCODE_RETURN / SDL_SCANCODE_ESCAPE arms
-                // in IsOskScancode + FireScancode below — with hooks
-                // installed, those keys flow through InputManager, match
-                // the dismiss / confirm shortcuts, and fire these
-                // callbacks before any other dispatch sees them. PAD BACK
-                // / PAD START fire here too via the same path. Lambdas
-                // capture `this`; lifetime is scoped to onClose's
-                // clearModalHooks call.
-                auto& im = OpenRCT2::Ui::GetInputManager();
-                _modalHooksToken = im.pushModalHooks({
+                // OPENRCT2MINI osk-overhaul bug-fix §A2: don't touch
+                // the selector mode here. The per-frame bootstrap
+                // (InputManager::process) auto-wakes the selector
+                // when a new topmost-focusable window appears AND the
+                // user was last on virtual input (D-pad / keyboard);
+                // it leaves the selector hidden if the user was last
+                // on real mouse. That's exactly the modal behaviour
+                // the rest of the UI gets — the OSK shouldn't be
+                // special. Likewise focus snapping is auto-driven by
+                // the bootstrap's snapFocusToTopmostFocusable, so
+                // there's no need for a SnapInitialFocus call here.
+
+                // Modal hooks for Confirm / Dismiss. The OSK keeps
+                // owning these because Commit / Cancel needs to dispatch
+                // to the parent (TextInputWindow / textbox / console)
+                // before tearing down the OSK. PAD START / PAD BACK and
+                // SDL RETURN / ESCAPE all funnel here through
+                // ShortcutManager.
+                auto& mgr = OpenRCT2::Ui::GetInputManager();
+                _modalHooksToken = mgr.pushModalHooks({
                     /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
                         Cancel();
                         return true;
@@ -363,32 +341,49 @@ namespace OpenRCT2::Ui::Windows
             void onClose() override
             {
                 gGamePaused &= ~GAME_PAUSED_MODAL;
-                // OPENRCT2MINI gamepad-plan 1.6c.3: pop our modal hooks
-                // off the stack — exposes the parent (TextInput) hooks
-                // again if there is one. Token-based pop so nested
-                // modals can close in any order without disturbing
-                // each other's slot.
-                OpenRCT2::Ui::GetInputManager().popModalHooks(_modalHooksToken);
-                // Phase F.6: drop our focus claim so the next frame's
-                // bootstrap can re-snap to whatever's underneath. If
-                // we don't clear here, the focus ring would persist
-                // pointing at a now-dead window-class for one tick
-                // (Phase F.3's stale-check would clear it anyway, but
-                // clearing here is the honest signal).
-                OpenRCT2::Ui::GetInputManager().clearFocus();
+                auto& mgr = OpenRCT2::Ui::GetInputManager();
+                mgr.popModalHooks(_modalHooksToken);
+                // OPENRCT2MINI osk-overhaul §6 / C14 / bug-fix §A: just
+                // drop the focus claim. We no longer save/restore the
+                // selector mode — that left the OSK as an outlier vs.
+                // every other window, and forced a mode even after the
+                // user moved the mouse. Letting the existing state
+                // (whatever it transitioned to during the OSK's
+                // lifetime) persist is the right behaviour.
+                mgr.clearFocus();
             }
 
             void onUpdate() override
             {
-                _cursorBlink = (_cursorBlink + 1) % 30;
+                // OPENRCT2MINI osk-overhaul §5 / bug-fix §C: re-anchor
+                // centre-bottom every frame. onResize on WindowBase
+                // fires when the window itself is resized (e.g. user
+                // drag), NOT on screen / SDL_WINDOWEVENT_SIZE_CHANGED;
+                // the cheapest robust re-anchor is per-frame here.
+                // Math matches OpenSkeleton so the OSK stays aligned
+                // to whatever the screen size is right now.
+                const int32_t screenW = ContextGetWidth();
+                const int32_t screenH = ContextGetHeight();
+                const int32_t desiredW = std::min<int32_t>(screenW, modeWidth(_mode));
+                if (width != desiredW)
+                {
+                    width = desiredW;
+                    BuildLayout();
+                }
+                const int16_t desiredX = static_cast<int16_t>(std::max(0, (screenW - desiredW) / 2));
+                const int16_t desiredY = static_cast<int16_t>(std::max(0, screenH - height));
+                if (windowPos.x != desiredX || windowPos.y != desiredY)
+                {
+                    windowPos.x = desiredX;
+                    windowPos.y = desiredY;
+                    invalidate();
+                }
+
                 if (_pressFlashFrames > 0)
                 {
                     --_pressFlashFrames;
                     if (_pressFlashFrames == 0 && _pressFlashIdx != kWidgetIndexNull)
                     {
-                        // Restore baseline pressed state once the flash
-                        // ends. CAPS keeps its toggle; everything else
-                        // goes back to unpressed.
                         SyncPressedFlag(_pressFlashIdx);
                         invalidateWidget(_pressFlashIdx);
                         _pressFlashIdx = kWidgetIndexNull;
@@ -398,9 +393,6 @@ namespace OpenRCT2::Ui::Windows
                     --_rejectFlashFrames;
                 if (_target == OskTarget::Console)
                 {
-                    // Live-mirror our buffer into the console so the
-                    // prompt line in the console region above shows
-                    // the same text in real time.
                     OpenRCT2::Ui::GetInGameConsole().OskMirrorBuffer(_editBuffer, _caret);
                 }
                 ProcessRepeats();
@@ -409,34 +401,67 @@ namespace OpenRCT2::Ui::Windows
 
             void onPrepareDraw() override
             {
-                // Refresh shifted-glyph labels when caps changes.
                 RefreshLabels();
                 SyncCapsPressed();
             }
 
             void onDraw(RenderTarget& rt) override
             {
-                // Background + standard widget pass.
+                // osk-overhaul §4: edit strip removed. The parent
+                // window / console renders the typed text — drawing it
+                // twice would be a confusing duplicate.
                 drawWidgets(rt);
-                // Console mode shares the prompt line with the
-                // console region above — drawing our own strip would
-                // be a confusing duplicate.
-                if (_target != OskTarget::Console)
-                    DrawEditStrip(rt);
             }
 
-            void onDrawWidget(WidgetIndex widgetIndex, RenderTarget& rt) override
+            // OPENRCT2MINI osk-overhaul §1: replace `pressWidgetByIndex`
+            // synthesis with a direct activation hook. Focus-mode dispatch
+            // (InputManager → OskContextImpl::cursor.click) ends up here
+            // via `pressWidgetByIndex` → onMouseDown; mouse clicks land
+            // the same way via the normal hit-test path.
+            void onMouseDown(WidgetIndex widgetIndex) override
             {
-                // Default rendering (frame, button face, label).
-                // The selection-ring overlay that used to live here was
-                // deleted in Phase F.6 — the generic render hook in
-                // WindowDrawSingle (via Ui::drawFocusOutlineIfActive)
-                // now paints the yellow inset outline for the focused
-                // widget across ALL focusable windows, so the OSK gets
-                // it for free as long as it publishes its current
-                // selection via SyncFocusState. See WidgetFocus.h
-                // §F.5 and the SyncFocusState comment for the wiring.
-                Window::onDrawWidget(widgetIndex, rt);
+                ActivateKey(widgetIndex);
+            }
+
+            // Activate the key at `widgetIndex` (insert character / fire
+            // backspace / commit / etc.). Public so OskContextImpl can
+            // re-press the focused key during auto-repeat, and so the
+            // free function OskActivateBackspace() can re-use the same
+            // path for cursor.cancel → Backspace.
+            void activateBackspace()
+            {
+                // Find the Backspace widget — used for cursor.cancel and
+                // for the numpad-mode Backspace key. We don't always have
+                // a Backspace widget (full QWERTY uses Cap+Z+Enter and
+                // no separate Backspace), so fall back to direct buffer
+                // edits when there's no widget to flash.
+                for (const auto& rt : _runtimeKeys)
+                {
+                    if (rt.action == OskAction::Backspace)
+                    {
+                        ActivateKey(rt.widgetIdx);
+                        return;
+                    }
+                }
+                // No widget — fire backspace directly (no flash, no
+                // sound). Full-QWERTY mode hits this path; the user is
+                // intentionally rebinding cursor.cancel to backspace,
+                // so silent behaviour is fine.
+                Backspace();
+                invalidate();
+            }
+
+            // Returns true if event consumed.
+            bool handleKey(int32_t, bool)
+            {
+                // OPENRCT2MINI osk-overhaul §1: SDL_KEYDOWN forwarding
+                // from UiContext::InterceptVirtualCursorKey is dead. All
+                // navigation is bindable shortcuts. The function is
+                // retained so the existing OskHandleKey export wires up
+                // to a no-op — we'll delete the export in a follow-up
+                // along with the InterceptVirtualCursorKey arm that
+                // calls it.
+                return false;
             }
 
             // OPENRCT2MINI: snapshot accessors so the parent
@@ -452,63 +477,40 @@ namespace OpenRCT2::Ui::Windows
             }
             bool caretIsFlashed() const
             {
-                return _cursorBlink < 15;
-            }
-
-            // Returns true if event consumed.
-            bool handleKey(int32_t scancode, bool down)
-            {
-                // Always swallow these scancodes while the OSK is up so
-                // shortcut chord handlers further down the pipeline
-                // don't fire (e.g. C = X = window-drag shortcut).
-                const bool consumed = IsOskScancode(scancode);
-                if (!consumed)
-                    return false;
-                if (!down)
-                {
-                    // KEY-UP: clear repeat state if it matches.
-                    if (_heldScancode == scancode)
-                    {
-                        _heldScancode = 0;
-                        _heldSinceMs = 0;
-                    }
-                    return true;
-                }
-                // KEY-DOWN: fire once, then start the repeat clock.
-                FireScancode(scancode);
-                _heldScancode = scancode;
-                _heldSinceMs = SDL_GetTicks();
-                _lastFireMs = _heldSinceMs;
-                return true;
+                // Visual blink driven off SDL_GetTicks so the parent
+                // textbox / console caret renderer can sync without
+                // sharing a frame counter.
+                const uint32_t now = SDL_GetTicks();
+                return (now / 500) & 1;
             }
 
         private:
             void BuildLayout()
             {
                 widgets.clear();
-                _keys.clear();
+                _runtimeKeys.clear();
                 _labels.clear();
+                _firstKeyWidget = kWidgetIndexNull;
 
-                // First widget = background frame.
-                const int32_t windowH = (_target == OskTarget::Console) ? kOskHeightConsole : kOskHeight;
+                // First widget = background frame. Width tracks the
+                // live window width (onUpdate keeps the window itself
+                // sized correctly for the mode).
+                const int16_t frameW = static_cast<int16_t>(width);
                 widgets.push_back(makeWidget(
-                    { 0, 0 }, { kOskWidth, windowH }, WidgetType::frame, WindowColour::primary));
+                    { 0, 0 }, { frameW, kOskHeight }, WidgetType::frame, WindowColour::primary));
 
                 const OskRowSpan* layout = (_mode == OskMode::full) ? kFullLayout : kNumpadLayout;
                 const size_t rowCount = (_mode == OskMode::full) ? std::size(kFullLayout)
                                                                  : std::size(kNumpadLayout);
-                _keys.resize(rowCount);
 
                 // Total potential keys for the label backing store.
                 size_t total = 0;
                 for (size_t r = 0; r < rowCount; ++r)
                     total += layout[r].count;
                 _labels.resize(total);
+                _runtimeKeys.reserve(total);
 
-                // Skip edit strip in console mode — console renders
-                // its own prompt above us, so a duplicate strip is
-                // redundant and wastes pixels.
-                const int16_t gridY0 = (_target == OskTarget::Console) ? int16_t{ 2 } : static_cast<int16_t>(kEditStripH);
+                const int16_t gridY0 = static_cast<int16_t>(kGridTopPad);
                 const int16_t cellH = kRowH;
 
                 size_t labelIdx = 0;
@@ -524,22 +526,21 @@ namespace OpenRCT2::Ui::Windows
                     }
                     else
                     {
-                        // Centre the 3-column numpad horizontally.
-                        cellWThisRow = 64;
+                        // Centre the 3-column numpad horizontally within
+                        // the current frame width (numpad-mode window is
+                        // already sized tight to the grid, so this is
+                        // essentially just kGridTopPad on each side).
+                        cellWThisRow = kNumpadCellW;
                         const int16_t gridW = static_cast<int16_t>(cellWThisRow * row.count);
-                        cursorX = static_cast<int16_t>((kOskWidth - gridW) / 2);
+                        cursorX = static_cast<int16_t>((width - gridW) / 2);
                     }
                     const int16_t y0 = static_cast<int16_t>(gridY0 + cellH * static_cast<int16_t>(r));
 
-                    _keys[r].reserve(row.count);
                     for (size_t k = 0; k < row.count; ++k)
                     {
                         const OskKeyDef& def = row.keys[k];
                         const int16_t spanW = static_cast<int16_t>(cellWThisRow * def.span);
 
-                        // Spacer: advance the cursor without creating
-                        // a widget or a selection slot. Used to put a
-                        // visible gap between action keys.
                         if (def.action == OskAction::Spacer)
                         {
                             cursorX = static_cast<int16_t>(cursorX + spanW);
@@ -552,7 +553,6 @@ namespace OpenRCT2::Ui::Windows
                         const int16_t top = static_cast<int16_t>(y0 + kKeyMargin);
                         const int16_t bottom = static_cast<int16_t>(y0 + cellH - kKeyMargin - 1);
 
-                        // Build the label string into our backing store.
                         if (def.label != nullptr)
                         {
                             std::strncpy(_labels[labelIdx].data, def.label, sizeof(_labels[labelIdx].data) - 1);
@@ -576,12 +576,13 @@ namespace OpenRCT2::Ui::Windows
 
                         OskRuntimeKey rt{};
                         rt.widgetIdx = static_cast<WidgetIndex>(widgets.size() - 1);
-                        rt.centreX = static_cast<int16_t>((left + right) / 2);
                         rt.action = def.action;
                         rt.glyph = def.glyph;
                         rt.shifted = def.shifted ? def.shifted : def.glyph;
-                        rt.span = def.span;
-                        _keys[r].push_back(rt);
+                        _runtimeKeys.push_back(rt);
+
+                        if (_firstKeyWidget == kWidgetIndexNull)
+                            _firstKeyWidget = rt.widgetIdx;
 
                         cursorX = static_cast<int16_t>(cursorX + spanW);
                         ++labelIdx;
@@ -591,41 +592,31 @@ namespace OpenRCT2::Ui::Windows
 
             void RefreshLabels()
             {
+                // Label index advances per widget (skipping Spacers).
                 size_t labelIdx = 0;
-                for (size_t r = 0; r < _keys.size(); ++r)
+                for (const auto& rt : _runtimeKeys)
                 {
-                    for (size_t k = 0; k < _keys[r].size(); ++k)
+                    if (rt.action == OskAction::Insert)
                     {
-                        const auto& rt = _keys[r][k];
-                        if (rt.action == OskAction::Insert)
-                        {
-                            const char ch = _caps ? rt.shifted : rt.glyph;
-                            _labels[labelIdx].data[0] = ch;
-                            _labels[labelIdx].data[1] = '\0';
-                            // Re-bind the widget to the same backing
-                            // pointer (it's cached in widget.string but
-                            // the byte we changed is already visible).
-                            widgets[rt.widgetIdx].string = _labels[labelIdx].data;
-                        }
-                        ++labelIdx;
+                        const char ch = _caps ? rt.shifted : rt.glyph;
+                        _labels[labelIdx].data[0] = ch;
+                        _labels[labelIdx].data[1] = '\0';
+                        widgets[rt.widgetIdx].string = _labels[labelIdx].data;
                     }
+                    ++labelIdx;
                 }
             }
 
             void SyncCapsPressed()
             {
-                // CAPS key reflects toggle state via isPressed.
-                for (auto& row : _keys)
+                for (const auto& key : _runtimeKeys)
                 {
-                    for (auto& key : row)
+                    if (key.action == OskAction::Caps)
                     {
-                        if (key.action == OskAction::Caps)
-                        {
-                            if (_caps)
-                                widgets[key.widgetIdx].flags.set(WidgetFlag::isPressed);
-                            else
-                                widgets[key.widgetIdx].flags.unset(WidgetFlag::isPressed);
-                        }
+                        if (_caps)
+                            widgets[key.widgetIdx].flags.set(WidgetFlag::isPressed);
+                        else
+                            widgets[key.widgetIdx].flags.unset(WidgetFlag::isPressed);
                     }
                 }
                 if (_pressFlashIdx != kWidgetIndexNull && _pressFlashFrames > 0)
@@ -634,110 +625,52 @@ namespace OpenRCT2::Ui::Windows
 
             void SyncPressedFlag(WidgetIndex idx)
             {
-                // Restore baseline pressed state for one widget after a
-                // flash ends. Most keys are unpressed; CAPS reflects
-                // _caps.
                 widgets[idx].flags.unset(WidgetFlag::isPressed);
-                for (auto& row : _keys)
+                for (const auto& key : _runtimeKeys)
                 {
-                    for (auto& key : row)
+                    if (key.widgetIdx == idx && key.action == OskAction::Caps && _caps)
                     {
-                        if (key.widgetIdx == idx && key.action == OskAction::Caps && _caps)
-                        {
-                            widgets[idx].flags.set(WidgetFlag::isPressed);
-                            return;
-                        }
+                        widgets[idx].flags.set(WidgetFlag::isPressed);
+                        return;
                     }
                 }
             }
 
-            WidgetIndex GetSelectedWidgetIdx() const
+            const OskRuntimeKey* runtimeKeyFor(WidgetIndex idx) const
             {
-                if (_selRow < 0 || _selRow >= static_cast<int>(_keys.size()))
-                    return kWidgetIndexNull;
-                if (_selKey < 0 || _selKey >= static_cast<int>(_keys[_selRow].size()))
-                    return kWidgetIndexNull;
-                return _keys[_selRow][_selKey].widgetIdx;
+                for (const auto& rt : _runtimeKeys)
+                    if (rt.widgetIdx == idx)
+                        return &rt;
+                return nullptr;
             }
 
-            const OskRuntimeKey& GetSelectedKey() const
+            void ActivateKey(WidgetIndex widgetIndex)
             {
-                return _keys[_selRow][_selKey];
-            }
-
-            // OPENRCT2MINI focus-mode-plan / Phase F.6: publish the OSK's
-            // current 2D selection to InputManager's shared focus state.
-            // Phase F.5's generic render hook reads that state and paints
-            // the yellow ring, replacing the OSK's per-key outline draw
-            // (deleted from onDrawWidget — search for the F.6 comment
-            // there). Called after every selection change (MoveSelection*,
-            // onOpen reset, setMode reset). onClose mirrors the cleanup
-            // via clearFocus().
-            //
-            // The shared focus state is intentionally a write-only sink
-            // from the OSK's perspective for now: we publish, the
-            // renderer consumes. The OSK keeps owning navigation /
-            // activation via _selRow + _selKey + FireScancode because
-            // its 2D row/column layout has horizontal-runs / non-
-            // uniform row widths that the generic spatial search would
-            // sometimes wander through. A future iteration can replace
-            // the 2D state with focus state + widget-coord nav helpers
-            // (per focus-mode-plan §F.6 follow-up), but that's not
-            // needed to consolidate the ring rendering — which is the
-            // headline goal of F.6.
-            void SyncFocusState()
-            {
-                OpenRCT2::Ui::GetInputManager().setFocus(WindowClass::osk, GetSelectedWidgetIdx());
-            }
-
-            void DrawEditStrip(RenderTarget& rt)
-            {
-                const auto stripRect = ScreenRect{
-                    { windowPos.x + 4, windowPos.y + 3 },
-                    { windowPos.x + kOskWidth - 5, windowPos.y + kEditStripH - 4 },
-                };
-                // OPENRCT2MINI Rev 7: red wash on the strip when an
-                // insert was just refused (maxLength reached). Two-
-                // frame stride for visible flicker.
-                const bool rejectFlashOn = (_rejectFlashFrames > 0) && ((_rejectFlashFrames & 2) != 0);
-                const auto stripColour = rejectFlashOn
-                    ? ColourWithFlags{ Colour::brightRed }
-                    : colours[1];
-                Rectangle::fillInset(
-                    rt, stripRect, stripColour, Rectangle::BorderStyle::inset, Rectangle::FillBrightness::light,
-                    Rectangle::FillMode::dontLightenWhenInset);
-
-                // Render the buffer text. Single line — if the buffer is
-                // longer than the strip can show, scroll horizontally so
-                // the caret stays visible. Plain ASCII assumption is
-                // safe for the OSK.
-                const int32_t textY = stripRect.GetTop() + 4;
-                const int32_t textXLeft = stripRect.GetLeft() + 6;
-                const int32_t textXRight = stripRect.GetRight() - 6;
-                const int32_t stripWidth = textXRight - textXLeft;
-
-                // Caret-visible scroll: measure the prefix up to the
-                // caret to figure out where it lands, then offset so the
-                // caret is in view.
-                const auto fontStyle = FontStyle::medium;
-                const auto preCaret = u8string_view{ _editBuffer.data(), _caret };
-                const int32_t preWidth = getStringWidth(preCaret, fontStyle, true);
-                int32_t scrollX = 0;
-                if (preWidth > stripWidth - 8)
-                    scrollX = preWidth - (stripWidth - 8);
-
-                drawText(
-                    rt, ScreenCoordsXY{ textXLeft - scrollX, textY }, _editBuffer.data(),
-                    { colours[1], fontStyle, { TextPaintFlag::noFormatting }, TextAlignment::left });
-
-                // Caret blink — visible for 15 of every 30 frames.
-                if (_cursorBlink < 15)
+                const auto* key = runtimeKeyFor(widgetIndex);
+                if (key == nullptr)
+                    return;
+                StartFlash(key->widgetIdx);
+                Audio::Play(Audio::SoundId::click1, 0, windowPos.x + (width / 2));
+                switch (key->action)
                 {
-                    const int32_t caretX = textXLeft + preWidth - scrollX;
-                    const auto caretColour = getColourMap(colours[1].colour).midLight;
-                    Rectangle::fill(
-                        rt, ScreenRect{ { caretX, textY }, { caretX + 1, textY + 9 } },
-                        static_cast<PaletteIndex>(EnumValue(caretColour) + 5));
+                    case OskAction::Insert:
+                        InsertChar(_caps ? key->shifted : key->glyph);
+                        break;
+                    case OskAction::Space:
+                        InsertChar(' ');
+                        break;
+                    case OskAction::Caps:
+                        _caps = !_caps;
+                        invalidate();
+                        break;
+                    case OskAction::Return:
+                        Commit();
+                        return;
+                    case OskAction::Backspace:
+                        Backspace();
+                        break;
+                    case OskAction::Spacer:
+                        break;
                 }
             }
 
@@ -746,12 +679,9 @@ namespace OpenRCT2::Ui::Windows
             {
                 if (_maxLength != 0)
                 {
-                    // Trim rule: codepoint count < max.
                     const size_t codepoints = String::lengthOf(_editBuffer.c_str());
                     if (codepoints >= _maxLength)
                     {
-                        // Visible feedback that the keypress was
-                        // refused — see DrawEditStrip below.
                         _rejectFlashFrames = kRejectFlashFrames;
                         invalidate();
                         return;
@@ -777,48 +707,6 @@ namespace OpenRCT2::Ui::Windows
                 _caret = newCaret;
             }
 
-            void CaretLeft()
-            {
-                if (_caret == 0)
-                    return;
-                const char* base = _editBuffer.data();
-                const char* p = base + _caret;
-                do
-                {
-                    --p;
-                } while (p > base && (static_cast<uint8_t>(*p) & 0xC0) == 0x80);
-                _caret = static_cast<size_t>(p - base);
-            }
-
-            void CaretRight()
-            {
-                if (_caret >= _editBuffer.size())
-                    return;
-                size_t step = 1;
-                while (_caret + step < _editBuffer.size()
-                       && (static_cast<uint8_t>(_editBuffer[_caret + step]) & 0xC0) == 0x80)
-                    ++step;
-                _caret += step;
-            }
-
-            // Numpad-only: flip the sign of the current value. Concretely
-            // toggle a leading '-' on the buffer. Caret tracks the
-            // shift so the user's logical position is preserved.
-            void ToggleSign()
-            {
-                if (!_editBuffer.empty() && _editBuffer.front() == '-')
-                {
-                    _editBuffer.erase(0, 1);
-                    if (_caret > 0)
-                        --_caret;
-                }
-                else
-                {
-                    _editBuffer.insert(0, 1, '-');
-                    ++_caret;
-                }
-            }
-
             void StartFlash(WidgetIndex idx)
             {
                 _pressFlashIdx = idx;
@@ -827,79 +715,83 @@ namespace OpenRCT2::Ui::Windows
                 invalidateWidget(idx);
             }
 
-            void ActivateSelectedKey()
+            // OPENRCT2MINI osk-overhaul §2.5: auto-repeat is driven by
+            // ShortcutManager held-state queries, not SDL scancode
+            // polling. cursor.click repeats activation of the currently
+            // focused key (re-pressed); cursor.cancel repeats Backspace.
+            // Same 250/60 ms cadence as before.
+            void ProcessRepeats()
             {
-                const auto& key = GetSelectedKey();
-                StartFlash(key.widgetIdx);
-                // OPENRCT2MINI Rev 7: audible click on every key
-                // activation. Skipping Spacer (which doesn't reach
-                // here) and Return/Cancel paths only because Commit/
-                // Cancel close the OSK before the sound queues — we
-                // play before that happens.
-                Audio::Play(Audio::SoundId::click1, 0, windowPos.x + (width / 2));
-                switch (key.action)
+                auto& mgr = OpenRCT2::Ui::GetInputManager();
+                auto& shortcutMgr = OpenRCT2::Ui::GetShortcutManager();
+                const uint32_t now = SDL_GetTicks();
+
+                // Detect which (if any) repeat-eligible shortcut is held.
+                std::string_view candidate{};
+                auto checkHeld = [&](std::string_view id) -> bool {
+                    if (auto* s = shortcutMgr.getShortcut(id); s != nullptr)
+                        return mgr.getState(*s);
+                    return false;
+                };
+                if (checkHeld(ShortcutId::kCursorCancel))
+                    candidate = ShortcutId::kCursorCancel;
+                else if (checkHeld(ShortcutId::kCursorClick))
+                    candidate = ShortcutId::kCursorClick;
+
+                if (candidate.empty())
+                {
+                    _heldShortcutId = {};
+                    return;
+                }
+                if (_heldShortcutId != candidate)
+                {
+                    // New press — reset the clock; primary fire happens
+                    // through normal shortcut dispatch, not from here.
+                    _heldShortcutId = candidate;
+                    _heldSinceMs = now;
+                    _lastFireMs = now;
+                    return;
+                }
+                // Should this key auto-repeat at all? Filter matches the
+                // old ScancodeShouldRepeat semantics — Backspace yes,
+                // Enter / Caps no.
+                if (candidate == ShortcutId::kCursorClick)
+                {
+                    auto focused = mgr.getFocusedWidget();
+                    const auto* key = runtimeKeyFor(focused);
+                    if (key == nullptr || !ShouldRepeatAction(key->action))
+                        return;
+                }
+                if (now - _heldSinceMs < kRepeatInitialMs)
+                    return;
+                if (now - _lastFireMs < kRepeatIntervalMs)
+                    return;
+                _lastFireMs = now;
+                if (candidate == ShortcutId::kCursorCancel)
+                {
+                    activateBackspace();
+                }
+                else if (candidate == ShortcutId::kCursorClick)
+                {
+                    auto focused = mgr.getFocusedWidget();
+                    ActivateKey(focused);
+                }
+            }
+
+            static bool ShouldRepeatAction(OskAction action)
+            {
+                switch (action)
                 {
                     case OskAction::Insert:
-                        InsertChar(_caps ? key.shifted : key.glyph);
-                        break;
                     case OskAction::Space:
-                        InsertChar(' ');
-                        break;
-                    case OskAction::Caps:
-                        _caps = !_caps;
-                        invalidate();
-                        break;
-                    case OskAction::Return:
-                        Commit();
-                        return;
                     case OskAction::Backspace:
-                        Backspace();
-                        break;
+                        return true;
+                    case OskAction::Caps:
+                    case OskAction::Return:
                     case OskAction::Spacer:
-                        // Selection should never land on a spacer (we
-                        // skip them at BuildLayout time), but be safe.
-                        break;
+                        return false;
                 }
-            }
-
-            void MoveSelectionLeft()
-            {
-                if (_keys[_selRow].empty())
-                    return;
-                _selKey = (_selKey - 1 + static_cast<int>(_keys[_selRow].size())) % static_cast<int>(_keys[_selRow].size());
-                SyncFocusState(); // Phase F.6
-            }
-
-            void MoveSelectionRight()
-            {
-                if (_keys[_selRow].empty())
-                    return;
-                _selKey = (_selKey + 1) % static_cast<int>(_keys[_selRow].size());
-                SyncFocusState(); // Phase F.6
-            }
-
-            void MoveSelectionVertical(int dir)
-            {
-                const int newRow = _selRow + dir;
-                if (newRow < 0 || newRow >= static_cast<int>(_keys.size()))
-                    return; // clamp
-                if (_keys[newRow].empty())
-                    return;
-                const int16_t targetX = _keys[_selRow][_selKey].centreX;
-                int bestKey = 0;
-                int bestDist = std::numeric_limits<int>::max();
-                for (size_t k = 0; k < _keys[newRow].size(); ++k)
-                {
-                    const int dist = std::abs(_keys[newRow][k].centreX - targetX);
-                    if (dist < bestDist)
-                    {
-                        bestDist = dist;
-                        bestKey = static_cast<int>(k);
-                    }
-                }
-                _selRow = newRow;
-                _selKey = bestKey;
-                SyncFocusState(); // Phase F.6
+                return false;
             }
 
             void Commit()
@@ -908,7 +800,6 @@ namespace OpenRCT2::Ui::Windows
                 const auto target = _target;
                 if (target == OskTarget::Console)
                 {
-                    // Submit the line and stay open for the next one.
                     auto& console = OpenRCT2::Ui::GetInGameConsole();
                     console.OskSubmitLine(buffer);
                     _editBuffer.clear();
@@ -921,9 +812,6 @@ namespace OpenRCT2::Ui::Windows
                     ? nullptr
                     : windowMgr->FindByNumber(_parentId.classification, _parentId.number);
                 const auto widgetIdx = _parentWidgetIdx;
-                // Close OSK first; then dispatch to parent. The parent's
-                // own onClose path calls OskClose() too, which is a
-                // no-op once we're already gone.
                 close();
                 if (parent == nullptr)
                     return;
@@ -933,9 +821,6 @@ namespace OpenRCT2::Ui::Windows
                         TextInputCommitFromOsk(parent, buffer);
                         break;
                     case OskTarget::Textbox:
-                        // Push the buffer to the parent widget the same
-                        // way WindowUpdateTextbox does, then end the
-                        // engine's textbox session.
                         parent->onTextInput(widgetIdx, buffer);
                         WindowCancelTextbox();
                         break;
@@ -949,8 +834,6 @@ namespace OpenRCT2::Ui::Windows
                 const auto target = _target;
                 if (target == OskTarget::Console)
                 {
-                    // Close the console — Console::Close calls OskClose
-                    // back, which closes us.
                     OpenRCT2::Ui::GetInGameConsole().Close();
                     return;
                 }
@@ -977,165 +860,6 @@ namespace OpenRCT2::Ui::Windows
                         break; // handled above
                 }
             }
-
-            // What scancodes belong to the OSK while it's active.
-            static bool IsOskScancode(int32_t scancode)
-            {
-                switch (scancode)
-                {
-                    case SDL_SCANCODE_UP:
-                    case SDL_SCANCODE_DOWN:
-                    case SDL_SCANCODE_LEFT:
-                    case SDL_SCANCODE_RIGHT:
-                    case SDL_SCANCODE_Z:      // A button — insert
-                    case SDL_SCANCODE_X:      // B button — backspace
-                    case SDL_SCANCODE_C:      // X button — space (was F16, see W0)
-                    case SDL_SCANCODE_V:      // Y button — caps  (was F17, see W0)
-                    // L1 = Q + LSHIFT dual-emit (W0). LSHIFT carries the
-                    // OpenRCT2 Shift-modifier reach; we still match it here
-                    // (and Q below) so the OSK consumes the L1 press cleanly.
-                    case SDL_SCANCODE_Q:
-                    case SDL_SCANCODE_LSHIFT: // L1 — caret left
-                    case SDL_SCANCODE_RSHIFT:
-                    // R1 = A + LALT dual-emit (W0). Same shape — match both
-                    // the user-facing letter and the modifier scancode.
-                    case SDL_SCANCODE_A:
-                    case SDL_SCANCODE_LALT:   // R1 — caret right
-                    case SDL_SCANCODE_RALT:
-                    // OPENRCT2MINI gamepad-plan 1.6c.3: SDL_SCANCODE_RETURN
-                    // / SDL_SCANCODE_ESCAPE removed — those keys now flow
-                    // through InputManager and match
-                    // kInterfaceConfirm / kInterfaceDismiss respectively,
-                    // which fire the OSK's registered ModalHooks
-                    // callbacks (Commit / Cancel). Same behaviour, but
-                    // routed through the bindable shortcut system so PAD
-                    // START / PAD BACK work too.
-                    case SDL_SCANCODE_W:      // L2 — swallow / console scroll prev (was F14)
-                    case SDL_SCANCODE_S:      // R2 — swallow / console scroll next (was F15)
-                        return true;
-                    default:
-                        return false;
-                }
-            }
-
-            void FireScancode(int32_t scancode)
-            {
-                switch (scancode)
-                {
-                    case SDL_SCANCODE_UP:
-                        MoveSelectionVertical(-1);
-                        break;
-                    case SDL_SCANCODE_DOWN:
-                        MoveSelectionVertical(+1);
-                        break;
-                    case SDL_SCANCODE_LEFT:
-                        MoveSelectionLeft();
-                        break;
-                    case SDL_SCANCODE_RIGHT:
-                        MoveSelectionRight();
-                        break;
-                    case SDL_SCANCODE_Z:
-                        ActivateSelectedKey();
-                        break;
-                    case SDL_SCANCODE_X:
-                        Backspace();
-                        break;
-                    case SDL_SCANCODE_C: // X button — space (W0: was F16)
-                        if (_mode == OskMode::numpad)
-                            ToggleSign();
-                        else
-                            InsertChar(' ');
-                        break;
-                    case SDL_SCANCODE_V: // Y button — caps (W0: was F17)
-                        if (_mode == OskMode::full)
-                            _caps = !_caps;
-                        // Numpad: Y is unused — see §6.3.
-                        break;
-                    // L1 = Q + LSHIFT dual-emit (W0). Either fires CaretLeft.
-                    // The dual emission means we'll get two FireScancode
-                    // calls per press (one for Q, one for LSHIFT), but
-                    // they're idempotent: caret moves twice — wait, no,
-                    // CaretLeft moves the caret. Two fires = caret moves
-                    // twice. We need to dedupe.
-                    case SDL_SCANCODE_Q:
-                        // Skip — LSHIFT carries the meaning, Q is just a
-                        // testability echo. handleKey returns true for
-                        // both, so nothing leaks; FireScancode no-ops here.
-                        break;
-                    case SDL_SCANCODE_LSHIFT:
-                    case SDL_SCANCODE_RSHIFT:
-                        CaretLeft();
-                        break;
-                    // R1 = A + LALT dual-emit (W0). Skip A for the same
-                    // dedup reason.
-                    case SDL_SCANCODE_A:
-                        break;
-                    case SDL_SCANCODE_LALT:
-                    case SDL_SCANCODE_RALT:
-                        CaretRight();
-                        break;
-                    // OPENRCT2MINI gamepad-plan 1.6c.3: SDL_SCANCODE_RETURN
-                    // / SDL_SCANCODE_ESCAPE arms deleted — the matching
-                    // ModalHooks callbacks installed in onOpen() fire
-                    // Commit / Cancel before the scancode reaches this
-                    // dispatcher.
-                    case SDL_SCANCODE_W: // L2 (W0: was F14)
-                        if (_target == OskTarget::Console)
-                            OpenRCT2::Ui::GetInGameConsole().Input(ConsoleInput::ScrollPrevious);
-                        // Otherwise swallow as no-op (already in IsOskScancode).
-                        break;
-                    case SDL_SCANCODE_S: // R2 (W0: was F15)
-                        if (_target == OskTarget::Console)
-                            OpenRCT2::Ui::GetInGameConsole().Input(ConsoleInput::ScrollNext);
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            void ProcessRepeats()
-            {
-                if (_heldScancode == 0)
-                    return;
-                // Only nav / backspace / caret keys repeat — see
-                // §3.8b. Don't repeat A (insert), X (space), Y (caps),
-                // Start (commit), Select (cancel).
-                if (!ScancodeShouldRepeat(_heldScancode))
-                    return;
-                const uint32_t now = SDL_GetTicks();
-                if (now - _heldSinceMs < kRepeatInitialMs)
-                    return;
-                if (now - _lastFireMs < kRepeatIntervalMs)
-                    return;
-                _lastFireMs = now;
-                FireScancode(_heldScancode);
-            }
-
-            bool ScancodeShouldRepeat(int32_t sc) const
-            {
-                switch (sc)
-                {
-                    case SDL_SCANCODE_W: // L2 — repeat console scroll (W0: was F14)
-                    case SDL_SCANCODE_S: // R2 — repeat console scroll (W0: was F15)
-                        return _target == OskTarget::Console;
-                    case SDL_SCANCODE_UP:
-                    case SDL_SCANCODE_DOWN:
-                    case SDL_SCANCODE_LEFT:
-                    case SDL_SCANCODE_RIGHT:
-                    case SDL_SCANCODE_X:      // backspace
-                    // L1/R1 dual-emit (W0): match both letter and modifier so
-                    // either one triggers caret repeat consistently.
-                    case SDL_SCANCODE_Q:
-                    case SDL_SCANCODE_LSHIFT:
-                    case SDL_SCANCODE_RSHIFT:
-                    case SDL_SCANCODE_A:
-                    case SDL_SCANCODE_LALT:
-                    case SDL_SCANCODE_RALT:
-                        return true;
-                    default:
-                        return false;
-                }
-            }
         };
 
         OskWindow* FindOsk()
@@ -1147,7 +871,7 @@ namespace OpenRCT2::Ui::Windows
 
     namespace
     {
-        OskWindow* OpenSkeleton(WindowBase* parent, OskMode mode, int32_t height)
+        OskWindow* OpenSkeleton(WindowBase* parent, OskMode mode)
         {
             auto* windowMgr = GetWindowManager();
             if (windowMgr->FindByClass(WindowClass::osk) != nullptr)
@@ -1155,11 +879,19 @@ namespace OpenRCT2::Ui::Windows
 
             const int32_t screenW = ContextGetWidth();
             const int32_t screenH = ContextGetHeight();
-            const int32_t w = std::min<int32_t>(screenW, kOskWidth);
-            const auto pos = ScreenCoordsXY{ (screenW - w) / 2, screenH - height };
+            // osk-overhaul bug-fix §B: numpad gets a tighter window
+            // than full QWERTY. modeWidth() encapsulates the mapping.
+            const int32_t w = std::min<int32_t>(screenW, modeWidth(mode));
+            const auto pos = ScreenCoordsXY{ (screenW - w) / 2, screenH - kOskHeight };
 
+            // OPENRCT2MINI osk-overhaul §5: noTitleBar removes the
+            // caption widget and prevents the user from dragging the
+            // window. WindowFlag::stickToFront keeps the OSK above
+            // every other window class so the parent textbox /
+            // TextInput / console below it stays interactive.
             auto* wnd = windowMgr->Create<OskWindow>(
-                WindowClass::osk, pos, ScreenSize{ w, height }, WindowFlag::stickToFront);
+                WindowClass::osk, pos, ScreenSize{ w, kOskHeight },
+                { WindowFlag::stickToFront, WindowFlag::noTitleBar });
             if (wnd == nullptr)
                 return nullptr;
             wnd->setMode(mode);
@@ -1170,7 +902,7 @@ namespace OpenRCT2::Ui::Windows
 
     void OskOpen(WindowBase* parent, OskMode mode)
     {
-        auto* wnd = OpenSkeleton(parent, mode, kOskHeight);
+        auto* wnd = OpenSkeleton(parent, mode);
         if (wnd == nullptr)
             return;
         wnd->setTarget(OskTarget::TextInputWindow, 0);
@@ -1180,7 +912,7 @@ namespace OpenRCT2::Ui::Windows
     void OskOpenForTextbox(
         WindowBase* parent, WidgetIndex widgetIdx, std::string_view initialText, size_t maxLength, OskMode mode)
     {
-        auto* wnd = OpenSkeleton(parent, mode, kOskHeight);
+        auto* wnd = OpenSkeleton(parent, mode);
         if (wnd == nullptr)
             return;
         wnd->setTarget(OskTarget::Textbox, widgetIdx);
@@ -1192,7 +924,7 @@ namespace OpenRCT2::Ui::Windows
         // Console always uses the full keyboard. No parent window —
         // the console isn't a Window, it's drawn directly by
         // UiContext::Draw, so colour inheritance doesn't apply.
-        auto* wnd = OpenSkeleton(nullptr, OskMode::full, kOskHeightConsole);
+        auto* wnd = OpenSkeleton(nullptr, OskMode::full);
         if (wnd == nullptr)
             return;
         wnd->setTarget(OskTarget::Console, 0);
@@ -1221,10 +953,42 @@ namespace OpenRCT2::Ui::Windows
 
     bool OskHandleKey(int32_t sdlScancode, bool down)
     {
+        // OPENRCT2MINI osk-overhaul §1: SDL_KEYDOWN forwarding from
+        // InterceptVirtualCursorKey is dead. Kept as a no-op for ABI
+        // compatibility with the existing UiContext call site, which
+        // will be deleted in the follow-up that strips the OSK arm
+        // from InterceptVirtualCursorKey.
+        (void)sdlScancode;
+        (void)down;
+        return false;
+    }
+
+    // OPENRCT2MINI osk-overhaul §1: routed from OskContextImpl
+    // cursor.cancel handler. Fires the OSK's Backspace key (with flash
+    // + click sound when the active layout has a Backspace widget,
+    // otherwise a silent buffer edit).
+    void OskActivateBackspace()
+    {
         auto* osk = FindOsk();
         if (osk == nullptr)
-            return false;
-        return osk->handleKey(sdlScancode, down);
+            return;
+        osk->activateBackspace();
+    }
+
+    // OPENRCT2MINI osk-overhaul §1: invoked from OskContextImpl when
+    // cursor.click is dispatched in the OSK context. Wraps
+    // pressWidgetByIndex with the focused-widget lookup so the
+    // strategy stays compact.
+    void OskActivateFocusedKey()
+    {
+        auto* osk = FindOsk();
+        if (osk == nullptr)
+            return;
+        auto& mgr = OpenRCT2::Ui::GetInputManager();
+        const auto idx = mgr.getFocusedWidget();
+        if (idx == kWidgetIndexNull)
+            return;
+        WidgetFocus::pressWidgetByIndex(*osk, idx);
     }
 
     std::string OskGetCurrentText()

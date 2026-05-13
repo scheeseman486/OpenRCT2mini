@@ -1004,7 +1004,7 @@ void ShortcutManager::registerDefaultShortcuts()
     // purpose: first-launch behaviour stays "D-pad navigates the
     // focus ring", and users who want non-overlap (e.g. D-pad
     // moves only cursor, never focus) can drop the focus.* binding
-    // through the Shortcut Keys window.
+    // through the Input Bindings window.
     registerShortcut(ShortcutId::kFocusUp,    STR_SHORTCUT_FOCUS_UP,    "UP",    []() {});
     registerShortcut(ShortcutId::kFocusDown,  STR_SHORTCUT_FOCUS_DOWN,  "DOWN",  []() {});
     registerShortcut(ShortcutId::kFocusLeft,  STR_SHORTCUT_FOCUS_LEFT,  "LEFT",  []() {});
@@ -1169,18 +1169,18 @@ void ShortcutManager::registerDefaultShortcuts()
     registerMouseDefault(ShortcutId::kViewZoomScrollUp,   "MOUSE WHEEL UP");
     registerMouseDefault(ShortcutId::kViewZoomScrollDown, "MOUSE WHEEL DOWN");
 
-    // OPENRCT2MINI mouse-input refactor: camera drag default bindings.
-    // RMB drives the legacy "press and hold to pan camera" gesture;
-    // PAD B is the gamepad equivalent. Both also fire cursor.cancel
-    // (right-click action) because cursor.cancel is bound to the
-    // same inputs by default — the cursor.cancel poll synthesises a
-    // rightPress that gets consumed for window-position-drag /
-    // scroll-drag (when not over a viewport) by the existing
-    // MouseInput state machine, while kInterfaceCameraDrag handles
-    // the camera-pan-on-viewport case via its own poll. The two
-    // don't conflict because the camera-drag poll only fires when
-    // cursor is over a viewport, and we removed the camera-drag
-    // branch from the rightPress switch in MouseInput.
+    // OPENRCT2MINI cursor-cancel-drag split: kInterfaceCameraDrag is
+    // the single binding that drives ALL three right-click drag
+    // gestures (camera-pan over viewport, scroll-drag over overflowing
+    // lists, window-position drag over draggable dialogs). Default
+    // RMB and PAD B. cursor.cancel is co-bound to the same inputs by
+    // default (so a single RMB tap still feels like one gesture to
+    // the user) but no longer carries any drag side-effects — its
+    // rightPress handler in MouseInput.cpp only closes tooltips and
+    // brings the under-cursor window to front. The drag dispatch is
+    // owned by InputContextDragBeginAtCursor, called from the
+    // kInterfaceCameraDrag held-state poll in UiContext::Process-
+    // WorldCursor.
     registerMouseDefault(ShortcutId::kInterfaceCameraDrag, "RMB");
     // shade-window keeps the C scancode as its default (the device
     // emits C for face-X). The SCANCODE_C handler in UiContext keeps
@@ -1264,7 +1264,7 @@ void ShortcutManager::registerDefaultShortcuts()
     // a digital DPAD binding AND an analog STICK_L axis binding —
     // ProcessWorldCursor's digital block handles the dpad, and its
     // new analog block handles the stick via getAnalogState. User
-    // can rebind either side via the Shortcut Keys window.
+    // can rebind either side via the Input Bindings window.
     registerPadDefault(ShortcutId::kCursorUp,                          "PAD STICK_L UP");
     registerPadDefault(ShortcutId::kCursorDown,                        "PAD STICK_L DOWN");
     registerPadDefault(ShortcutId::kCursorLeft,                        "PAD STICK_L LEFT");

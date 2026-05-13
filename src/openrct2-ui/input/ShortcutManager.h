@@ -190,7 +190,7 @@ namespace OpenRCT2::Ui
         std::string getDisplayString() const;
 
         // OPENRCT2MINI gamepad-plan 1.7a: per-column display strings.
-        // The Shortcut Keys window splits each row into three columns
+        // The Input Bindings window splits each row into three columns
         // (Keyboard / Mouse / Gamepad) — each column shows only the
         // bindings whose InputDeviceKind matches.
         //
@@ -423,13 +423,22 @@ namespace OpenRCT2::Ui
         bool isPendingShortcutChange() const;
         // OPENRCT2MINI gamepad-plan 1.7b/1.7e: kind defaults to `any`
         // and mode defaults to `replace` so existing callers don't
-        // need to be updated. The per-column Shortcut Keys window
+        // need to be updated. The per-column Input Bindings window
         // passes keyboard / gamepad explicitly depending on which
         // column was clicked, and replace / append based on the
         // append-toggle in the change modal.
         void setPendingShortcutChange(
             std::string_view id, PendingShortcutKind kind = PendingShortcutKind::any,
             PendingShortcutMode mode = PendingShortcutMode::replace);
+
+        // OPENRCT2MINI input-bindings-rework §2.3: clear all bindings
+        // of a given device kind for a single shortcut. The per-cell
+        // bin button in the Input Bindings list drives this (one
+        // call per kind cell). Buckets joyButton / joyHat / joyAxis
+        // together under PendingShortcutKind::gamepad — same grouping
+        // the rebind UI uses. Saves user bindings on success. No-op
+        // if the shortcut id is unknown.
+        void clearBindingsOfKind(std::string_view id, PendingShortcutKind kind);
 
         // OPENRCT2MINI gamepad-plan 1.7e: live-update the append flag
         // while a session is active (called when the user toggles the

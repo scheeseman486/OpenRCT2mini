@@ -16,6 +16,7 @@
 
 #include <SDL.h>
 #include <openrct2-ui/windows/Windows.h>
+#include <openrct2/config/Config.h>
 #include <openrct2/core/Memory.hpp>
 #include <openrct2/core/String.hpp>
 #include <openrct2/core/UTF8.h>
@@ -110,6 +111,18 @@ void TextComposition::HandleMessage(const SDL_Event* e)
 {
     auto& console = GetInGameConsole();
 
+    // OPENRCT2MINI osk-overhaul §6 / C5: when the OSK is up, the OSK
+    // owns text editing. SDL_TEXTINPUT and SDL_KEYDOWN edit-key paths
+    // are gated off here so a hardware key (or scancode-emitting
+    // gamepad button) can't double-type into the textbox while the
+    // OSK is also delivering characters.
+    //
+    // We still let the events fall through to update internal state
+    // (SDL_TEXTEDITING IME buffer, SDL_KEYDOWN's UiContext::SetKeys-
+    // Pressed cache) where it's safe — but skip the buffer-edit
+    // branches at the bottom.
+    const bool oskOpen = Windows::OskIsActive();
+
     switch (e->type)
     {
         case SDL_TEXTEDITING:
@@ -123,7 +136,10 @@ void TextComposition::HandleMessage(const SDL_Event* e)
             // will receive an `SDL_TEXTINPUT` event when a composition is committed
             _imeActive = false;
             _imeBuffer[0] = '\0';
-            if (_session.Buffer != nullptr)
+            // OPENRCT2MINI osk-overhaul §6 / C5: skip when the OSK
+            // owns text editing — the OSK feeds characters via its
+            // widget activations and would double-type otherwise.
+            if (_session.Buffer != nullptr && !oskOpen)
             {
                 // HACK ` will close console, so don't input any text
                 if (e->text.text[0] == '`' && console.IsOpen())
@@ -154,6 +170,14 @@ void TextComposition::HandleMessage(const SDL_Event* e)
 
             // Text input
             if (_session.Buffer == nullptr)
+            {
+                break;
+            }
+            // OPENRCT2MINI osk-overhaul §6 / C5: when the OSK is up, it
+            // owns text editing. Hardware-keyboard caret keys (left /
+            // right / home / end) and backspace would otherwise edit
+            // the parent textbox out-of-sync with the OSK's buffer.
+            if (oskOpen)
             {
                 break;
             }

@@ -236,6 +236,10 @@ namespace OpenRCT2::Ui::Windows
         WIDX_WINDOW_BUTTONS_ON_THE_LEFT,
         WIDX_ENLARGED_UI,
         WIDX_TOUCH_ENHANCEMENTS,
+        // OPENRCT2MINI osk-overhaul §8: gate OSK spawn from all
+        // textbox / TextInput / console paths. Sits between Touch
+        // enhancements and the Input Bindings button.
+        WIDX_ON_SCREEN_KEYBOARD,
         WIDX_HOTKEY_DROPDOWN,
 
         // Gamepad
@@ -408,11 +412,14 @@ namespace OpenRCT2::Ui::Windows
     );
 
     constexpr int32_t kControlsGroupStart = 53;
-    constexpr int32_t kGamepadGroupStart = kControlsGroupStart + 142;
+    // OPENRCT2MINI osk-overhaul §8: Controls group grew by one row
+    // (+15 px) to fit the on-screen keyboard checkbox before the
+    // Input Bindings button. Gamepad group offset bumped to match.
+    constexpr int32_t kGamepadGroupStart = kControlsGroupStart + 157;
 
     static const auto window_options_controls_widgets = makeWidgets(
         kMainOptionsWidgets,
-        makeWidget({  5, kControlsGroupStart +  0},  {300,139}, WidgetType::groupbox, WindowColour::secondary, STR_CONTROLS_GROUP                                                ), // Controls group
+        makeWidget({  5, kControlsGroupStart +  0},  {300,154}, WidgetType::groupbox, WindowColour::secondary, STR_CONTROLS_GROUP                                                ), // Controls group
         makeWidget({ 10, kControlsGroupStart + 13},  {290, 14}, WidgetType::checkbox, WindowColour::tertiary,  STR_SCREEN_EDGE_SCROLLING,      STR_SCREEN_EDGE_SCROLLING_TIP     ), // Edge scrolling
         makeWidget({ 10, kControlsGroupStart + 30},  {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_TRAP_MOUSE,                 STR_TRAP_MOUSE_TIP                ), // Trap mouse
         makeWidget({ 10, kControlsGroupStart + 45},  {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_INVERT_RIGHT_MOUSE_DRAG,    STR_INVERT_RIGHT_MOUSE_DRAG_TIP   ), // Invert right mouse dragging
@@ -420,7 +427,8 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({ 10, kControlsGroupStart + 75},  {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_WINDOW_BUTTONS_ON_THE_LEFT, STR_WINDOW_BUTTONS_ON_THE_LEFT_TIP), // Window buttons on the left
         makeWidget({ 10, kControlsGroupStart + 90},  {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_ENLARGED_UI,                STR_ENLARGED_UI_TIP               ),
         makeWidget({ 25, kControlsGroupStart + 105}, {275, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_TOUCH_ENHANCEMENTS,         STR_TOUCH_ENHANCEMENTS_TIP        ),
-        makeWidget({155, kControlsGroupStart + 120}, {144, 13}, WidgetType::button,   WindowColour::secondary, STR_HOTKEY,                     STR_HOTKEY_TIP                    ), // Set hotkeys buttons
+        makeWidget({ 10, kControlsGroupStart + 120}, {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_ON_SCREEN_KEYBOARD,         STR_ON_SCREEN_KEYBOARD_TIP        ), // OPENRCT2MINI osk-overhaul §8
+        makeWidget({155, kControlsGroupStart + 135}, {144, 13}, WidgetType::button,   WindowColour::secondary, STR_HOTKEY,                     STR_HOTKEY_TIP                    ), // Set hotkeys buttons
 
         // Gamepad group — expanded from 46 px to 62 px to fit the
         // OPENRCT2MINI Phase F.7 widgetFocusAlwaysOn checkbox at +45.
@@ -1826,6 +1834,14 @@ namespace OpenRCT2::Ui::Windows
                     invalidate();
                     windowMgr->InvalidateAll();
                     break;
+                // OPENRCT2MINI osk-overhaul §8: when off, OSK is never
+                // spawned and SDL_TEXTINPUT flows straight to the
+                // active textbox via TextComposition.
+                case WIDX_ON_SCREEN_KEYBOARD:
+                    Config::Get().interface.onScreenKeyboard ^= 1;
+                    Config::Save();
+                    invalidate();
+                    break;
                 case WIDX_INVERT_DRAG:
                     Config::Get().general.invertViewportDrag ^= 1;
                     Config::Save();
@@ -1877,6 +1893,8 @@ namespace OpenRCT2::Ui::Windows
             setCheckboxValue(WIDX_WINDOW_BUTTONS_ON_THE_LEFT, Config::Get().interface.windowButtonsOnTheLeft);
             setCheckboxValue(WIDX_ENLARGED_UI, Config::Get().interface.enlargedUi);
             setCheckboxValue(WIDX_TOUCH_ENHANCEMENTS, Config::Get().interface.touchEnhancements);
+            // OPENRCT2MINI osk-overhaul §8: on-screen keyboard toggle.
+            setCheckboxValue(WIDX_ON_SCREEN_KEYBOARD, Config::Get().interface.onScreenKeyboard);
 
             widgetSetEnabled(*this, WIDX_TOUCH_ENHANCEMENTS, Config::Get().interface.enlargedUi);
 

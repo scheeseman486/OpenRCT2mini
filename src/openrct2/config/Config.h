@@ -263,6 +263,13 @@ namespace OpenRCT2::Config
         bool windowButtonsOnTheLeft;
         bool enlargedUi;
         bool touchEnhancements;
+        // OPENRCT2MINI osk-overhaul §8: when false, OSK is never
+        // spawned (textboxes, TextInput modal, in-game console).
+        // SDL_TEXTINPUT flows directly to TextComposition via the
+        // hardware keyboard. Default true so device builds (Miyoo Mini)
+        // see no regression; desktop users with a hardware keyboard
+        // will likely want to disable it from Options > Controls.
+        bool onScreenKeyboard;
         CursorStyle cursorStyle;
         // OPENRCT2MINI: optional 50%-translucent drop shadow under the
         // software cursor sprite, offset (+2, +2) pixels. Default off.

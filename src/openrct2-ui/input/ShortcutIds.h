@@ -64,7 +64,7 @@ namespace OpenRCT2::Ui::ShortcutId
     // Defaults overlap with cursor.* on purpose so first-launch
     // behaviour is preserved (D-pad / arrows still navigate the
     // focus ring); users who want non-overlapping behaviour can
-    // unbind one side via the Shortcut Keys window.
+    // unbind one side via the Input Bindings window.
     constexpr std::string_view kFocusUp = "focus.up";
     constexpr std::string_view kFocusDown = "focus.down";
     constexpr std::string_view kFocusLeft = "focus.left";

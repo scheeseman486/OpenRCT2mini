@@ -317,13 +317,48 @@ void ShortcutManager::setPendingShortcutMode(PendingShortcutMode mode)
     _pendingShortcutMode = mode;
 }
 
+void ShortcutManager::clearBindingsOfKind(std::string_view id, PendingShortcutKind kind)
+{
+    // OPENRCT2MINI input-bindings-rework §2.3: remove every binding on
+    // shortcut `id` whose device-kind falls into the requested bucket.
+    // Gamepad bucket = joyButton + joyHat + joyAxis (mirrors the rebind
+    // UI's column → kind mapping).
+    auto* shortcut = getShortcut(id);
+    if (shortcut == nullptr)
+        return;
+    auto& bindings = shortcut->current;
+    const auto matchesKind = [kind](InputDeviceKind k) -> bool {
+        switch (kind)
+        {
+            case PendingShortcutKind::keyboard:
+                return k == InputDeviceKind::keyboard;
+            case PendingShortcutKind::mouse:
+                return k == InputDeviceKind::mouse;
+            case PendingShortcutKind::gamepad:
+                return k == InputDeviceKind::joyButton || k == InputDeviceKind::joyHat
+                    || k == InputDeviceKind::joyAxis;
+            case PendingShortcutKind::any:
+                return true;
+        }
+        return false;
+    };
+    const auto before = bindings.size();
+    bindings.erase(
+        std::remove_if(
+            bindings.begin(), bindings.end(),
+            [&](const ShortcutInput& b) { return matchesKind(b.kind); }),
+        bindings.end());
+    if (bindings.size() != before)
+        saveUserBindings();
+}
+
 namespace
 {
     // OPENRCT2MINI gamepad-plan 1.7b: classify an event's device kind
     // into the same buckets the capture filter uses.
     //
     // Mouse-column refactor: mouse events used to be lumped in with
-    // keyboard (single per-row column showed both). The Shortcut Keys
+    // keyboard (single per-row column showed both). The Input Bindings
     // window now has a dedicated Mouse column, so each helper here is
     // strictly its own kind.
     bool isKeyboardKind(OpenRCT2::Ui::InputDeviceKind k)

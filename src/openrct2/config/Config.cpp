@@ -520,6 +520,10 @@ namespace OpenRCT2::Config
             model->windowButtonsOnTheLeft = reader->GetBoolean("window_buttons_on_the_left", kWindowButtonsOnTheLeftDefault);
             model->enlargedUi = reader->GetBoolean("enlarged_ui", kEnlargedUiDefault);
             model->touchEnhancements = reader->GetBoolean("touch_enhancements", kEnlargedUiDefault);
+            // OPENRCT2MINI osk-overhaul §8: gate the on-screen keyboard.
+            // Defaults to true so device builds keep spawning it; desktop
+            // users can disable it from Options > Controls.
+            model->onScreenKeyboard = reader->GetBoolean("on_screen_keyboard", true);
             // OPENRCT2MINI revision 59 / 61: cursor-style theme. Stored
             // as a name string ("classic", "default", "high_contrast")
             // so future themes can be added without renumbering.
@@ -567,6 +571,7 @@ namespace OpenRCT2::Config
         writer->WriteBoolean("window_buttons_on_the_left", model->windowButtonsOnTheLeft);
         writer->WriteBoolean("enlarged_ui", model->enlargedUi);
         writer->WriteBoolean("touch_enhancements", model->touchEnhancements);
+        writer->WriteBoolean("on_screen_keyboard", model->onScreenKeyboard);
         // OPENRCT2MINI revision 59 / 61 / 77: cursor-style theme as a name string.
         u8string styleName{ "default" };
         if (model->cursorStyle == CursorStyle::Classic)

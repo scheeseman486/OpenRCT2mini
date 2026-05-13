@@ -271,7 +271,10 @@ void InGameConsole::Open()
     // OPENRCT2MINI: spawn the on-screen keyboard so the user can type
     // commands without a physical keyboard. The OSK calls back into
     // OskMirrorBuffer / OskSubmitLine for the live mirror and commit.
-    OpenRCT2::Ui::Windows::OskOpenForConsole();
+    // osk-overhaul §7+§8: gate on the Options checkbox so desktop users
+    // can drive the console with a hardware keyboard via SDL_TEXTINPUT.
+    if (Config::Get().interface.onScreenKeyboard)
+        OpenRCT2::Ui::Windows::OskOpenForConsole();
 }
 
 void InGameConsole::Close()

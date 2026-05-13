@@ -640,8 +640,15 @@ namespace OpenRCT2::Ui::Windows
         // OPENRCT2MINI: spawn the on-screen keyboard. The OSK has its
         // own buffer; on Start it fires the parent's onTextInput and
         // ends this textbox session.
-        OskOpenForTextbox(
-            const_cast<WindowBase*>(&callW), callWidget, existingText, static_cast<size_t>(maxLength), oskMode);
+        // osk-overhaul §8: only spawn when the user has the on-screen
+        // keyboard enabled. When off, the ContextStartTextInput call
+        // above keeps SDL_TEXTINPUT flowing into TextComposition, so
+        // a hardware keyboard can drive the textbox directly.
+        if (Config::Get().interface.onScreenKeyboard)
+        {
+            OskOpenForTextbox(
+                const_cast<WindowBase*>(&callW), callWidget, existingText, static_cast<size_t>(maxLength), oskMode);
+        }
     }
 
     void WindowCancelTextbox()
@@ -1086,6 +1093,15 @@ namespace OpenRCT2::Ui::Windows
     void InvalidateAllWindowsAfterInput()
     {
         WindowVisitEach([](WindowBase* w) { WindowUpdateScrollWidgets(*w); });
+        // OPENRCT2MINI list-focus-plan flicker fix: after upstream
+        // WindowUpdateScrollWidgets has cleared per-window hover state
+        // for the input frame (StaffList/GuestList reset _highlighted-
+        // Index in onScrollGetSize, etc.), re-synthesise the hover for
+        // the focused list-mode scroll item so the focus ring's
+        // associated row highlight survives. Mouse-driven hovers
+        // re-establish themselves naturally each frame; focus-driven
+        // hovers don't, so they need this nudge.
+        OpenRCT2::Ui::GetInputManager().restoreFocusedListHover();
     }
 
     /**

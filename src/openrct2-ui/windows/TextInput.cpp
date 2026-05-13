@@ -16,6 +16,7 @@
 #include <openrct2-ui/windows/Windows.h>
 #include <openrct2/Context.h>
 #include <openrct2/Input.h>
+#include <openrct2/config/Config.h>
 #include <openrct2/core/String.hpp>
 #include <openrct2/core/UTF8.h>
 #include <openrct2/drawing/ColourMap.h>
@@ -530,8 +531,10 @@ namespace OpenRCT2::Ui::Windows
             w->setText(existing_text, maxLength);
             w->setOskMode(oskMode);
             // OPENRCT2MINI: spawn OSK now (after Create returns) so the
-            // caller's OskMode is in effect.
-            OskOpen(w, oskMode);
+            // caller's OskMode is in effect. osk-overhaul §8: only when
+            // the user hasn't disabled the on-screen keyboard in Options.
+            if (Config::Get().interface.onScreenKeyboard)
+                OskOpen(w, oskMode);
         }
     }
 
@@ -549,7 +552,9 @@ namespace OpenRCT2::Ui::Windows
             w->setText(initialValue, maxLength);
             w->setCallback(callback, cancelCallback);
             w->setOskMode(oskMode);
-            OskOpen(w, oskMode);
+            // OPENRCT2MINI osk-overhaul §8.
+            if (Config::Get().interface.onScreenKeyboard)
+                OskOpen(w, oskMode);
         }
     }
 
