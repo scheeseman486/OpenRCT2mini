@@ -301,87 +301,24 @@ namespace OpenRCT2
                         InputWidgetLeft(screenCoords, w, widgetIndex);
                         break;
                     case MouseState::rightPress:
+                        // OPENRCT2MINI input-rework: cursor.cancel (the
+                        // shortcut bound to RMB / PAD B / X by default)
+                        // no longer initiates ANY drag. Window-drag,
+                        // scroll-drag and camera-drag are owned by
+                        // kInterfaceCameraDrag's held-state poll in
+                        // UiContext::ProcessWorldCursor → InputContextDrag
+                        // BeginAtCursor / InputContextDragEndCurrent.
+                        // cursor.cancel's right-press now does only the
+                        // ambient cleanup the legacy upstream code did:
+                        // close the tooltip and raise the window under
+                        // the cursor to the front (so a single right-tap
+                        // is still a useful "interact with this window"
+                        // gesture). All the drag-init dispatch lives in
+                        // InputContextDragBeginAtCursor.
                         windowMgr->CloseByClass(WindowClass::tooltip);
-
                         if (w != nullptr)
                         {
                             w = windowMgr->BringToFront(*w);
-                        }
-
-                        if (w != nullptr)
-                        {
-                            // OPENRCT2MINI: right-click is the universal
-                            // context-sensitive drag gesture.
-                            //   - Over the main viewport (stickToBack /
-                            //     noBackground / noTitleBar — i.e. a window
-                            //     that can't itself be dragged) → camera
-                            //     pan / quick click =
-                            //     ViewportInteractionRightClick ("delete"
-                            //     in game world). Existing.
-                            //   - Over a viewport widget INSIDE a regular
-                            //     dialog (Park, Ride, Guest, …) → fall
-                            //     through to window-drag. Trying to
-                            //     camera-pan a small embedded viewport
-                            //     just silently fails because most of
-                            //     those windows have noScrolling.
-                            //   - Over a scroll widget → drag-scroll the
-                            //     list contents. Existing.
-                            //   - Over any other widget (or no widget at all,
-                            //     just window chrome) on a title-barred,
-                            //     non-toolbar window → drag the window. New.
-                            // Toolbars / tooltips / dropdowns / error popups
-                            // / debug overlays are excluded by their flags
-                            // (noTitleBar / noBackground / stickToBack).
-                            const auto wType = widget != nullptr ? widget->type : WidgetType::empty;
-                            const bool isUndraggableShell = w->flags.hasAny(
-                                WindowFlag::stickToBack, WindowFlag::noBackground, WindowFlag::noTitleBar);
-                            // OPENRCT2MINI mouse-input refactor: the
-                            // camera-drag-on-viewport branch is gone.
-                            // Camera drag is now driven by the
-                            // kInterfaceCameraDrag shortcut poll
-                            // (UiContext::ProcessWorldCursor) which
-                            // calls InputViewportDragBeginAtCursor /
-                            // InputViewportDragEndCurrent on rising /
-                            // falling edge. The other right-click
-                            // drag types (scroll-drag, window-drag)
-                            // stay here; they aren't bindable yet
-                            // and the rightPress event is still the
-                            // right entry point for them.
-                            if (wType == WidgetType::viewport && isUndraggableShell)
-                            {
-                                // intentional no-op — camera drag
-                                // handled by polling. Falls through.
-                            }
-                            else if (wType == WidgetType::scroll && [&] {
-                                         // OPENRCT2MINI: only do drag-scroll if
-                                         // the scrollable region actually
-                                         // overflows. Many scroll widgets in
-                                         // OpenRCT2 (object selectors, lists)
-                                         // declare scroll capability but their
-                                         // content fits in the visible area —
-                                         // there's nothing to scroll. In that
-                                         // case fall through to the window-drag
-                                         // branch so right-click still works as
-                                         // a "grab the window" gesture.
-                                         const auto scrollIdx = WindowGetScrollDataIndex(*w, widgetIndex);
-                                         const auto& scroll = w->scrolls[scrollIdx];
-                                         const bool hOverflow = (widget->content & SCROLL_HORIZONTAL)
-                                             && scroll.contentWidth > widget->width();
-                                         const bool vOverflow = (widget->content & SCROLL_VERTICAL)
-                                             && scroll.contentHeight > widget->height();
-                                         return hOverflow || vOverflow;
-                                     }())
-                            {
-                                InputScrollDragBegin(screenCoords, w, widgetIndex);
-                            }
-                            else if (!isUndraggableShell)
-                            {
-                                // widgetIndex 0 (frame) when cursor is in a
-                                // dead zone — only used for tooltip
-                                // restoration on release, harmless.
-                                InputWindowPositionBegin(
-                                    *w, widgetIndex == kWidgetIndexNull ? 0 : widgetIndex, screenCoords);
-                            }
                         }
                         break;
                     case MouseState::leftRelease:
@@ -637,7 +574,6 @@ namespace OpenRCT2
         Viewport* viewport;
 
         auto newDragCoords = ContextGetCursorPosition();
-
         auto differentialCoords = newDragCoords - gInputDragLast;
         if (differentialCoords.x == 0 && differentialCoords.y == 0)
             return;
@@ -710,49 +646,133 @@ namespace OpenRCT2
         ContextShowCursor();
     }
 
-    // OPENRCT2MINI mouse-input refactor: public entry points for the
-    // kInterfaceCameraDrag shortcut poll. The poll lives in
-    // UiContext::ProcessWorldCursor; calling it from here would
-    // require pulling in shortcut headers, so the polling owns the
-    // edge detection and we just expose Begin / End / state queries.
-    void InputViewportDragBeginAtCursor()
+    // OPENRCT2MINI mouse-input refactor / cursor-cancel-drag split:
+    // public entry points for the kInterfaceCameraDrag held-state poll.
+    // The poll lives in UiContext::ProcessWorldCursor. Calling shortcut
+    // code from MouseInput.cpp would pull half of openrct2-ui in here,
+    // so the poll owns rising / falling edge detection and we just
+    // expose Begin / End / state queries.
+    //
+    // InputContextDragBeginAtCursor is a context-sensitive dispatcher.
+    // Same priority order the legacy rightPress switch used (before the
+    // drag-init was stripped out of it):
+    //   1. Cursor over a main viewport (stickToBack / noBackground /
+    //      noTitleBar window with a viewport widget under cursor) →
+    //      camera-pan via InputViewportDragBegin. Tap-and-release <
+    //      500ms fires ViewportInteractionRightClick (the "delete tile"
+    //      action) — the camera-drag poll handles that fallback.
+    //   2. Cursor over a scroll widget whose content actually overflows
+    //      → InputScrollDragBegin. Non-overflowing scroll widgets fall
+    //      through to step 3 (drag-scroll on a fits-in-place list is a
+    //      surprise no-op; falling through to window-drag matches user
+    //      intent — "I'm trying to move this dialog").
+    //   3. Otherwise, on a title-barred non-toolbar window → bring it
+    //      forward and start a window-position drag.
+    // Toolbars / tooltips / dropdowns / error popups / debug overlays
+    // are filtered out by the isUndraggableShell flag check.
+    void InputContextDragBeginAtCursor()
     {
-        // Don't start while another drag is already in progress
-        // (e.g. user already initiated scroll-drag via right-click on
-        // a list, then pressed PAD B). The state machine assumes
-        // single-source drags — re-entering would corrupt
+        // Re-entrancy guard: don't start a new drag while another drag
+        // (left-caption drag, left-scrollbar, prior right-drag) is
+        // already in progress. Re-entering would corrupt the shared
         // _dragWidget bookkeeping.
         if (_inputState != InputState::Reset && _inputState != InputState::Normal)
             return;
-        // Same scene-gating as the legacy rightPress path.
-        if (gLegacyScene == LegacyScene::trackDesignsManager || gLegacyScene == LegacyScene::titleSequence)
-            return;
 
-        auto cursorPosition = ContextGetCursorPosition();
+        const auto cursorPosition = ContextGetCursorPosition();
         auto* windowMgr = GetWindowManager();
         WindowBase* w = windowMgr->FindFromPoint(cursorPosition);
         if (w == nullptr)
             return;
-        // Only the main viewport / extra-viewport class — narrow
-        // viewports embedded in regular dialog windows (Park / Ride /
-        // Guest details) didn't camera-pan in the legacy path either.
+
+        const WidgetIndex widgetIndex = windowMgr->FindWidgetFromPoint(*w, cursorPosition);
+        const Widget* widget = (widgetIndex == kWidgetIndexNull) ? nullptr : &w->widgets[widgetIndex];
+        const auto wType = widget != nullptr ? widget->type : WidgetType::empty;
         const bool isUndraggableShell = w->flags.hasAny(
             WindowFlag::stickToBack, WindowFlag::noBackground, WindowFlag::noTitleBar);
-        if (!isUndraggableShell)
-            return;
-        WidgetIndex widgetIndex = windowMgr->FindWidgetFromPoint(*w, cursorPosition);
-        if (widgetIndex == kWidgetIndexNull)
-            return;
-        if (w->widgets[widgetIndex].type != WidgetType::viewport)
-            return;
 
-        InputViewportDragBegin(*w);
+        // 1. Camera-pan over the main/extra viewport. Legacy rightPress
+        // skipped camera-drag in the title-sequence scene (no
+        // meaningful camera to drive) and the track-designs-manager
+        // scene (no main viewport at all). Both gates apply only to
+        // the camera branch — the scroll/window-drag branches below
+        // still work because user-facing dialogs like ScenarioSelect
+        // appear over the title scene and need to scroll-drag.
+        if (isUndraggableShell && wType == WidgetType::viewport)
+        {
+            if (gLegacyScene == LegacyScene::trackDesignsManager
+                || gLegacyScene == LegacyScene::titleSequence)
+                return;
+            InputViewportDragBegin(*w);
+            return;
+        }
+
+        // 2. Scroll-drag — only on widgets that actually overflow.
+        if (!isUndraggableShell && wType == WidgetType::scroll && widget != nullptr)
+        {
+            const auto scrollIdx = WindowGetScrollDataIndex(*w, widgetIndex);
+            const auto& scroll = w->scrolls[scrollIdx];
+            const bool hOverflow = (widget->content & SCROLL_HORIZONTAL)
+                && scroll.contentWidth > widget->width();
+            const bool vOverflow = (widget->content & SCROLL_VERTICAL)
+                && scroll.contentHeight > widget->height();
+            if (hOverflow || vOverflow)
+            {
+                InputScrollDragBegin(cursorPosition, w, widgetIndex);
+                return;
+            }
+            // fall through to window-drag for non-overflowing scrolls.
+        }
+
+        // 3. Window-position drag. BringToFront has historically been
+        // a side-effect of the rightPress that initiated the drag —
+        // since rightPress no longer drives drag-init, do it here so
+        // the visual cue still happens regardless of how the drag was
+        // triggered (mouse, gamepad, keyboard binding).
+        if (!isUndraggableShell)
+        {
+            w = windowMgr->BringToFront(*w);
+            if (w == nullptr)
+                return;
+            // widgetIndex 0 (frame) when cursor is in a dead zone —
+            // only used for tooltip restoration on release, harmless.
+            InputWindowPositionBegin(
+                *w, widgetIndex == kWidgetIndexNull ? 0 : widgetIndex, cursorPosition);
+        }
     }
 
-    void InputViewportDragEndCurrent()
+    // End whichever drag is currently in progress. Safe to call when
+    // none of the three drag states is active — it's a no-op.
+    void InputContextDragEndCurrent()
     {
-        if (_inputState == InputState::ViewportRight)
-            InputViewportDragEnd();
+        switch (_inputState)
+        {
+            case InputState::ViewportRight:
+                InputViewportDragEnd();
+                break;
+            case InputState::ScrollRight:
+                // Mirrors the rightRelease branch of InputScrollRight.
+                _inputState = InputState::Reset;
+                ContextShowCursor();
+                break;
+            case InputState::PositioningWindow:
+            {
+                auto* windowMgr = GetWindowManager();
+                auto* w = windowMgr->FindByNumber(
+                    _dragWidget.windowClassification, _dragWidget.windowNumber);
+                if (w != nullptr)
+                {
+                    InputWindowPositionEnd(*w, ContextGetCursorPosition());
+                }
+                else
+                {
+                    _inputState = InputState::Reset;
+                }
+                break;
+            }
+            default:
+                break;
+        }
     }
 
     bool CameraDragWasShortPress()
@@ -1286,6 +1306,33 @@ namespace OpenRCT2
      */
     void ProcessMouseOver(const ScreenCoordsXY& screenCoords)
     {
+        // OPENRCT2MINI cursor-selector-modal-plan: when the selector is
+        // active (focus mode driving the UI, cursor hidden), suppress
+        // hover-dispatch entirely. The virtual cursor's position is
+        // still being polled — without this gate, every frame fires an
+        // onScrollMouseOver on whatever widget happens to be under the
+        // invisible cursor, which spawns tooltips, highlights list
+        // rows, loads preview screenshots, etc. — visible state
+        // changes driven by a cursor the user can't see. Focus mode
+        // owns its own hover state via restoreFocusedListHover; real
+        // mouse motion will transition the selector back to hidden
+        // (via SelectorTransitionSource::realMouseMotion) and resume
+        // hover-dispatch on the next frame.
+        //
+        // Also close any tooltip that was already showing so a
+        // tooltip spawned by the last cursor-mode hover doesn't
+        // linger over the focus ring.
+        {
+            auto& mgr = GetInputManager();
+            if (mgr.getSelectorMode() == InputManager::SelectorMode::active)
+            {
+                auto* windowMgr = GetWindowManager();
+                if (windowMgr != nullptr)
+                    windowMgr->CloseByClass(WindowClass::tooltip);
+                return;
+            }
+        }
+
         CursorID cursorId = CursorID::Arrow;
         auto ft = Formatter();
         ft.Add<StringId>(kStringIdNone);
