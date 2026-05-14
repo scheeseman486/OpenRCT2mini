@@ -1,0 +1,700 @@
+{
+    "soundEffects": {
+        "blockBrakeClose": {
+            "disabled": false,
+            "envelopeDurationMs": 80,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.30000001192092896,
+                    "t": 0
+                },
+                {
+                    "i": 0.0,
+                    "t": 80
+                }
+            ],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "blockBrakeRelease": {
+            "disabled": false,
+            "envelopeDurationMs": 60,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.20000000298023224,
+                    "t": 0
+                },
+                {
+                    "i": 0.0,
+                    "t": 60
+                }
+            ],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "crash": {
+            "disabled": false,
+            "envelopeDurationMs": 500,
+            "high": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.800000011920929,
+                    "t": 10
+                },
+                {
+                    "i": 0.20000000298023224,
+                    "t": 80
+                },
+                {
+                    "i": 0.0,
+                    "t": 200
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 1.0,
+                    "t": 20
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 200
+                },
+                {
+                    "i": 0.0,
+                    "t": 500
+                }
+            ],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "crowdAmbience": {
+            "disabled": false,
+            "envelopeDurationMs": 500,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.05000000074505806,
+                    "t": 0
+                },
+                {
+                    "i": 0.05000000074505806,
+                    "t": 500
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "error": {
+            "disabled": false,
+            "envelopeDurationMs": 120,
+            "high": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.800000011920929,
+                    "t": 10
+                },
+                {
+                    "i": 0.0,
+                    "t": 120
+                }
+            ],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "frictionClassic": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [
+                {
+                    "i": 0.10000000149011612,
+                    "t": 0
+                },
+                {
+                    "i": 0.10000000149011612,
+                    "t": 250
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.5,
+                    "t": 0
+                },
+                {
+                    "i": 0.5,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "goKartEngine": {
+            "disabled": false,
+            "envelopeDurationMs": 200,
+            "high": [
+                {
+                    "i": 0.20000000298023224,
+                    "t": 0
+                },
+                {
+                    "i": 0.20000000298023224,
+                    "t": 200
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.30000001192092896,
+                    "t": 0
+                },
+                {
+                    "i": 0.30000001192092896,
+                    "t": 200
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "liftArrow": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.4000000059604645,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "liftBM": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.4000000059604645,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "liftClassic": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.4000000059604645,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "liftFrictionWheels": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.4000000059604645,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "liftRMC": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.4000000059604645,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "liftWildMouse": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.4000000059604645,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "liftWood": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.4000000059604645,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "placeItem": {
+            "disabled": false,
+            "envelopeDurationMs": 60,
+            "high": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 5
+                },
+                {
+                    "i": 0.0,
+                    "t": 60
+                }
+            ],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "rideLaunch1": {
+            "disabled": false,
+            "envelopeDurationMs": 350,
+            "high": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 50
+                },
+                {
+                    "i": 0.0,
+                    "t": 150
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.800000011920929,
+                    "t": 50
+                },
+                {
+                    "i": 0.0,
+                    "t": 350
+                }
+            ],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "rideLaunch2": {
+            "disabled": false,
+            "envelopeDurationMs": 350,
+            "high": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 50
+                },
+                {
+                    "i": 0.0,
+                    "t": 150
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.800000011920929,
+                    "t": 50
+                },
+                {
+                    "i": 0.0,
+                    "t": 350
+                }
+            ],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "scream1": {
+            "disabled": false,
+            "envelopeDurationMs": 300,
+            "high": [
+                {
+                    "i": 0.30000001192092896,
+                    "t": 0
+                },
+                {
+                    "i": 0.30000001192092896,
+                    "t": 300
+                }
+            ],
+            "low": [],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "scream2": {
+            "disabled": false,
+            "envelopeDurationMs": 300,
+            "high": [
+                {
+                    "i": 0.30000001192092896,
+                    "t": 0
+                },
+                {
+                    "i": 0.30000001192092896,
+                    "t": 300
+                }
+            ],
+            "low": [],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "scream3": {
+            "disabled": false,
+            "envelopeDurationMs": 300,
+            "high": [
+                {
+                    "i": 0.30000001192092896,
+                    "t": 0
+                },
+                {
+                    "i": 0.30000001192092896,
+                    "t": 300
+                }
+            ],
+            "low": [],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "scream4": {
+            "disabled": false,
+            "envelopeDurationMs": 300,
+            "high": [
+                {
+                    "i": 0.30000001192092896,
+                    "t": 0
+                },
+                {
+                    "i": 0.30000001192092896,
+                    "t": 300
+                }
+            ],
+            "low": [],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "scream5": {
+            "disabled": false,
+            "envelopeDurationMs": 300,
+            "high": [
+                {
+                    "i": 0.30000001192092896,
+                    "t": 0
+                },
+                {
+                    "i": 0.30000001192092896,
+                    "t": 300
+                }
+            ],
+            "low": [],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "scream6": {
+            "disabled": false,
+            "envelopeDurationMs": 300,
+            "high": [
+                {
+                    "i": 0.30000001192092896,
+                    "t": 0
+                },
+                {
+                    "i": 0.30000001192092896,
+                    "t": 300
+                }
+            ],
+            "low": [],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "scream7": {
+            "disabled": false,
+            "envelopeDurationMs": 300,
+            "high": [
+                {
+                    "i": 0.30000001192092896,
+                    "t": 0
+                },
+                {
+                    "i": 0.30000001192092896,
+                    "t": 300
+                }
+            ],
+            "low": [],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "trackFrictionBM": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [
+                {
+                    "i": 0.10000000149011612,
+                    "t": 0
+                },
+                {
+                    "i": 0.10000000149011612,
+                    "t": 250
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.5,
+                    "t": 0
+                },
+                {
+                    "i": 0.5,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "trackFrictionClassicWood": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [
+                {
+                    "i": 0.10000000149011612,
+                    "t": 0
+                },
+                {
+                    "i": 0.10000000149011612,
+                    "t": 250
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.5,
+                    "t": 0
+                },
+                {
+                    "i": 0.5,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "trackFrictionTrain": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [
+                {
+                    "i": 0.10000000149011612,
+                    "t": 0
+                },
+                {
+                    "i": 0.10000000149011612,
+                    "t": 250
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.5,
+                    "t": 0
+                },
+                {
+                    "i": 0.5,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "trackFrictionWater": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [
+                {
+                    "i": 0.10000000149011612,
+                    "t": 0
+                },
+                {
+                    "i": 0.10000000149011612,
+                    "t": 250
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.5,
+                    "t": 0
+                },
+                {
+                    "i": 0.5,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "trackFrictionWood": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [
+                {
+                    "i": 0.10000000149011612,
+                    "t": 0
+                },
+                {
+                    "i": 0.10000000149011612,
+                    "t": 250
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.5,
+                    "t": 0
+                },
+                {
+                    "i": 0.5,
+                    "t": 250
+                }
+            ],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "waterSplash": {
+            "disabled": false,
+            "envelopeDurationMs": 250,
+            "high": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.20000000298023224,
+                    "t": 20
+                },
+                {
+                    "i": 0.0,
+                    "t": 100
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.0,
+                    "t": 0
+                },
+                {
+                    "i": 0.4000000059604645,
+                    "t": 30
+                },
+                {
+                    "i": 0.0,
+                    "t": 250
+                }
+            ],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        }
+    },
+    "version": 2
+}
