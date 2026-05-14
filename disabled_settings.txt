@@ -1,0 +1,78 @@
+OpenRCT2mini — settings that are disabled, hidden, or removed in Miyoo Mini builds
+==================================================================================
+
+Anything in this list is greyed out, stripped from a dropdown, or removed
+from a menu when the binary is built with -DOPENRCT2MINI=ON. The host /
+AppImage build (OPENRCT2MINI=OFF) keeps all of them.
+
+Each entry names the UI location, the gating macro / file, and a brief
+reason. Where the entry says "removed" the widget is gone entirely; where
+it says "greyed out" the widget is visible but disabled so the user can
+see the value the build is locked to.
+
+
+Options > Display
+-----------------
+* Fullscreen mode dropdown                 — greyed out  (Options.cpp:1100 #ifdef OPENRCT2MINI). Mini is fullscreen always.
+* Resolution dropdown                      — greyed out. Panel is fixed at 640x480.
+* Window scale + ↑/↓                       — greyed out. Display is the panel; nothing to scale to.
+* Drawing engine dropdown                  — greyed out. Software is the only path that drives the mmiyoo render driver.
+* Frame rate limit dropdown                — greyed out. Tied to vsync on the panel.
+* Multi-threaded rendering checkbox        — greyed out + force-disabled (Config.cpp #ifdef OPENRCT2MINI). Net regression on the Mini's single-issue ARM core.
+* "Minimize on focus loss" checkbox        — greyed out. OnionUI doesn't multitask, the app never loses focus.
+* "Disable screensaver" checkbox           — greyed out. The device is always-on; nothing to suppress.
+
+
+Options > Audio
+---------------
+* Audio device dropdown                    — greyed out  (Options.cpp:1772 #ifdef OPENRCT2MINI). The Mini has exactly one mi_ao output.
+* "Pause audio when window loses focus"    — greyed out. App always in foreground (see above).
+
+
+Options > Controls
+------------------
+* "Trap mouse cursor in window" checkbox   — greyed out  (Options.cpp:1872 #ifdef OPENRCT2MINI). No real mouse on the Mini.
+
+
+Options > Advanced
+------------------
+* "Stay connected after desync"            — greyed out (unconditional, both builds — Options.cpp:2523). Multiplayer is compiled out (DISABLE_NETWORK).
+
+
+Language dropdown (Options > General)
+-------------------------------------
+* Arabic, Chinese (Simplified), Chinese (Traditional), Japanese, Korean,
+  Vietnamese                               — hidden  (Options.cpp:78 IsLanguageHiddenFromDropdown). No ICU on Mini (cut 34 — DISABLE_ICU + CP1252 fallback) and no TTF fonts shipped, so glyph shaping / BiDi / CJK rendering aren't available.
+
+
+Main Menu > Game Tools (title screen)
+-------------------------------------
+* "Open Custom Content Folder"             — removed  (TitleMenu.cpp:50 #ifdef OPENRCT2MINI). Handheld has a fixed SD layout; users don't browse a "custom content" folder.
+
+
+About window
+------------
+* Upstream-only buttons (Discord / Steam / changelog link etc.)
+                                           — removed in the layout shipped with the Mini build (host-restoration-plan §2g locked the strip after a brief restoration attempt).
+
+
+Top toolbar / Disk options dropdown
+-----------------------------------
+* "Report a bug on GitHub"                 — removed (cut completed task #172). The device's launcher can't open URLs, so the link was dead.
+
+
+Window resolution (config.ini)
+------------------------------
+* window_width / window_height             — NOT clamped (recent change). Defaults flow from the embedded config.ini seed under config/miyoo_mini/save/ (-1 / -1 → falls back to 640x480 at startup). The UiContext min-size guard (640x480) still prevents the user from dragging the window smaller at runtime, but nothing in the binary overrides a valid larger value the user explicitly puts in config.ini. Authors who edit config to something the mmiyoo render driver can't allocate (texture cap ~800x600) take on the risk themselves.
+
+
+Source-of-truth references
+--------------------------
+* Options.cpp:1100, 1772, 1872, 2523       — Options > Display / Audio / Controls / Advanced gates
+* Options.cpp:78                           — Language dropdown hide-list
+* Config.cpp:#ifdef OPENRCT2MINI           — multi-threaded rendering force-off
+* TitleMenu.cpp:50                         — Game Tools menu trim
+* UiContext.cpp:1430+                      — window size fallback + min-size guard (no hard clamp post-change)
+
+To regenerate this list, grep the repo for `#ifdef OPENRCT2MINI` inside
+src/openrct2-ui/windows/ and src/openrct2/config/.
