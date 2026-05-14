@@ -1,0 +1,12 @@
+{
+    "_comment": "Per-build UI gate manifest. Each entry in 'disabled' is a widget identifier whose runtime state is forced to disabled (greyed out, still drawn). Each entry in 'removed' is a UI element that is stripped from the layout entirely (widget hidden, dropdown entry omitted, language filtered from the language selector). See disabled_settings.txt at repo root for the human-facing summary of why each entry is gated. This file is embedded into the binary at build time by cmake/EmbedFileAsArray.cmake; see src/openrct2/ui/DisabledSettings.cpp for the runtime consumer.",
+    "disabled": [],
+    "removed": [
+        "Language.ar-EG",
+        "Language.zh-CN",
+        "Language.zh-TW",
+        "Language.ja-JP",
+        "Language.ko-KR",
+        "Language.vi-VN"
+    ]
+}

@@ -1,0 +1,208 @@
+{
+    "cursor.cancel": [
+        "RMB",
+        "PAD B",
+        "Backspace"
+    ],
+    "cursor.click": [
+        "LMB",
+        "PAD A",
+        "Space"
+    ],
+    "cursor.down": [
+        "Down",
+        "PAD STICK_L DOWN"
+    ],
+    "cursor.fast_modifier": [
+        "LSHIFT",
+        "PAD L3"
+    ],
+    "cursor.left": [
+        "Left",
+        "PAD STICK_L LEFT"
+    ],
+    "cursor.right": [
+        "Right",
+        "PAD STICK_L RIGHT"
+    ],
+    "cursor.up": [
+        "Up",
+        "PAD STICK_L UP"
+    ],
+    "debug.advance_tick": [],
+    "debug.console": [
+        "PAD GUIDE",
+        "`"
+    ],
+    "debug.toggle_paint_debug_window": [],
+    "focus.down": [
+        "PAD DPAD_DOWN",
+        "Down"
+    ],
+    "focus.left": [
+        "PAD DPAD_LEFT",
+        "Left"
+    ],
+    "focus.right": [
+        "PAD DPAD_RIGHT",
+        "Right"
+    ],
+    "focus.up": [
+        "PAD DPAD_UP",
+        "Up"
+    ],
+    "interface.general.camera_drag": [
+        "RMB",
+        "X",
+        "PAD X"
+    ],
+    "interface.general.cancel_construction": [],
+    "interface.general.close_all": "CTRL+Backspace",
+    "interface.general.close_top": "SHIFT+Backspace",
+    "interface.general.close_window_under_cursor": "PAD R1+Y",
+    "interface.general.confirm": [
+        "PAD START",
+        "Return"
+    ],
+    "interface.general.construction_z_lock": [
+        "LCTRL",
+        "RCTRL"
+    ],
+    "interface.general.cycle_next_window": "SHIFT+Tab",
+    "interface.general.cycle_previous_window": "CTRL+Tab",
+    "interface.general.dismiss": [
+        "PAD BACK",
+        "Escape"
+    ],
+    "interface.general.enter_focus_mode": "Tab",
+    "interface.general.pause": [
+        "PAD START",
+        "Pause"
+    ],
+    "interface.general.rotate_construction": "R",
+    "interface.general.shade_all_windows": [
+        "HOLD PAD Y",
+        "SHIFT+V"
+    ],
+    "interface.general.shade_window_under_cursor": "V",
+    "interface.general.shift_modifier": [
+        "LSHIFT",
+        "RSHIFT"
+    ],
+    "interface.general.show_cursor": [
+        "J",
+        "PAD L3"
+    ],
+    "interface.graphics.decrease": "ALT+-",
+    "interface.graphics.increase": "ALT+=",
+    "interface.graphics.toggle_window_mode": "ALT+Return",
+    "interface.misc.decrease_speed": "-",
+    "interface.misc.disable_clearance": "C",
+    "interface.misc.giant_screenshot": "SHIFT+F12",
+    "interface.misc.increase_speed": "=",
+    "interface.misc.load_game": "F8",
+    "interface.misc.multiplayer_chat": [],
+    "interface.misc.mute": "ALT+M",
+    "interface.misc.save_game": "F7",
+    "interface.misc.scenery_picker": [],
+    "interface.misc.screenshot": "F12",
+    "interface.misc.toggle_toolbars": "\\",
+    "interface.open.cheats": [],
+    "interface.open.clear_scenery": "F1",
+    "interface.open.finances": "SHIFT+F1",
+    "interface.open.footpaths": "F5",
+    "interface.open.guests": "SHIFT+F5",
+    "interface.open.keyboard_shortcuts": [],
+    "interface.open.land": "F2",
+    "interface.open.map": "Z",
+    "interface.open.messages": "M",
+    "interface.open.multiplayer": [],
+    "interface.open.new_ride": "F6",
+    "interface.open.options": [],
+    "interface.open.park": "SHIFT+F4",
+    "interface.open.research": "SHIFT+F2",
+    "interface.open.rides": "SHIFT+F3",
+    "interface.open.scenery": "F4",
+    "interface.open.staff": "SHIFT+F6",
+    "interface.open.tileinspector": [],
+    "interface.open.transparency_options": "T",
+    "interface.open.water": "F3",
+    "view.general.rotate_anticlockwise": [
+        "PAD L1",
+        "Q"
+    ],
+    "view.general.rotate_clockwise": [
+        "PAD R1",
+        "E"
+    ],
+    "view.general.zoom_in": "PAD R2",
+    "view.general.zoom_out": "PAD L2",
+    "view.general.zoom_scroll_down": [
+        "MOUSE WHEEL DOWN",
+        "PageDown"
+    ],
+    "view.general.zoom_scroll_up": [
+        "MOUSE WHEEL UP",
+        "PageUp"
+    ],
+    "view.scroll.down": [
+        "PAD STICK_R DOWN",
+        "S"
+    ],
+    "view.scroll.left": [
+        "PAD STICK_R LEFT",
+        "A"
+    ],
+    "view.scroll.right": [
+        "PAD STICK_R RIGHT",
+        "D"
+    ],
+    "view.scroll.up": [
+        "PAD STICK_R UP",
+        "W"
+    ],
+    "view.toggle.hide_base_land": [],
+    "view.toggle.hide_guests": "6",
+    "view.toggle.hide_staff": "7",
+    "view.toggle.hide_supports": "5",
+    "view.toggle.hide_vertical_land": [],
+    "view.toggle.highlight_path_issues": [],
+    "view.toggle.show_footpath_height": "0",
+    "view.toggle.show_gridlines": "G",
+    "view.toggle.show_land_height": "8",
+    "view.toggle.show_track_height": "9",
+    "view.toggle.show_underground": "1",
+    "view.toggle.toggle_cut_away": [],
+    "view.toggle.transparent_footpaths": [],
+    "view.toggle.transparent_rides": "3",
+    "view.toggle.transparent_scenery": "4",
+    "view.toggle.transparent_vegetation": [],
+    "view.toggle.transparent_vehicles": [],
+    "view.toggle.transparent_water": "2",
+    "window.rideconstruction.bank_left": [],
+    "window.rideconstruction.bank_right": [],
+    "window.rideconstruction.build": [],
+    "window.rideconstruction.chain_lift": [],
+    "window.rideconstruction.default": [],
+    "window.rideconstruction.demolish": [],
+    "window.rideconstruction.next": [],
+    "window.rideconstruction.previous": [],
+    "window.rideconstruction.slope_down": [],
+    "window.rideconstruction.slope_up": [],
+    "window.rideconstruction.turn_left": [],
+    "window.rideconstruction.turn_right": [],
+    "window.tileinspector.copy": [],
+    "window.tileinspector.decrease_height": [],
+    "window.tileinspector.decrease_x": [],
+    "window.tileinspector.decrease_y": [],
+    "window.tileinspector.increase_height": [],
+    "window.tileinspector.increase_x": [],
+    "window.tileinspector.increase_y": [],
+    "window.tileinspector.move_down": [],
+    "window.tileinspector.move_up": [],
+    "window.tileinspector.paste": [],
+    "window.tileinspector.remove": [],
+    "window.tileinspector.sort": [],
+    "window.tileinspector.toggle_invisibility": [],
+    "window.tileinspector.toggle_wall_slope": []
+}
