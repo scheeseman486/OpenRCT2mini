@@ -43,13 +43,13 @@ cp "$BUILD_DIR/openrct2.exe"     "$STAGE_DIR/openrct2.exe"
 # stage 0; the cross binary doesn't need a CLI counterpart.
 # cp "$BUILD_DIR/openrct2-cli.exe" "$STAGE_DIR/openrct2-cli.exe"
 
-# .exe/.com split — duplicate openrct2.exe as openrct2.com with the PE
-# subsystem field flipped to console. cmd.exe resolves .com before .exe
-# on PATH, so users can invoke `openrct2` from a terminal and get stdout
-# in the window, or double-click openrct2.exe for a GUI launch with no
-# stray cmd window. Same UX as upstream's MSBuild + editbin split.
-cp "$BUILD_DIR/openrct2.exe" "$STAGE_DIR/openrct2.com"
-x86_64-w64-mingw32-objcopy --subsystem console "$STAGE_DIR/openrct2.com"
+# Upstream's MSBuild path produces both openrct2.exe (GUI subsystem) and
+# openrct2.com (console subsystem) so terminal users can `openrct2` from
+# cmd and get stdout, while double-click on the .exe launches with no
+# stray cmd window. OpenRCT2mini is a handheld-first build; the only
+# stdout consumer is debugging, which is easier done from a separate
+# Wine console anyway. Skip the .com generation to keep the bundle
+# lean.
 
 ##############################################################################
 # 2) Runtime DLLs — SDL2 + mingw libgcc/libstdc++/libwinpthread.
