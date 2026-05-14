@@ -17,7 +17,9 @@ cleanup () {
     fi
 }
 
-if [ -z "$NO_CLEANUP" ] && trap cleanup EXIT
+if [ -z "$NO_CLEANUP" ]; then
+    trap cleanup EXIT
+fi
 
 # store repo root as variable
 REPO_ROOT=$(readlink -f $(dirname "$0")/../..)

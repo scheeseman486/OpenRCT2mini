@@ -13,6 +13,13 @@
 
 #include <functional>
 #include <openrct2-ui/UiContext.h>
+// OPENRCT2MINI defaults-export P4 (shortcuts cutover): per-build
+// seed bindings, embedded at compile time. See bottom of
+// registerDefaultShortcuts() for the override pass that replaces the
+// hardcoded register*Default calls' output with the seed's contents.
+#include "ShortcutsJsonDefault.h"
+#include <openrct2/core/Console.hpp>
+#include <openrct2/core/Json.hpp>
 #include <openrct2-ui/interface/InGameConsole.h>
 #include <openrct2-ui/interface/Viewport.h>
 #include <openrct2-ui/interface/Widget.h>
@@ -1333,4 +1340,61 @@ void ShortcutManager::registerDefaultShortcuts()
     // to kInterfacePause's action lambda. No conflict.
     registerPadDefault(ShortcutId::kInterfaceDismiss,                  "PAD BACK");
     registerPadDefault(ShortcutId::kInterfaceConfirm,                  "PAD START");
+
+    // OPENRCT2MINI defaults-export P4 (shortcuts cutover): override
+    // everything we just registered with the per-build seed
+    // shortcuts.json. The seed lives at config/<build>/save/
+    // shortcuts.json and was originally captured FROM the
+    // register*Default + registerShortcut(default-key) calls above
+    // via --dump-defaults, so an unedited seed reproduces the prior
+    // behaviour byte-for-byte. Editing the seed JSON (e.g. to
+    // diverge Mini bindings from host AppImage bindings) now takes
+    // effect at build time without touching this file.
+    //
+    // Override semantics: for each shortcut id present in the
+    // manifest, clear its current standard + current binding arrays
+    // and replace them with the binding(s) the seed names. Shortcut
+    // ids absent from the seed retain whatever was set by the
+    // hardcoded registrations above — defensive, since a malformed
+    // or partial seed shouldn't silently strip bindings.
+    try
+    {
+        const auto* data = reinterpret_cast<const char*>(kShortcutsJsonDefault);
+        auto root = json_t::parse(data, data + kShortcutsJsonDefaultSize);
+        if (root.is_object())
+        {
+            for (auto it = root.begin(); it != root.end(); ++it)
+            {
+                auto* sc = getShortcut(it.key());
+                if (sc == nullptr)
+                    continue;
+                sc->standard.clear();
+                sc->current.clear();
+                auto apply = [&](const std::string& chord) {
+                    ShortcutInput parsed{ chord };
+                    sc->standard.push_back(parsed);
+                    sc->current.push_back(std::move(parsed));
+                };
+                const auto& v = it.value();
+                if (v.is_string())
+                {
+                    apply(v.get<std::string>());
+                }
+                else if (v.is_array())
+                {
+                    for (const auto& s : v)
+                    {
+                        if (s.is_string())
+                            apply(s.get<std::string>());
+                    }
+                }
+            }
+        }
+    }
+    catch (...)
+    {
+        Console::Error::WriteLine(
+            "registerDefaultShortcuts: embedded shortcuts.json failed to parse — "
+            "falling back to hardcoded register*Default bindings");
+    }
 }

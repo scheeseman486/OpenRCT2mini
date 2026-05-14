@@ -1,8 +1,34 @@
 {
     "soundEffects": {
+        "balloonPop": {
+            "disabled": false,
+            "envelopeDurationMs": 240,
+            "high": [
+                {
+                    "i": 1.0,
+                    "t": 10
+                },
+                {
+                    "i": 0.9965635538101196,
+                    "t": 16
+                },
+                {
+                    "i": 0.9192439913749695,
+                    "t": 95
+                },
+                {
+                    "i": 0.049828171730041504,
+                    "t": 141
+                }
+            ],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
         "blockBrakeClose": {
             "disabled": false,
-            "envelopeDurationMs": 80,
+            "envelopeDurationMs": 390,
             "high": [],
             "low": [
                 {
@@ -24,7 +50,7 @@
         },
         "blockBrakeRelease": {
             "disabled": false,
-            "envelopeDurationMs": 60,
+            "envelopeDurationMs": 417,
             "high": [],
             "low": [
                 {
@@ -44,25 +70,86 @@
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
+        "click1": {
+            "disabled": false,
+            "envelopeDurationMs": 237,
+            "high": [],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "click2": {
+            "disabled": false,
+            "envelopeDurationMs": 100,
+            "high": [],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "click3": {
+            "disabled": false,
+            "envelopeDurationMs": 53,
+            "high": [],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "cough3": {
+            "disabled": false,
+            "envelopeDurationMs": 578,
+            "high": [],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "cough4": {
+            "disabled": false,
+            "envelopeDurationMs": 660,
+            "high": [],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
         "crash": {
             "disabled": false,
-            "envelopeDurationMs": 500,
+            "envelopeDurationMs": 4688,
             "high": [
                 {
                     "i": 0.0,
                     "t": 0
                 },
                 {
-                    "i": 0.800000011920929,
-                    "t": 10
+                    "i": 0.9879275560379028,
+                    "t": 372
                 },
                 {
-                    "i": 0.20000000298023224,
-                    "t": 80
+                    "i": 0.2535211443901062,
+                    "t": 1245
                 },
                 {
-                    "i": 0.0,
-                    "t": 200
+                    "i": 0.3058350086212158,
+                    "t": 2262
+                },
+                {
+                    "i": 0.12072432041168213,
+                    "t": 2680
+                },
+                {
+                    "i": 0.23541247844696045,
+                    "t": 3500
+                },
+                {
+                    "i": 0.03018110990524292,
+                    "t": 3986
+                },
+                {
+                    "i": 0.01609659194946289,
+                    "t": 4677
                 }
             ],
             "low": [
@@ -71,16 +158,16 @@
                     "t": 0
                 },
                 {
-                    "i": 1.0,
-                    "t": 20
+                    "i": 0.9839034080505371,
+                    "t": 173
                 },
                 {
-                    "i": 0.4000000059604645,
-                    "t": 200
+                    "i": 0.038229405879974365,
+                    "t": 1086
                 },
                 {
-                    "i": 0.0,
-                    "t": 500
+                    "i": 0.006036221981048584,
+                    "t": 4677
                 }
             ],
             "mode": "oneShot",
@@ -89,39 +176,17 @@
         },
         "crowdAmbience": {
             "disabled": false,
-            "envelopeDurationMs": 500,
+            "envelopeDurationMs": 34288,
             "high": [],
-            "low": [
-                {
-                    "i": 0.05000000074505806,
-                    "t": 0
-                },
-                {
-                    "i": 0.05000000074505806,
-                    "t": 500
-                }
-            ],
+            "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "error": {
             "disabled": false,
-            "envelopeDurationMs": 120,
-            "high": [
-                {
-                    "i": 0.0,
-                    "t": 0
-                },
-                {
-                    "i": 0.800000011920929,
-                    "t": 10
-                },
-                {
-                    "i": 0.0,
-                    "t": 120
-                }
-            ],
+            "envelopeDurationMs": 100,
+            "high": [],
             "low": [],
             "mode": "oneShot",
             "rateScalePercent": 100,
@@ -129,15 +194,11 @@
         },
         "frictionClassic": {
             "disabled": false,
-            "envelopeDurationMs": 250,
+            "envelopeDurationMs": 1448,
             "high": [
                 {
                     "i": 0.10000000149011612,
                     "t": 0
-                },
-                {
-                    "i": 0.10000000149011612,
-                    "t": 250
                 }
             ],
             "low": [
@@ -146,89 +207,206 @@
                     "t": 0
                 },
                 {
-                    "i": 0.5,
+                    "i": 0.4114583134651184,
+                    "t": 123
+                },
+                {
+                    "i": 0.4635416865348816,
                     "t": 250
+                },
+                {
+                    "i": 0.5909091234207153,
+                    "t": 443
+                },
+                {
+                    "i": 0.2984848618507385,
+                    "t": 635
+                },
+                {
+                    "i": 0.1772727370262146,
+                    "t": 1166
+                },
+                {
+                    "i": 0.4469696879386902,
+                    "t": 1448
                 }
             ],
             "mode": "continuous",
             "rateScalePercent": 100,
-            "scaleWithRate": false
+            "scaleWithRate": true
         },
         "goKartEngine": {
             "disabled": false,
-            "envelopeDurationMs": 200,
+            "envelopeDurationMs": 266,
             "high": [
                 {
                     "i": 0.20000000298023224,
                     "t": 0
                 },
                 {
-                    "i": 0.20000000298023224,
-                    "t": 200
-                }
-            ],
-            "low": [
-                {
-                    "i": 0.30000001192092896,
-                    "t": 0
+                    "i": 0.6803030371665955,
+                    "t": 92
                 },
                 {
-                    "i": 0.30000001192092896,
-                    "t": 200
+                    "i": 0.08636361360549927,
+                    "t": 210
+                },
+                {
+                    "i": 0.21666663885116577,
+                    "t": 262
                 }
             ],
+            "low": [],
             "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": true
+        },
+        "layingOutWater": {
+            "disabled": false,
+            "envelopeDurationMs": 445,
+            "high": [],
+            "low": [
+                {
+                    "i": 0.008048295974731445,
+                    "t": 22
+                },
+                {
+                    "i": 0.4869215488433838,
+                    "t": 445
+                }
+            ],
+            "mode": "oneShot",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "liftArrow": {
             "disabled": false,
-            "envelopeDurationMs": 250,
-            "high": [],
-            "low": [
+            "envelopeDurationMs": 1678,
+            "high": [
                 {
-                    "i": 0.4000000059604645,
-                    "t": 0
+                    "i": 0.19859403371810913,
+                    "t": 2
                 },
                 {
-                    "i": 0.4000000059604645,
-                    "t": 250
+                    "i": 0.9122084975242615,
+                    "t": 143
+                },
+                {
+                    "i": 0.8910369277000427,
+                    "t": 471
+                },
+                {
+                    "i": 0.13708257675170898,
+                    "t": 577
+                },
+                {
+                    "i": 0.17047452926635742,
+                    "t": 991
+                },
+                {
+                    "i": 0.8787345886230469,
+                    "t": 1170
+                },
+                {
+                    "i": 0.18804919719696045,
+                    "t": 1257
+                },
+                {
+                    "i": 0.043936729431152344,
+                    "t": 1406
+                },
+                {
+                    "i": 0.12653779983520508,
+                    "t": 1539
                 }
             ],
+            "low": [],
             "mode": "continuous",
-            "rateScalePercent": 100,
+            "rateScalePercent": 40,
             "scaleWithRate": false
         },
         "liftBM": {
             "disabled": false,
-            "envelopeDurationMs": 250,
+            "envelopeDurationMs": 4376,
             "high": [],
-            "low": [
-                {
-                    "i": 0.4000000059604645,
-                    "t": 0
-                },
-                {
-                    "i": 0.4000000059604645,
-                    "t": 250
-                }
-            ],
+            "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "liftClassic": {
-            "disabled": false,
-            "envelopeDurationMs": 250,
-            "high": [],
+            "disabled": true,
+            "envelopeDurationMs": 1828,
+            "high": [
+                {
+                    "i": 0.23030304908752441,
+                    "t": 10
+                },
+                {
+                    "i": 0.8560606241226196,
+                    "t": 126
+                },
+                {
+                    "i": 0.6758409738540649,
+                    "t": 422
+                },
+                {
+                    "i": 0.4808853268623352,
+                    "t": 540
+                },
+                {
+                    "i": 0.7887324094772339,
+                    "t": 850
+                },
+                {
+                    "i": 0.5090543031692505,
+                    "t": 1219
+                },
+                {
+                    "i": 0.09657949209213257,
+                    "t": 1386
+                },
+                {
+                    "i": 0.09696972370147705,
+                    "t": 1828
+                }
+            ],
             "low": [
                 {
                     "i": 0.4000000059604645,
                     "t": 0
                 },
                 {
-                    "i": 0.4000000059604645,
-                    "t": 250
+                    "i": 0.40909093618392944,
+                    "t": 110
+                },
+                {
+                    "i": 0.40366971492767334,
+                    "t": 125
+                },
+                {
+                    "i": 0.3320000171661377,
+                    "t": 147
+                },
+                {
+                    "i": 0.19393938779830933,
+                    "t": 215
+                },
+                {
+                    "i": 0.8256880640983582,
+                    "t": 405
+                },
+                {
+                    "i": 0.1499999761581421,
+                    "t": 1047
+                },
+                {
+                    "i": 0.5372233390808105,
+                    "t": 1289
+                },
+                {
+                    "i": 0.1878787875175476,
+                    "t": 1815
                 }
             ],
             "mode": "continuous",
@@ -237,16 +415,49 @@
         },
         "liftFrictionWheels": {
             "disabled": false,
-            "envelopeDurationMs": 250,
-            "high": [],
-            "low": [
+            "envelopeDurationMs": 1007,
+            "high": [
                 {
-                    "i": 0.4000000059604645,
-                    "t": 0
+                    "i": 0.12747877836227417,
+                    "t": 80
                 },
                 {
-                    "i": 0.4000000059604645,
-                    "t": 250
+                    "i": 0.9206798672676086,
+                    "t": 239
+                },
+                {
+                    "i": 0.07648724317550659,
+                    "t": 273
+                },
+                {
+                    "i": 0.11331444978713989,
+                    "t": 526
+                },
+                {
+                    "i": 0.8725212812423706,
+                    "t": 593
+                },
+                {
+                    "i": 0.09348440170288086,
+                    "t": 641
+                },
+                {
+                    "i": 0.12181305885314941,
+                    "t": 921
+                }
+            ],
+            "low": [
+                {
+                    "i": 0.09631729125976563,
+                    "t": 1
+                },
+                {
+                    "i": 0.402266263961792,
+                    "t": 561
+                },
+                {
+                    "i": 0.0878186821937561,
+                    "t": 1007
                 }
             ],
             "mode": "continuous",
@@ -255,73 +466,50 @@
         },
         "liftRMC": {
             "disabled": false,
-            "envelopeDurationMs": 250,
+            "envelopeDurationMs": 3356,
             "high": [],
-            "low": [
-                {
-                    "i": 0.4000000059604645,
-                    "t": 0
-                },
-                {
-                    "i": 0.4000000059604645,
-                    "t": 250
-                }
-            ],
+            "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "liftWildMouse": {
             "disabled": false,
-            "envelopeDurationMs": 250,
+            "envelopeDurationMs": 1496,
             "high": [],
-            "low": [
-                {
-                    "i": 0.4000000059604645,
-                    "t": 0
-                },
-                {
-                    "i": 0.4000000059604645,
-                    "t": 250
-                }
-            ],
+            "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "liftWood": {
             "disabled": false,
-            "envelopeDurationMs": 250,
+            "envelopeDurationMs": 1786,
             "high": [],
-            "low": [
-                {
-                    "i": 0.4000000059604645,
-                    "t": 0
-                },
-                {
-                    "i": 0.4000000059604645,
-                    "t": 250
-                }
-            ],
+            "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "placeItem": {
             "disabled": false,
-            "envelopeDurationMs": 60,
+            "envelopeDurationMs": 229,
             "high": [
                 {
-                    "i": 0.0,
+                    "i": 0.5291750431060791,
                     "t": 0
                 },
                 {
-                    "i": 0.4000000059604645,
-                    "t": 5
+                    "i": 0.6116700172424316,
+                    "t": 42
                 },
                 {
-                    "i": 0.0,
-                    "t": 60
+                    "i": 0.12273639440536499,
+                    "t": 92
+                },
+                {
+                    "i": 0.022132813930511475,
+                    "t": 229
                 }
             ],
             "low": [],
@@ -329,9 +517,18 @@
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
+        "purchase": {
+            "disabled": false,
+            "envelopeDurationMs": 576,
+            "high": [],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
         "rideLaunch1": {
             "disabled": false,
-            "envelopeDurationMs": 350,
+            "envelopeDurationMs": 1029,
             "high": [
                 {
                     "i": 0.0,
@@ -344,6 +541,14 @@
                 {
                     "i": 0.0,
                     "t": 150
+                },
+                {
+                    "i": 0.6666666269302368,
+                    "t": 664
+                },
+                {
+                    "i": 0.31388330459594727,
+                    "t": 1029
                 }
             ],
             "low": [
@@ -358,6 +563,10 @@
                 {
                     "i": 0.0,
                     "t": 350
+                },
+                {
+                    "i": 0.0,
+                    "t": 1029
                 }
             ],
             "mode": "oneShot",
@@ -366,7 +575,7 @@
         },
         "rideLaunch2": {
             "disabled": false,
-            "envelopeDurationMs": 350,
+            "envelopeDurationMs": 1561,
             "high": [
                 {
                     "i": 0.0,
@@ -379,6 +588,14 @@
                 {
                     "i": 0.0,
                     "t": 150
+                },
+                {
+                    "i": 0.5651515126228333,
+                    "t": 877
+                },
+                {
+                    "i": 0.17424243688583374,
+                    "t": 1553
                 }
             ],
             "low": [
@@ -401,17 +618,8 @@
         },
         "scream1": {
             "disabled": false,
-            "envelopeDurationMs": 300,
-            "high": [
-                {
-                    "i": 0.30000001192092896,
-                    "t": 0
-                },
-                {
-                    "i": 0.30000001192092896,
-                    "t": 300
-                }
-            ],
+            "envelopeDurationMs": 3372,
+            "high": [],
             "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
@@ -419,17 +627,8 @@
         },
         "scream2": {
             "disabled": false,
-            "envelopeDurationMs": 300,
-            "high": [
-                {
-                    "i": 0.30000001192092896,
-                    "t": 0
-                },
-                {
-                    "i": 0.30000001192092896,
-                    "t": 300
-                }
-            ],
+            "envelopeDurationMs": 2358,
+            "high": [],
             "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
@@ -437,17 +636,8 @@
         },
         "scream3": {
             "disabled": false,
-            "envelopeDurationMs": 300,
-            "high": [
-                {
-                    "i": 0.30000001192092896,
-                    "t": 0
-                },
-                {
-                    "i": 0.30000001192092896,
-                    "t": 300
-                }
-            ],
+            "envelopeDurationMs": 2195,
+            "high": [],
             "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
@@ -455,17 +645,8 @@
         },
         "scream4": {
             "disabled": false,
-            "envelopeDurationMs": 300,
-            "high": [
-                {
-                    "i": 0.30000001192092896,
-                    "t": 0
-                },
-                {
-                    "i": 0.30000001192092896,
-                    "t": 300
-                }
-            ],
+            "envelopeDurationMs": 3626,
+            "high": [],
             "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
@@ -473,17 +654,8 @@
         },
         "scream5": {
             "disabled": false,
-            "envelopeDurationMs": 300,
-            "high": [
-                {
-                    "i": 0.30000001192092896,
-                    "t": 0
-                },
-                {
-                    "i": 0.30000001192092896,
-                    "t": 300
-                }
-            ],
+            "envelopeDurationMs": 3959,
+            "high": [],
             "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
@@ -491,17 +663,8 @@
         },
         "scream6": {
             "disabled": false,
-            "envelopeDurationMs": 300,
-            "high": [
-                {
-                    "i": 0.30000001192092896,
-                    "t": 0
-                },
-                {
-                    "i": 0.30000001192092896,
-                    "t": 300
-                }
-            ],
+            "envelopeDurationMs": 4756,
+            "high": [],
             "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
@@ -509,70 +672,64 @@
         },
         "scream7": {
             "disabled": false,
-            "envelopeDurationMs": 300,
-            "high": [
-                {
-                    "i": 0.30000001192092896,
-                    "t": 0
-                },
-                {
-                    "i": 0.30000001192092896,
-                    "t": 300
-                }
-            ],
+            "envelopeDurationMs": 2571,
+            "high": [],
             "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
+        "toiletFlush": {
+            "disabled": false,
+            "envelopeDurationMs": 2683,
+            "high": [],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
         "trackFrictionBM": {
             "disabled": false,
-            "envelopeDurationMs": 250,
-            "high": [
-                {
-                    "i": 0.10000000149011612,
-                    "t": 0
-                },
-                {
-                    "i": 0.10000000149011612,
-                    "t": 250
-                }
-            ],
-            "low": [
-                {
-                    "i": 0.5,
-                    "t": 0
-                },
-                {
-                    "i": 0.5,
-                    "t": 250
-                }
-            ],
+            "envelopeDurationMs": 2345,
+            "high": [],
+            "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "trackFrictionClassicWood": {
             "disabled": false,
-            "envelopeDurationMs": 250,
+            "envelopeDurationMs": 1415,
             "high": [
                 {
-                    "i": 0.10000000149011612,
-                    "t": 0
+                    "i": 0.6147308349609375,
+                    "t": 9
                 },
                 {
-                    "i": 0.10000000149011612,
-                    "t": 250
+                    "i": 0.45325779914855957,
+                    "t": 200
+                },
+                {
+                    "i": 0.10764873027801514,
+                    "t": 337
+                },
+                {
+                    "i": 0.05382436513900757,
+                    "t": 1389
+                },
+                {
+                    "i": 0.580736517906189,
+                    "t": 1415
                 }
             ],
             "low": [
                 {
-                    "i": 0.5,
-                    "t": 0
+                    "i": 0.02832859754562378,
+                    "t": 22
                 },
                 {
-                    "i": 0.5,
-                    "t": 250
+                    "i": 0.022662878036499023,
+                    "t": 1415
                 }
             ],
             "mode": "continuous",
@@ -581,100 +738,161 @@
         },
         "trackFrictionTrain": {
             "disabled": false,
-            "envelopeDurationMs": 250,
-            "high": [
-                {
-                    "i": 0.10000000149011612,
-                    "t": 0
-                },
-                {
-                    "i": 0.10000000149011612,
-                    "t": 250
-                }
-            ],
-            "low": [
-                {
-                    "i": 0.5,
-                    "t": 0
-                },
-                {
-                    "i": 0.5,
-                    "t": 250
-                }
-            ],
+            "envelopeDurationMs": 2137,
+            "high": [],
+            "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "trackFrictionWater": {
             "disabled": false,
-            "envelopeDurationMs": 250,
-            "high": [
-                {
-                    "i": 0.10000000149011612,
-                    "t": 0
-                },
-                {
-                    "i": 0.10000000149011612,
-                    "t": 250
-                }
-            ],
-            "low": [
-                {
-                    "i": 0.5,
-                    "t": 0
-                },
-                {
-                    "i": 0.5,
-                    "t": 250
-                }
-            ],
+            "envelopeDurationMs": 1892,
+            "high": [],
+            "low": [],
             "mode": "continuous",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "trackFrictionWood": {
             "disabled": false,
-            "envelopeDurationMs": 250,
+            "envelopeDurationMs": 1297,
+            "high": [],
+            "low": [],
+            "mode": "continuous",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "trainDeparting": {
+            "disabled": false,
+            "envelopeDurationMs": 5194,
+            "high": [],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "trainWhistle": {
+            "disabled": false,
+            "envelopeDurationMs": 3391,
+            "high": [],
+            "low": [],
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "water1": {
+            "disabled": false,
+            "envelopeDurationMs": 1152,
             "high": [
                 {
-                    "i": 0.10000000149011612,
-                    "t": 0
+                    "i": 0.0,
+                    "t": 2
                 },
                 {
-                    "i": 0.10000000149011612,
-                    "t": 250
+                    "i": 0.1215066909790039,
+                    "t": 195
+                },
+                {
+                    "i": 0.24787360429763794,
+                    "t": 363
+                },
+                {
+                    "i": 0.12393683195114136,
+                    "t": 444
+                },
+                {
+                    "i": 0.2381531000137329,
+                    "t": 586
+                },
+                {
+                    "i": 0.034021854400634766,
+                    "t": 776
+                },
+                {
+                    "i": 0.0,
+                    "t": 896
                 }
             ],
             "low": [
                 {
-                    "i": 0.5,
+                    "i": 0.05467802286148071,
                     "t": 0
                 },
                 {
-                    "i": 0.5,
-                    "t": 250
+                    "i": 0.7120291590690613,
+                    "t": 146
+                },
+                {
+                    "i": 0.07776427268981934,
+                    "t": 236
+                },
+                {
+                    "i": 0.06841045618057251,
+                    "t": 825
+                },
+                {
+                    "i": 0.0,
+                    "t": 1152
+                },
+                {
+                    "i": 0.027946531772613525,
+                    "t": 1155
                 }
             ],
-            "mode": "continuous",
+            "mode": "oneShot",
+            "rateScalePercent": 100,
+            "scaleWithRate": false
+        },
+        "water2": {
+            "disabled": false,
+            "envelopeDurationMs": 910,
+            "high": [
+                {
+                    "i": 0.3001214861869812,
+                    "t": 0
+                },
+                {
+                    "i": 0.41555285453796387,
+                    "t": 103
+                },
+                {
+                    "i": 0.03888213634490967,
+                    "t": 143
+                },
+                {
+                    "i": 0.07897937297821045,
+                    "t": 441
+                },
+                {
+                    "i": 0.22721749544143677,
+                    "t": 517
+                },
+                {
+                    "i": 0.04495745897293091,
+                    "t": 755
+                }
+            ],
+            "low": [],
+            "mode": "oneShot",
             "rateScalePercent": 100,
             "scaleWithRate": false
         },
         "waterSplash": {
             "disabled": false,
-            "envelopeDurationMs": 250,
+            "envelopeDurationMs": 2053,
             "high": [
                 {
                     "i": 0.0,
                     "t": 0
                 },
                 {
-                    "i": 0.20000000298023224,
-                    "t": 20
+                    "i": 0.34607648849487305,
+                    "t": 128
                 },
                 {
                     "i": 0.0,
-                    "t": 100
+                    "t": 2053
                 }
             ],
             "low": [
@@ -683,12 +901,16 @@
                     "t": 0
                 },
                 {
-                    "i": 0.4000000059604645,
-                    "t": 30
+                    "i": 0.6921529173851013,
+                    "t": 259
                 },
                 {
-                    "i": 0.0,
-                    "t": 250
+                    "i": 0.1327967643737793,
+                    "t": 769
+                },
+                {
+                    "i": 0.004024147987365723,
+                    "t": 2053
                 }
             ],
             "mode": "oneShot",
