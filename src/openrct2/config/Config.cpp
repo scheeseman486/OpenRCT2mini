@@ -36,6 +36,14 @@
 #include "ConfigEnum.hpp"
 #include "IniReader.hpp"
 #include "IniWriter.hpp"
+// OPENRCT2MINI defaults-export P4: embedded config.ini for the active
+// build variant. Generated at compile time from
+// config/<build>/save/config.ini by cmake/EmbedFileAsArray.cmake;
+// SetDefaults below consumes it via MemoryStream + CreateIniReader so
+// the canonical defaults round-trip through the same INI parser the
+// disk-load path uses.
+#include "ConfigIniDefault.h"
+#include "../core/MemoryStream.h"
 
 using namespace OpenRCT2;
 using namespace OpenRCT2::Ui;
@@ -802,7 +810,17 @@ namespace OpenRCT2::Config
     {
         try
         {
-            auto reader = CreateDefaultIniReader();
+            // OPENRCT2MINI defaults-export P4: parse the embedded
+            // config.ini blob through the same IniReader the on-disk
+            // path uses. Replaces the legacy DefaultIniReader (the
+            // stub that just returned each Get*'s defaultValue
+            // argument and required defaults to live inline at every
+            // Read* call site). With this swap, the canonical
+            // defaults live in config/<build>/save/config.ini and
+            // can be hand-edited per build variant without
+            // recompiling the Read* functions.
+            auto stream = MemoryStream(kConfigIniDefault, kConfigIniDefaultSize);
+            auto reader = CreateIniReader(&stream);
             ReadGeneral(reader.get());
             ReadInterface(reader.get());
             ReadSound(reader.get());

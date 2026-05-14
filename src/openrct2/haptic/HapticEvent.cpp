@@ -18,6 +18,12 @@
 #include "../core/Path.hpp"
 #include "../platform/Platform.h"
 #include "../ui/UiContext.h"
+// OPENRCT2MINI defaults-export P4: embedded rumble.json for the
+// active build variant. Generated at compile time from
+// config/<build>/save/rumble.json by cmake/EmbedFileAsArray.cmake;
+// seedDefaults below parses it through the same JSON pipeline the
+// disk-load path uses.
+#include "RumbleJsonDefault.h"
 
 #include <algorithm>
 #include <array>
@@ -541,136 +547,50 @@ namespace OpenRCT2::Haptic
 
     namespace
     {
-        // Helper to build a flat envelope (two endpoint points).
-        MotorEnvelope flatEnv(uint32_t durMs, float intensity)
-        {
-            return MotorEnvelope{
-                std::vector<EnvelopePoint>{ { 0u, intensity }, { durMs, intensity } }
-            };
-        }
+        // OPENRCT2MINI defaults-export P4: forward declaration so the
+        // seedDefaults() below (which lives in this first anonymous
+        // namespace) can call populateMapFromJson, which is DEFINED in
+        // a later anonymous namespace nearer the JSON-IO block.
+        // Anonymous namespaces don't share scope across declarations
+        // even within the same TU; the forward decl makes the
+        // function name visible to seedDefaults's parse path.
+        // The pre-cutover flatEnv / peakEnv / contLow helpers fed the
+        // procedural defaults and are now dead; removed.
+        void populateMapFromJson(const json_t&);
 
-        // Helper to build a 3-point peak-and-decay envelope:
-        //   (0, 0) → (peakMs, peak) → (durMs, 0)
-        MotorEnvelope peakEnv(uint32_t durMs, uint32_t peakMs, float peak)
-        {
-            return MotorEnvelope{
-                std::vector<EnvelopePoint>{ { 0u, 0.0f }, { peakMs, peak }, { durMs, 0.0f } }
-            };
-        }
-
+        // OPENRCT2MINI defaults-export P4 cutover: parse the embedded
+        // rumble.json blob via populateMapFromJson. Pre-cutover this
+        // was ~110 lines of procedural _map[...] assignments + helper
+        // functions (peakEnv / flatEnv / contLow). The seeds under
+        // config/<build>/save/rumble.json were originally captured
+        // FROM that procedural code via --dump-defaults, so this
+        // refactor is a lossless migration: parsing the embedded
+        // blob reproduces the same in-memory map. Per-build defaults
+        // are now hand-editable in the seed files without recompiling
+        // a single source line.
         void seedDefaults()
         {
             _map.clear();
-
-            // Crash — strong attack, fast decay, long tail.
+            try
             {
-                RumbleProfile p;
-                p.mode = RumbleMode::oneShot;
-                p.envelopeDurationMs = 500;
-                p.low.points = { { 0, 0.0f }, { 20, 1.0f }, { 200, 0.4f }, { 500, 0.0f } };
-                p.high.points = { { 0, 0.0f }, { 10, 0.8f }, { 80, 0.2f }, { 200, 0.0f } };
-                _map[Audio::SoundId::crash] = std::move(p);
+                const auto* data = reinterpret_cast<const char*>(kRumbleJsonDefault);
+                auto root = json_t::parse(data, data + kRumbleJsonDefaultSize);
+                populateMapFromJson(root);
             }
-
-            // Error — sharp high-frequency buzz.
+            catch (...)
             {
-                RumbleProfile p;
-                p.mode = RumbleMode::oneShot;
-                p.envelopeDurationMs = 120;
-                p.high = peakEnv(120, 10, 0.8f);
-                _map[Audio::SoundId::error] = std::move(p);
+                // Embedded blob is part of the binary — if parse
+                // fails the build's broken; leave _map empty and
+                // let the rest of the rumble engine no-op gracefully.
+                Console::Error::WriteLine("seedDefaults: embedded rumble.json failed to parse");
             }
-
-            // Place item — soft tick.
-            {
-                RumbleProfile p;
-                p.mode = RumbleMode::oneShot;
-                p.envelopeDurationMs = 60;
-                p.high = peakEnv(60, 5, 0.4f);
-                _map[Audio::SoundId::placeItem] = std::move(p);
-            }
-
-            // Block brake close / release — subtle thud.
-            {
-                RumbleProfile p;
-                p.mode = RumbleMode::oneShot;
-                p.envelopeDurationMs = 80;
-                p.low = peakEnv(80, 0, 0.3f);
-                _map[Audio::SoundId::blockBrakeClose] = std::move(p);
-            }
-            {
-                RumbleProfile p;
-                p.mode = RumbleMode::oneShot;
-                p.envelopeDurationMs = 60;
-                p.low = peakEnv(60, 0, 0.2f);
-                _map[Audio::SoundId::blockBrakeRelease] = std::move(p);
-            }
-
-            // Water splash — bigger thud + buzz.
-            {
-                RumbleProfile p;
-                p.mode = RumbleMode::oneShot;
-                p.envelopeDurationMs = 250;
-                p.low = peakEnv(250, 30, 0.4f);
-                p.high = peakEnv(100, 20, 0.2f);
-                _map[Audio::SoundId::waterSplash] = std::move(p);
-            }
-
-            // Ride launch — kick + buzz tail.
-            {
-                RumbleProfile p;
-                p.mode = RumbleMode::oneShot;
-                p.envelopeDurationMs = 350;
-                p.low = peakEnv(350, 50, 0.8f);
-                p.high = peakEnv(150, 50, 0.4f);
-                _map[Audio::SoundId::rideLaunch1] = std::move(p);
-            }
-            {
-                RumbleProfile p;
-                p.mode = RumbleMode::oneShot;
-                p.envelopeDurationMs = 350;
-                p.low = peakEnv(350, 50, 0.8f);
-                p.high = peakEnv(150, 50, 0.4f);
-                _map[Audio::SoundId::rideLaunch2] = std::move(p);
-            }
-
-            // Continuous — flat envelopes, audio volume drives
-            // perceived strength. Track friction & lift hills mostly
-            // low-frequency to feel like wheels on rails.
-            const auto contLow = [](Audio::SoundId id, uint32_t dur, float lowI, float highI) {
-                RumbleProfile p;
-                p.mode = RumbleMode::continuous;
-                p.envelopeDurationMs = dur;
-                if (lowI > 0.0f)
-                    p.low = flatEnv(dur, lowI);
-                if (highI > 0.0f)
-                    p.high = flatEnv(dur, highI);
-                _map[id] = std::move(p);
-            };
-            contLow(Audio::SoundId::trackFrictionTrain,       250, 0.50f, 0.10f);
-            contLow(Audio::SoundId::trackFrictionWater,       250, 0.50f, 0.10f);
-            contLow(Audio::SoundId::trackFrictionWood,        250, 0.50f, 0.10f);
-            contLow(Audio::SoundId::trackFrictionBM,          250, 0.50f, 0.10f);
-            contLow(Audio::SoundId::trackFrictionClassicWood, 250, 0.50f, 0.10f);
-            contLow(Audio::SoundId::frictionClassic,          250, 0.50f, 0.10f);
-            contLow(Audio::SoundId::liftClassic,              250, 0.40f, 0.0f);
-            contLow(Audio::SoundId::liftWildMouse,            250, 0.40f, 0.0f);
-            contLow(Audio::SoundId::liftBM,                   250, 0.40f, 0.0f);
-            contLow(Audio::SoundId::liftRMC,                  250, 0.40f, 0.0f);
-            contLow(Audio::SoundId::liftWood,                 250, 0.40f, 0.0f);
-            contLow(Audio::SoundId::liftArrow,                250, 0.40f, 0.0f);
-            contLow(Audio::SoundId::liftFlume,                250, 0.40f, 0.0f);
-            contLow(Audio::SoundId::liftFrictionWheels,       250, 0.40f, 0.0f);
-            contLow(Audio::SoundId::goKartEngine,             200, 0.30f, 0.20f);
-            contLow(Audio::SoundId::scream1, 300, 0.0f, 0.30f);
-            contLow(Audio::SoundId::scream2, 300, 0.0f, 0.30f);
-            contLow(Audio::SoundId::scream3, 300, 0.0f, 0.30f);
-            contLow(Audio::SoundId::scream4, 300, 0.0f, 0.30f);
-            contLow(Audio::SoundId::scream5, 300, 0.0f, 0.30f);
-            contLow(Audio::SoundId::scream6, 300, 0.0f, 0.30f);
-            contLow(Audio::SoundId::scream7, 300, 0.0f, 0.30f);
-            contLow(Audio::SoundId::crowdAmbience, 500, 0.05f, 0.0f);
         }
+
+        // Procedural defaults removed (was ~110 lines of explicit
+        // _map[Audio::SoundId::*] = {...} assignments plus helper
+        // functions peakEnv / flatEnv / contLow that fed them). The
+        // canonical defaults now live in config/<build>/save/rumble.json
+        // and are baked into the binary by CMake at build time.
 
         // ---- JSON (de)serialisation -------------------------------------
 
@@ -719,39 +639,22 @@ namespace OpenRCT2::Haptic
         }
     } // namespace
 
-    void loadProfilesFromDisk()
+    namespace
     {
-        const auto path = getRumbleJsonPath();
-        if (path.empty())
+        // OPENRCT2MINI defaults-export P4: walk a parsed rumble.json
+        // root and populate _map. Factored out so both the disk-load
+        // path (loadProfilesFromDisk) and the embedded-blob path
+        // (seedDefaults, post-P4) can share the same logic. Caller
+        // owns clearing _map beforehand and falling back to a fresh
+        // seedDefaults() on parse failure.
+        void populateMapFromJson(const json_t& root)
         {
-            seedDefaults();
-            return;
-        }
-
-        json_t root;
-        try
-        {
-            root = Json::ReadFromFile(path);
-        }
-        catch (...)
-        {
-            // Missing or malformed — fall back to defaults.
-            seedDefaults();
-            return;
-        }
-
-        if (!root.is_object())
-        {
-            seedDefaults();
-            return;
-        }
-
-        const auto version = Json::GetNumber<int32_t>(root["version"], 1);
-        const auto sfx = root.contains("soundEffects") ? Json::AsObject(root["soundEffects"]) : json_t::object();
-
-        _map.clear();
-        for (auto it = sfx.begin(); it != sfx.end(); ++it)
-        {
+            if (!root.is_object())
+                return;
+            const auto version = Json::GetNumber<int32_t>(root["version"], 1);
+            const auto sfx = root.contains("soundEffects") ? Json::AsObject(root["soundEffects"]) : json_t::object();
+            for (auto it = sfx.begin(); it != sfx.end(); ++it)
+            {
             const auto sid = soundIdForName(it.key());
             if (!sid.has_value())
                 continue;
@@ -804,7 +707,39 @@ namespace OpenRCT2::Haptic
                 }
             }
             _map[*sid] = std::move(p);
+            }
         }
+    } // namespace
+
+    void loadProfilesFromDisk()
+    {
+        // OPENRCT2MINI defaults-export P4 cutover: the per-build
+        // defaults now live in the embedded rumble.json blob (see
+        // seedDefaults below). loadProfilesFromDisk is the user-
+        // overrides layer: if rumble.json exists in the user data
+        // directory, parse it; otherwise fall back to the embedded
+        // defaults via seedDefaults.
+        const auto path = getRumbleJsonPath();
+        if (path.empty())
+        {
+            seedDefaults();
+            return;
+        }
+
+        json_t root;
+        try
+        {
+            root = Json::ReadFromFile(path);
+        }
+        catch (...)
+        {
+            // Missing or malformed — fall back to embedded defaults.
+            seedDefaults();
+            return;
+        }
+
+        _map.clear();
+        populateMapFromJson(root);
 
         // If file existed but had zero entries (or all parses
         // failed), still want a sensible baseline — only seed
