@@ -15,6 +15,7 @@
 /build-host-mini/
 /build-asan/
 /build-appimage/
+/build-windows/
 
 # Internal planning documents — design plans, audits, peer-reviews, phase
 # progress logs, perf reports. Kept on disk so the dev can reference them

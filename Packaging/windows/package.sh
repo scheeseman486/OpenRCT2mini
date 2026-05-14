@@ -67,7 +67,12 @@ docker run --rm --user "$(id -u):$(id -g)" \
         # mingw runtime DLLs from the apt-installed cross-toolchain.
         # Paths checked: /usr/lib/gcc/x86_64-w64-mingw32/<ver>/ and
         # /usr/x86_64-w64-mingw32/lib/.
-        for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
+        # libssp-0.dll provides __stack_chk_fail / __stack_chk_guard. The
+        # engine is built with -fstack-protector-strong via the if (MINGW)
+        # branch in src/openrct2/CMakeLists.txt:181, so the runtime DLL
+        # is loaded at process start. Without bundling libssp-0.dll the
+        # exe fails to load (Wine reports the missing library by name).
+        for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libssp-0.dll; do
             src=\$(find /usr/lib/gcc/x86_64-w64-mingw32 /usr/x86_64-w64-mingw32 -name \"\$dll\" 2>/dev/null | head -1)
             if [ -z \"\$src\" ]; then
                 echo \"ERROR: \$dll not found in cross-toolchain\" >&2
@@ -80,32 +85,93 @@ docker run --rm --user "$(id -u):$(id -g)" \
 
 ##############################################################################
 # 3) Generated graphics .dat files (from build-host/).
+#
+# Path resolution: Platform.Win32.cpp's GetInstallPath() returns
+# <exeDir>/data (Platform.Win32.cpp:177), and Drawing.Sprite.cpp:571 loads
+# g2.dat / fonts.dat / palettes.dat / tracks.dat from
+# env.GetDirectoryPath(DirBase::openrct2), which is exactly that
+# Platform::GetInstallPath() return value (PlatformEnvironment.cpp:276).
+# So the four .dat files must live INSIDE data/, not at the bundle root.
 ##############################################################################
 echo "==[ graphics .dat files ]======================================="
-cp "$PROJECT_ROOT/build-host"/{g2,fonts,palettes,tracks}.dat "$STAGE_DIR/"
+cp "$PROJECT_ROOT/build-host"/{g2,fonts,palettes,tracks}.dat "$STAGE_DIR/data/"
 
 ##############################################################################
 # 4) data/ tree — language, objects, sequences, sfx, music, shaders,
-#    scenario_patches. Pulled from the install tree which the cmake
-#    install step laid out under AppDir/install/share/openrct2/.
+#    scenario_patches.
+#
+# Why we download here, not at cmake-install time: the upstream
+# install(CODE ...) download blocks in CMakeLists.txt:546+ aren't tagged
+# with any COMPONENT, so they fall in the default "Unspecified" bucket.
+# build.sh runs `cmake --install . --component openrct2` to skip the
+# (unlinkable) openrct2-cli, which also skips the asset-pack downloads.
+# Replicating the four downloads here keeps the bundle self-contained
+# without forcing us to either tag every install rule or build a CLI
+# target the cross-toolchain can't link.
+#
+# Layout produced (matches upstream OpenRCT2 portable Windows release):
+#   data/g2.dat data/fonts.dat data/palettes.dat data/tracks.dat
+#   data/language/  data/scenario_patches/  data/shaders/   (from source tree)
+#   data/object/                                            (from objects.zip)
+#   data/sequence/                                          (from title-sequences.zip)
+#   data/assetpack/openrct2.sound.parkap                    (from opensound.zip)
+#   data/assetpack/openrct2.music.alternative.parkap        (from openmusic.zip)
 ##############################################################################
-echo "==[ data tree ]================================================="
-# The install step may not have run (e.g. when openrct2-cli won't link).
-# We assemble data/ from whatever directories are present. The static
-# parts (language, scenario_patches, shaders) always live in the source
-# tree. Downloaded asset packs (sequence, object, assetpack) land in
-# build-windows/data/ from DOWNLOAD_* configure steps.
+echo "==[ data tree (static) ]========================================"
 echo "  source data/ tree -> $STAGE_DIR/data/"
 if [ -d "$PROJECT_ROOT/data" ]; then
     cp -r "$PROJECT_ROOT/data"/* "$STAGE_DIR/data/" 2>/dev/null || true
 fi
-echo "  CMake-downloaded asset packs -> $STAGE_DIR/data/"
-for src in "$BUILD_DIR/data" "$APPDIR/install/share/openrct2"; do
-    if [ -d "$src" ]; then
-        echo "    from $src"
-        cp -r "$src"/* "$STAGE_DIR/data/" 2>/dev/null || true
+
+echo "==[ data tree (asset packs — download) ]========================"
+# URLs come from assets.json. Keep this list in sync with that file.
+ASSETS_JSON="$PROJECT_ROOT/assets.json"
+get_url() { python3 -c "import json,sys; print(json.load(open('$ASSETS_JSON'))['$1']['url'])"; }
+get_sha() { python3 -c "import json,sys; print(json.load(open('$ASSETS_JSON'))['$1']['sha256'])"; }
+
+CACHE_DIR="$DIST_DIR/asset-cache"
+mkdir -p "$CACHE_DIR"
+
+fetch_and_extract() {
+    local key=$1 dest=$2
+    local url
+    url=$(get_url "$key")
+    local sha
+    sha=$(get_sha "$key")
+    local zip="$CACHE_DIR/$(basename "$url")"
+
+    if [ -f "$zip" ]; then
+        local actual_sha
+        actual_sha=$(sha256sum "$zip" | awk '{print $1}')
+        if [ "$actual_sha" != "$sha" ]; then
+            echo "  cache miss (sha mismatch) — re-downloading $key"
+            rm -f "$zip"
+        fi
     fi
-done
+    if [ ! -f "$zip" ]; then
+        echo "  download $url"
+        curl -fL --retry 3 -o "$zip" "$url"
+        local actual_sha
+        actual_sha=$(sha256sum "$zip" | awk '{print $1}')
+        if [ "$actual_sha" != "$sha" ]; then
+            echo "ERROR: sha256 mismatch for $key" >&2
+            echo "  expected $sha" >&2
+            echo "  got      $actual_sha" >&2
+            exit 1
+        fi
+    fi
+    echo "  extract $(basename "$zip") -> $dest"
+    mkdir -p "$dest"
+    unzip -q -o "$zip" -d "$dest"
+}
+
+fetch_and_extract objects          "$STAGE_DIR/data/object"
+fetch_and_extract title-sequences  "$STAGE_DIR/data/sequence"
+# opensfx + openmusic zips contain the assetpack/ folder at top level,
+# so they extract directly into data/ — same convention as the install
+# rules in CMakeLists.txt:577 and CMakeLists.txt:587.
+fetch_and_extract opensfx          "$STAGE_DIR/data"
+fetch_and_extract openmusic        "$STAGE_DIR/data"
 
 ##############################################################################
 # 5) Documentation.
