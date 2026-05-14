@@ -266,6 +266,62 @@ target_include_directories(libopenrct2 SYSTEM PRIVATE ${PNG_INCLUDE_DIRS}
 target_include_directories(libopenrct2 SYSTEM PRIVATE ${ZSTD_INCLUDE_DIRS})
 include_directories(libopenrct2 SYSTEM ${CMAKE_CURRENT_LIST_DIR}/../thirdparty)
 
+# OPENRCT2MINI defaults-export P3: embed per-build defaults into the
+# binary. The seed files under config/{appimage,miyoo_mini}/save/
+# (committed as the canonical source of truth — see P2) are
+# hex-included via cmake/EmbedFileAsArray.cmake. Choice of seed dir
+# is gated on the existing OPENRCT2MINI option, so the Mini build
+# embeds its own per-build defaults and the host/appimage build
+# embeds the appimage variants.
+#
+# The generated headers live under
+# ${CMAKE_CURRENT_BINARY_DIR}/embedded_defaults/ and are added to
+# libopenrct2's PUBLIC include path so both the openrct2 library
+# (Config.cpp / HapticEvent.cpp) and the openrct2-ui sources
+# (ShortcutManager.cpp) can include them.
+#
+# Driven via add_custom_command — editing a seed file (e.g. tweaking
+# a default in config/appimage/save/shortcuts.json) triggers a
+# regenerate of the matching header, which then triggers a recompile
+# of the TU that consumes it.
+include(${ROOT_DIR}/cmake/EmbedFileAsArray.cmake)
+
+if (OPENRCT2MINI)
+    set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/miyoo_mini/save")
+else ()
+    set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/appimage/save")
+endif ()
+
+set(_OPENRCT2MINI_EMBED_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/embedded_defaults")
+file(MAKE_DIRECTORY "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}")
+
+embed_file_as_array(
+    "${_OPENRCT2MINI_DEFAULTS_SEED_DIR}/config.ini"
+    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ConfigIniDefault.h"
+    "kConfigIniDefault")
+embed_file_as_array(
+    "${_OPENRCT2MINI_DEFAULTS_SEED_DIR}/shortcuts.json"
+    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ShortcutsJsonDefault.h"
+    "kShortcutsJsonDefault")
+embed_file_as_array(
+    "${_OPENRCT2MINI_DEFAULTS_SEED_DIR}/rumble.json"
+    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/RumbleJsonDefault.h"
+    "kRumbleJsonDefault")
+
+# An ALL-target depending on the three generated headers ensures the
+# custom commands actually run (a header that's nobody's `target_sources`
+# input would never be built otherwise). add_dependencies(libopenrct2 ...)
+# then hooks the generation into libopenrct2's build, so a clean build
+# always materialises the headers before any .cpp that #includes them.
+add_custom_target(openrct2mini_embedded_defaults ALL
+    DEPENDS
+        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ConfigIniDefault.h"
+        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ShortcutsJsonDefault.h"
+        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/RumbleJsonDefault.h")
+add_dependencies(libopenrct2 openrct2mini_embedded_defaults)
+
+target_include_directories(libopenrct2 PUBLIC "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}")
+
 # To avoid unnecessary rebuilds set the current branch and
 # short sha1 only for the two files that use these
 # definitions: Version.cpp and Crash/Platform.cpp
