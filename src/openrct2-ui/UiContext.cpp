@@ -1422,24 +1422,26 @@ private:
         int32_t height = Config::Get().general.windowHeight;
 #endif
 
-        // OPENRCT2MINI cut 40c: default window is the Miyoo Mini panel size
-        // (640×480). Anything bigger is wasted on this device; the mmiyoo
-        // render driver also caps texture dimensions at 800×600, so 1280×720
-        // would crash SDL_CreateTexture before the title screen rendered.
-        // Set defaults if size is invalid
+        // OPENRCT2MINI defaults-export follow-up: only fall back to
+        // 640×480 when the config value is the "unset" sentinel
+        // (width or height <= 0). Once that's done, we trust whatever
+        // the config specifies — including on the Mini, where the
+        // canonical seed config.ini already carries -1 / -1 and so
+        // hits this fallback path anyway. The previous cut 40c/40d
+        // hard-clamp (max(640, width)/max(480, height)) was removed:
+        // it stopped host builds from honouring a perfectly valid
+        // user-chosen window size, and on the Mini the Options >
+        // Display widgets are greyed out anyway so the only way to
+        // get an out-of-range value is hand-editing config.ini —
+        // which is the user's call to make.
+        //
+        // If a Mini user hand-edits to a size the mmiyoo render
+        // driver can't allocate (texture cap ~800×600), SDL_Create-
+        // Texture will fail at first draw and the user gets to deal
+        // with that consequence.
         if (width <= 0)
             width = 640;
         if (height <= 0)
-            height = 480;
-
-        // OPENRCT2MINI cut 40d: hard-clamp the window to the panel resolution
-        // even if a stale config.ini specifies something larger. A previous
-        // crashing run (cut 40b) could have written window_width=1280 /
-        // window_height=720; without the clamp the renderer's screen-texture
-        // creation would fail again because mmiyoo limits textures to 800×600.
-        if (width > 640)
-            width = 640;
-        if (height > 480)
             height = 480;
 
         // Create window in window first rather than fullscreen so we have the display the window is on first
@@ -1461,9 +1463,14 @@ private:
 
         ApplyScreenSaverLockSetting();
 
-        // OPENRCT2MINI: cut 29. Miyoo Mini screen is 640×480; upstream's 720×480
-        // minimum would force scaling/cropping. Drop to the device's native size.
-        // The dev host can still resize larger; the change only affects the floor.
+        // OPENRCT2MINI: cut 29. Minimum window size, NOT a hard
+        // override on config.ini's window_width / window_height —
+        // those are honoured verbatim above. This call only stops
+        // the user from dragging the window smaller than 640×480
+        // at runtime via the standard SDL resize handles. 640×480
+        // matches the Mini's native panel and is a sane floor for
+        // host builds too (upstream's 720×480 would force scaling
+        // on the Mini, which is the whole reason for the drop).
         SDL_SetWindowMinimumSize(_window, 640, 480);
         SetCursorTrap(Config::Get().general.trapCursor);
         _platformUiContext->SetWindowIcon(_window);
