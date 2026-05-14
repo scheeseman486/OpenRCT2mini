@@ -1,0 +1,37 @@
+{
+    "_comment": "Per-build UI gate manifest. Each entry in 'disabled' is a widget identifier whose runtime state is forced to disabled (greyed out, still drawn). Each entry in 'removed' is a UI element that is stripped from the layout entirely (widget hidden, dropdown entry omitted, language filtered from the language selector). See disabled_settings.txt at repo root for the human-facing summary of why each entry is gated. This file is embedded into the binary at build time by cmake/EmbedFileAsArray.cmake; see src/openrct2/ui/DisabledSettings.cpp for the runtime consumer.",
+    "disabled": [
+        "Options.WIDX_FULLSCREEN_LABEL",
+        "Options.WIDX_FULLSCREEN",
+        "Options.WIDX_FULLSCREEN_DROPDOWN",
+        "Options.WIDX_RESOLUTION_LABEL",
+        "Options.WIDX_RESOLUTION",
+        "Options.WIDX_RESOLUTION_DROPDOWN",
+        "Options.WIDX_SCALE_LABEL",
+        "Options.WIDX_SCALE",
+        "Options.WIDX_SCALE_UP",
+        "Options.WIDX_SCALE_DOWN",
+        "Options.WIDX_DRAWING_ENGINE_LABEL",
+        "Options.WIDX_DRAWING_ENGINE",
+        "Options.WIDX_DRAWING_ENGINE_DROPDOWN",
+        "Options.WIDX_FRAME_RATE_LIMIT_LABEL",
+        "Options.WIDX_FRAME_RATE_LIMIT",
+        "Options.WIDX_FRAME_RATE_LIMIT_DROPDOWN",
+        "Options.WIDX_MULTITHREADING_CHECKBOX",
+        "Options.WIDX_MINIMIZE_FOCUS_LOSS",
+        "Options.WIDX_DISABLE_SCREENSAVER_LOCK",
+        "Options.WIDX_SOUND",
+        "Options.WIDX_SOUND_DROPDOWN",
+        "Options.WIDX_AUDIO_FOCUS_CHECKBOX",
+        "Options.WIDX_TRAP_CURSOR"
+    ],
+    "removed": [
+        "Language.ar-EG",
+        "Language.zh-CN",
+        "Language.zh-TW",
+        "Language.ja-JP",
+        "Language.ko-KR",
+        "Language.vi-VN",
+        "TitleMenu.OPEN_CONTENT_FOLDER"
+    ]
+}

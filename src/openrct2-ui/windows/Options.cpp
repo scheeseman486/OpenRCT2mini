@@ -29,6 +29,10 @@
 #include <openrct2/audio/AudioContext.h>
 #include <openrct2/audio/AudioMixer.h>
 #include <openrct2/config/Config.h>
+// OPENRCT2MINI disabled-settings: per-build UI gate manifest. Replaces
+// the scattered #ifdef OPENRCT2MINI blocks in onPrepare hooks below.
+// See src/openrct2/ui/DisabledSettings.h and config/<build>/disabled_settings.json.
+#include <openrct2/ui/DisabledSettings.h>
 #include <openrct2/core/EnumUtils.hpp>
 #include <openrct2/core/File.h>
 #include <openrct2/core/String.hpp>
@@ -75,20 +79,20 @@ namespace OpenRCT2::Ui::Windows
     // BiDi shaping). The strings still ship in the data tarball — we
     // just keep them off the dropdown so the user can't pick a setting
     // that produces empty boxes.
-    static constexpr bool IsLanguageHiddenFromDropdown(size_t langId)
+    //
+    // OPENRCT2MINI disabled-settings refactor: the hide-list lived as a
+    // hardcoded switch here; it now consults DisabledSettings::is-
+    // LanguageRemoved which reads from the per-build manifest at
+    // config/<build>/disabled_settings.json. Behaviour is unchanged
+    // for both builds (both manifests currently list the same six
+    // locales because ICU is disabled in both); the indirection lets
+    // a future build that ships TTF fallbacks enable a subset by
+    // editing the JSON instead of recompiling this file.
+    static bool IsLanguageHiddenFromDropdown(size_t langId)
     {
-        switch (langId)
-        {
-            case LANGUAGE_ARABIC:
-            case LANGUAGE_CHINESE_SIMPLIFIED:
-            case LANGUAGE_CHINESE_TRADITIONAL:
-            case LANGUAGE_JAPANESE:
-            case LANGUAGE_KOREAN:
-            case LANGUAGE_VIETNAMESE:
-                return true;
-            default:
-                return false;
-        }
+        if (langId >= std::size(LanguagesDescriptors))
+            return false;
+        return DisabledSettings::isLanguageRemoved(LanguagesDescriptors[langId].locale);
     }
 
     enum WindowOptionsPage
@@ -1097,18 +1101,37 @@ namespace OpenRCT2::Ui::Windows
             // rate-limit/multi-threading/focus-loss/screensaver). The
             // multi-threading config force-off in Config.cpp is gated
             // the same way so the checkbox honours saved state on host.
-#ifdef OPENRCT2MINI
-            for (auto idx : { WIDX_FULLSCREEN_LABEL, WIDX_FULLSCREEN, WIDX_FULLSCREEN_DROPDOWN,
-                              WIDX_RESOLUTION_LABEL, WIDX_RESOLUTION, WIDX_RESOLUTION_DROPDOWN,
-                              WIDX_SCALE_LABEL, WIDX_SCALE, WIDX_SCALE_UP, WIDX_SCALE_DOWN,
-                              WIDX_DRAWING_ENGINE_LABEL, WIDX_DRAWING_ENGINE, WIDX_DRAWING_ENGINE_DROPDOWN,
-                              WIDX_FRAME_RATE_LIMIT_LABEL, WIDX_FRAME_RATE_LIMIT, WIDX_FRAME_RATE_LIMIT_DROPDOWN,
-                              WIDX_MULTITHREADING_CHECKBOX,
-                              WIDX_MINIMIZE_FOCUS_LOSS, WIDX_DISABLE_SCREENSAVER_LOCK })
+            // OPENRCT2MINI disabled-settings: greying driven by the
+            // per-build manifest (config/<build>/disabled_settings.json).
+            // The old #ifdef OPENRCT2MINI block hand-listed every WIDX
+            // to grey on the Mini; that list now lives in the manifest's
+            // `disabled[]` array. We walk the same WIDX set here and
+            // ask the manifest per id so the host build naturally gets
+            // a no-op (its manifest's `disabled[]` is empty) without
+            // requiring two compile branches.
+            for (auto [idx, key] : { std::pair{ WIDX_FULLSCREEN_LABEL,        std::string_view{ "Options.WIDX_FULLSCREEN_LABEL" } },
+                                     std::pair{ WIDX_FULLSCREEN,              std::string_view{ "Options.WIDX_FULLSCREEN" } },
+                                     std::pair{ WIDX_FULLSCREEN_DROPDOWN,     std::string_view{ "Options.WIDX_FULLSCREEN_DROPDOWN" } },
+                                     std::pair{ WIDX_RESOLUTION_LABEL,        std::string_view{ "Options.WIDX_RESOLUTION_LABEL" } },
+                                     std::pair{ WIDX_RESOLUTION,              std::string_view{ "Options.WIDX_RESOLUTION" } },
+                                     std::pair{ WIDX_RESOLUTION_DROPDOWN,     std::string_view{ "Options.WIDX_RESOLUTION_DROPDOWN" } },
+                                     std::pair{ WIDX_SCALE_LABEL,             std::string_view{ "Options.WIDX_SCALE_LABEL" } },
+                                     std::pair{ WIDX_SCALE,                   std::string_view{ "Options.WIDX_SCALE" } },
+                                     std::pair{ WIDX_SCALE_UP,                std::string_view{ "Options.WIDX_SCALE_UP" } },
+                                     std::pair{ WIDX_SCALE_DOWN,              std::string_view{ "Options.WIDX_SCALE_DOWN" } },
+                                     std::pair{ WIDX_DRAWING_ENGINE_LABEL,    std::string_view{ "Options.WIDX_DRAWING_ENGINE_LABEL" } },
+                                     std::pair{ WIDX_DRAWING_ENGINE,          std::string_view{ "Options.WIDX_DRAWING_ENGINE" } },
+                                     std::pair{ WIDX_DRAWING_ENGINE_DROPDOWN, std::string_view{ "Options.WIDX_DRAWING_ENGINE_DROPDOWN" } },
+                                     std::pair{ WIDX_FRAME_RATE_LIMIT_LABEL,  std::string_view{ "Options.WIDX_FRAME_RATE_LIMIT_LABEL" } },
+                                     std::pair{ WIDX_FRAME_RATE_LIMIT,        std::string_view{ "Options.WIDX_FRAME_RATE_LIMIT" } },
+                                     std::pair{ WIDX_FRAME_RATE_LIMIT_DROPDOWN, std::string_view{ "Options.WIDX_FRAME_RATE_LIMIT_DROPDOWN" } },
+                                     std::pair{ WIDX_MULTITHREADING_CHECKBOX, std::string_view{ "Options.WIDX_MULTITHREADING_CHECKBOX" } },
+                                     std::pair{ WIDX_MINIMIZE_FOCUS_LOSS,     std::string_view{ "Options.WIDX_MINIMIZE_FOCUS_LOSS" } },
+                                     std::pair{ WIDX_DISABLE_SCREENSAVER_LOCK,std::string_view{ "Options.WIDX_DISABLE_SCREENSAVER_LOCK" } } })
             {
-                widgetSetEnabled(*this, idx, false);
+                if (DisabledSettings::isDisabled(key))
+                    widgetSetEnabled(*this, idx, false);
             }
-#endif
 
             // Dropdown captions for straightforward strings.
             widgets[WIDX_FULLSCREEN].text = FullscreenModeNames[Config::Get().general.fullscreenMode];
@@ -1769,11 +1792,14 @@ namespace OpenRCT2::Ui::Windows
             // audio device selection (no choice to make) and the
             // disable-audio-on-focus-loss checkbox (no focus loss).
             // host-restoration-plan §2b: Mini-only.
-#ifdef OPENRCT2MINI
-            widgetSetEnabled(*this, WIDX_SOUND, false);
-            widgetSetEnabled(*this, WIDX_SOUND_DROPDOWN, false);
-            widgetSetEnabled(*this, WIDX_AUDIO_FOCUS_CHECKBOX, false);
-#endif
+            // OPENRCT2MINI disabled-settings: data-driven per manifest.
+            for (auto [idx, key] : { std::pair{ WIDX_SOUND,                std::string_view{ "Options.WIDX_SOUND" } },
+                                     std::pair{ WIDX_SOUND_DROPDOWN,       std::string_view{ "Options.WIDX_SOUND_DROPDOWN" } },
+                                     std::pair{ WIDX_AUDIO_FOCUS_CHECKBOX, std::string_view{ "Options.WIDX_AUDIO_FOCUS_CHECKBOX" } } })
+            {
+                if (DisabledSettings::isDisabled(key))
+                    widgetSetEnabled(*this, idx, false);
+            }
 
             // Initialize only on first frame, otherwise the scrollbars won't be able to be modified
             if (currentFrame == 0)
@@ -1869,9 +1895,9 @@ namespace OpenRCT2::Ui::Windows
             // OPENRCT2MINI: trap-mouse-cursor is meaningless on a 640x480
             // fullscreen device with no real mouse. Disable the checkbox.
             // host-restoration-plan §2c: Mini-only.
-#ifdef OPENRCT2MINI
-            widgetSetEnabled(*this, WIDX_TRAP_CURSOR, false);
-#endif
+            // OPENRCT2MINI disabled-settings: data-driven per manifest.
+            if (DisabledSettings::isDisabled("Options.WIDX_TRAP_CURSOR"))
+                widgetSetEnabled(*this, WIDX_TRAP_CURSOR, false);
             // OPENRCT2MINI gamepad-plan 1.5/1.6: re-enable Shortcut
             // Keys. The earlier disable rationale (gamepad controls
             // were hardcoded in UiContext intercepts and the rebind UI

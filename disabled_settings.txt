@@ -61,11 +61,6 @@ Top toolbar / Disk options dropdown
 * "Report a bug on GitHub"                 — removed (cut completed task #172). The device's launcher can't open URLs, so the link was dead.
 
 
-Window resolution (config.ini)
-------------------------------
-* window_width / window_height             — NOT clamped (recent change). Defaults flow from the embedded config.ini seed under config/miyoo_mini/save/ (-1 / -1 → falls back to 640x480 at startup). The UiContext min-size guard (640x480) still prevents the user from dragging the window smaller at runtime, but nothing in the binary overrides a valid larger value the user explicitly puts in config.ini. Authors who edit config to something the mmiyoo render driver can't allocate (texture cap ~800x600) take on the risk themselves.
-
-
 Source-of-truth references
 --------------------------
 * Options.cpp:1100, 1772, 1872, 2523       — Options > Display / Audio / Controls / Advanced gates

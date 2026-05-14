@@ -308,6 +308,21 @@ embed_file_as_array(
     "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/RumbleJsonDefault.h"
     "kRumbleJsonDefault")
 
+# OPENRCT2MINI disabled-settings: a fourth per-build manifest, sibling
+# of the save/ defaults but living one level up under
+# config/<build>/disabled_settings.json. Lists widgets to grey out and
+# UI items to remove on a per-build basis (Options pane gates, etc.).
+# Consumed at runtime by src/openrct2/ui/DisabledSettings.cpp.
+if (OPENRCT2MINI)
+    set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/miyoo_mini/disabled_settings.json")
+else ()
+    set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/appimage/disabled_settings.json")
+endif ()
+embed_file_as_array(
+    "${_OPENRCT2MINI_DISABLED_SETTINGS_SRC}"
+    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/DisabledSettingsDefault.h"
+    "kDisabledSettingsDefault")
+
 # An ALL-target depending on the three generated headers ensures the
 # custom commands actually run (a header that's nobody's `target_sources`
 # input would never be built otherwise). add_dependencies(libopenrct2 ...)
@@ -317,7 +332,8 @@ add_custom_target(openrct2mini_embedded_defaults ALL
     DEPENDS
         "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ConfigIniDefault.h"
         "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ShortcutsJsonDefault.h"
-        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/RumbleJsonDefault.h")
+        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/RumbleJsonDefault.h"
+        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/DisabledSettingsDefault.h")
 add_dependencies(libopenrct2 openrct2mini_embedded_defaults)
 
 target_include_directories(libopenrct2 PUBLIC "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}")
