@@ -360,7 +360,8 @@ namespace OpenRCT2::Ui
         static std::optional<ShortcutInput> convertLegacyBinding(uint16_t binding);
         void loadLegacyBindings(const fs::path& path);
         void loadUserBindings(const fs::path& path);
-        void saveUserBindings(const fs::path& path);
+        // saveUserBindings(const fs::path&) is now declared public below
+        // (OPENRCT2MINI defaults-export, used by --dump-defaults).
 
         // We store the IDs separately so that we can safely use them for string_view in the map
         std::vector<std::unique_ptr<std::string>> _ids;
@@ -373,6 +374,13 @@ namespace OpenRCT2::Ui
 
         void loadUserBindings();
         void saveUserBindings();
+        // OPENRCT2MINI defaults-export: explicit path overload promoted
+        // to public so the --dump-defaults handler (Ui.cpp::main) can
+        // serialise the registerDefaultShortcuts-populated table into
+        // an arbitrary directory at packaging time. The default-path
+        // private overload above is the one the engine uses for the
+        // normal user shortcuts.json round-trip.
+        void saveUserBindings(const fs::path& path);
 
         void registerShortcut(RegisteredShortcut&& shortcut);
         template<typename... Args>

@@ -31,6 +31,15 @@
 #include <openrct2/command_line/CommandLine.hpp>
 #include <openrct2/platform/Platform.h>
 #include <openrct2/ui/UiContext.h>
+// OPENRCT2MINI defaults-export: includes for the --dump-defaults
+// handler at the top of main. Pulls in Config / ShortcutManager /
+// Haptic so we can bootstrap each system's defaults without booting
+// the full game context.
+#include <openrct2/config/Config.h>
+#include <openrct2/core/Path.hpp>
+#include <openrct2/haptic/HapticEvent.h>
+#include "input/ShortcutManager.h"
+#include <filesystem>
 
 #include <cstdio>
 #include <cstdlib>
@@ -212,6 +221,98 @@ int main(int argc, const char** argv)
     kpt("CommandLineRun returned");
     RegisterBitmapReader();
     kpt("RegisterBitmapReader ok");
+
+    // OPENRCT2MINI defaults-export: --dump-defaults short-circuit.
+    // The CLI flag stashes its target directory on gDumpDefaultsPath
+    // and returns EXITCODE_CONTINUE so we can intercept here, after
+    // basic process bootstrap (signal handlers, malloc tuning,
+    // RegisterBitmapReader for any image-touching code paths) but
+    // BEFORE the heavyweight context/audio/UI construction below.
+    //
+    // We bootstrap a minimal PlatformEnvironment, then synthesise
+    // each system's built-in defaults to disk:
+    //   * Config::SetDefaults populates the global Config from the
+    //     in-source DefaultIniReader (post-P4: from an embedded ini
+    //     blob; for now this still produces the canonical defaults).
+    //     Config::SaveToPath then serialises to <dir>/config.ini.
+    //   * ShortcutManager ctor calls registerDefaultShortcuts, which
+    //     populates each shortcut's `standard` AND `current` arrays.
+    //     saveUserBindings(path) writes `current` to JSON — so the
+    //     dump captures the full defaults table.
+    //   * Haptic::writeDefaultProfilesTo wraps seedDefaults +
+    //     saveProfilesToDisk(path) in one call (we added it for
+    //     this purpose — see HapticEvent.h).
+    //
+    // After the dump we return EXIT_SUCCESS without booting the
+    // game. The handler lives here in openrct2-ui (not in the
+    // openrct2 lib that owns RootCommands.cpp) because
+    // ShortcutManager is openrct2-ui code; the CLI parser sits one
+    // library down and can't reach it.
+    if (runGame == EXITCODE_CONTINUE && !gDumpDefaultsPath.empty())
+    {
+        kpt("dump-defaults: starting");
+        try
+        {
+            // Ensure the target directory exists. `gDumpDefaultsPath`
+            // was already absolutised in RootCommands.cpp.
+            std::error_code ec;
+            std::filesystem::create_directories(std::filesystem::u8path(gDumpDefaultsPath), ec);
+            if (ec)
+            {
+                std::fprintf(stderr,
+                    "[--dump-defaults] could not create '%s': %s\n",
+                    gDumpDefaultsPath.c_str(), ec.message().c_str());
+                return EXIT_FAILURE;
+            }
+
+            // (1) config.ini — populate Config singleton from the
+            // canonical defaults, then write it out.
+            Config::SetDefaults();
+            const auto configPath = Path::Combine(gDumpDefaultsPath, u8"config.ini");
+            if (!Config::SaveToPath(configPath))
+            {
+                std::fprintf(stderr,
+                    "[--dump-defaults] failed to write %s\n", configPath.c_str());
+                return EXIT_FAILURE;
+            }
+            kpt("dump-defaults: wrote config.ini");
+
+            // (2) shortcuts.json — construct a ShortcutManager (the
+            // ctor runs registerDefaultShortcuts populating each
+            // entry's `current` and `standard`), then serialise
+            // `current` to JSON via the path-taking overload.
+            //
+            // ShortcutManager needs an IPlatformEnvironment for its
+            // _env reference, but only consults it for the user
+            // shortcuts.json path on the disk-load path, which we
+            // never trigger here. CreatePlatformEnvironment honours
+            // the gCustomUserDataPath / gCustomRCT2DataPath env
+            // overrides set by the corresponding CLI flags — fine
+            // even though we don't actually use that file location.
+            auto env = CreatePlatformEnvironment();
+            Ui::ShortcutManager sm(*env);
+            const auto shortcutsPath = Path::Combine(gDumpDefaultsPath, u8"shortcuts.json");
+            sm.saveUserBindings(std::filesystem::u8path(shortcutsPath));
+            kpt("dump-defaults: wrote shortcuts.json");
+
+            // (3) rumble.json — seedDefaults + write via the helper
+            // we added in HapticEvent.h.
+            const auto rumblePath = Path::Combine(gDumpDefaultsPath, u8"rumble.json");
+            Haptic::writeDefaultProfilesTo(rumblePath);
+            kpt("dump-defaults: wrote rumble.json");
+
+            std::fprintf(stderr,
+                "[--dump-defaults] wrote config.ini, shortcuts.json, rumble.json to %s\n",
+                gDumpDefaultsPath.c_str());
+        }
+        catch (const std::exception& e)
+        {
+            std::fprintf(stderr, "[--dump-defaults] failed: %s\n", e.what());
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
+
     if (runGame == EXITCODE_CONTINUE)
     {
         std::unique_ptr<IContext> context;

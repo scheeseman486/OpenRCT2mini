@@ -168,4 +168,14 @@ namespace OpenRCT2::Haptic
     // Atomic write of the in-memory map back to rumble.json.
     // Debounced by callers via the editor's auto-save logic.
     void saveProfilesToDisk();
+
+    // OPENRCT2MINI defaults-export: rebuild the in-memory map from the
+    // built-in defaults and write the result to `path` (e.g. an
+    // arbitrary directory passed via --dump-defaults). Used at
+    // packaging time to capture the source-of-truth defaults for the
+    // active build variant into a JSON file that's then embedded into
+    // the binary via the EmbedFileAsArray CMake helper. NOT called by
+    // the normal game-startup path (which uses loadProfilesFromDisk
+    // and falls through to seedDefaults internally).
+    void writeDefaultProfilesTo(const std::string& path);
 } // namespace OpenRCT2::Haptic

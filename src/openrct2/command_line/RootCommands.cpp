@@ -62,6 +62,10 @@ namespace OpenRCT2
     static u8string _openrct2DataPath = {};
     static u8string _rct1DataPath = {};
     static u8string _rct2DataPath = {};
+    // OPENRCT2MINI defaults-export: target directory for --dump-defaults.
+    // Non-empty → main() runs the dump path instead of booting the game.
+    // Carried over to gDumpDefaultsPath in HandleCommandDefault.
+    static u8string _dumpDefaultsPath = {};
     static bool _silentBreakpad = false;
 
     // clang-format off
@@ -84,6 +88,12 @@ namespace OpenRCT2
         { CMDLINE_TYPE_STRING,  &_openrct2DataPath, kNAC, "openrct2-data-path", "path to the OpenRCT2 data directory (containing languages)" },
         { CMDLINE_TYPE_STRING,  &_rct1DataPath,     kNAC, "rct1-data-path",     "path to the RollerCoaster Tycoon 1 data directory (containing data/csg1.dat)" },
         { CMDLINE_TYPE_STRING,  &_rct2DataPath,     kNAC, "rct2-data-path",     "path to the RollerCoaster Tycoon 2 data directory (containing data/g1.dat)" },
+        // OPENRCT2MINI defaults-export: dump current in-source defaults
+        // for Config / Shortcuts / Rumble to <dir>/{config.ini,
+        // shortcuts.json, rumble.json} and exit before booting the game.
+        // Used at packaging time to capture per-build seed files that
+        // are then embedded into the binary via EmbedFileAsArray.
+        { CMDLINE_TYPE_STRING,  &_dumpDefaultsPath, kNAC, "dump-defaults",      "dump current in-source defaults (config.ini / shortcuts.json / rumble.json) to a directory and exit"   },
     #ifdef USE_BREAKPAD
         { CMDLINE_TYPE_SWITCH,  &_silentBreakpad,  kNAC, "silent-breakpad",   "make breakpad crash reporting silent"                       },
     #endif // USE_BREAKPAD
@@ -220,6 +230,17 @@ namespace OpenRCT2
         if (!_rct2DataPath.empty())
         {
             gCustomRCT2DataPath = Path::GetAbsolute(_rct2DataPath);
+        }
+
+        // OPENRCT2MINI defaults-export: stash the dump target. The
+        // actual dump runs from Ui.cpp::main after CommandLineRun
+        // returns (it needs ShortcutManager, which lives in the
+        // openrct2-ui library — out of reach from this TU). Returning
+        // EXITCODE_CONTINUE here is intentional: main flips early to
+        // the dump path on seeing this non-empty.
+        if (!_dumpDefaultsPath.empty())
+        {
+            gDumpDefaultsPath = Path::GetAbsolute(_dumpDefaultsPath);
         }
 
         if (!_password.empty())

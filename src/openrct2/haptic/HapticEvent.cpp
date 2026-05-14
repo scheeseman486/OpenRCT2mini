@@ -828,48 +828,71 @@ namespace OpenRCT2::Haptic
         }
     } // namespace
 
+    namespace
+    {
+        // OPENRCT2MINI defaults-export: shared serialiser used by
+        // both saveProfilesToDisk (writes the live in-memory map) and
+        // writeDefaultProfilesTo (writes the seeded defaults to an
+        // arbitrary path). Iterates _map in enum-declaration order
+        // for stable, diff-friendly output.
+        void writeMapToPath(const std::string& path)
+        {
+            json_t root;
+            root["version"] = 2;
+
+            json_t sfx = json_t::object();
+            for (const auto& nameEntry : kSoundIdNames)
+            {
+                const auto it = _map.find(nameEntry.id);
+                if (it == _map.end())
+                    continue;
+                const auto& p = it->second;
+
+                json_t entry = json_t::object();
+                entry["mode"] = (p.mode == RumbleMode::continuous) ? "continuous" : "oneShot";
+                entry["envelopeDurationMs"] = p.envelopeDurationMs;
+                // OPENRCT2MINI v2.19: persist per-profile flags. Always
+                // emitted so the format is self-documenting; defaults
+                // (false/false/100) are still readable from older builds
+                // (Json::GetBoolean / Json::GetNumber tolerate the same
+                // shapes).
+                entry["disabled"] = p.disabled;
+                entry["scaleWithRate"] = p.scaleWithRate;
+                entry["rateScalePercent"] = static_cast<int32_t>(p.rateScalePercent);
+                entry["low"] = envToJson(p.low);
+                entry["high"] = envToJson(p.high);
+                sfx[std::string(nameEntry.name)] = std::move(entry);
+            }
+            root["soundEffects"] = std::move(sfx);
+
+            try
+            {
+                Json::WriteToFile(path, root);
+            }
+            catch (...)
+            {
+                Console::Error::WriteLine("Failed to write rumble.json to %s", path.c_str());
+            }
+        }
+    } // namespace
+
     void saveProfilesToDisk()
     {
         const auto path = getRumbleJsonPath();
         if (path.empty())
             return;
+        writeMapToPath(path);
+    }
 
-        json_t root;
-        root["version"] = 2;
-
-        json_t sfx = json_t::object();
-        // Iterate in enum-declaration order for stable output.
-        for (const auto& nameEntry : kSoundIdNames)
-        {
-            const auto it = _map.find(nameEntry.id);
-            if (it == _map.end())
-                continue;
-            const auto& p = it->second;
-
-            json_t entry = json_t::object();
-            entry["mode"] = (p.mode == RumbleMode::continuous) ? "continuous" : "oneShot";
-            entry["envelopeDurationMs"] = p.envelopeDurationMs;
-            // OPENRCT2MINI v2.19: persist per-profile flags. Always
-            // emitted so the format is self-documenting; defaults
-            // (false/false/100) are still readable from older builds
-            // (Json::GetBoolean / Json::GetNumber tolerate the same
-            // shapes).
-            entry["disabled"] = p.disabled;
-            entry["scaleWithRate"] = p.scaleWithRate;
-            entry["rateScalePercent"] = static_cast<int32_t>(p.rateScalePercent);
-            entry["low"] = envToJson(p.low);
-            entry["high"] = envToJson(p.high);
-            sfx[std::string(nameEntry.name)] = std::move(entry);
-        }
-        root["soundEffects"] = std::move(sfx);
-
-        try
-        {
-            Json::WriteToFile(path, root);
-        }
-        catch (...)
-        {
-            Console::Error::WriteLine("Failed to write rumble.json to %s", path.c_str());
-        }
+    void writeDefaultProfilesTo(const std::string& path)
+    {
+        // Reset the in-memory map and re-populate from the built-in
+        // defaults. Bypasses the disk-load fall-through that
+        // loadProfilesFromDisk would do, so we get the canonical
+        // defaults regardless of whether a stale rumble.json happens
+        // to exist in the user's data directory.
+        _map.clear();
+        seedDefaults();
+        writeMapToPath(path);
     }
 } // namespace OpenRCT2::Haptic

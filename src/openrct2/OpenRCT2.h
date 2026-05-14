@@ -44,6 +44,10 @@ extern u8string gCustomOpenRCT2DataPath;
 extern u8string gCustomRCT1DataPath;
 extern u8string gCustomRCT2DataPath;
 extern u8string gCustomPassword;
+// OPENRCT2MINI defaults-export: set by --dump-defaults CLI flag.
+// Non-empty → main() runs the dump and exits without booting the
+// game. See OpenRCT2.cpp for the full rationale.
+extern u8string gDumpDefaultsPath;
 extern bool gOpenRCT2Headless;
 extern bool gOpenRCT2NoGraphics;
 extern bool gOpenRCT2ShowChangelog;
