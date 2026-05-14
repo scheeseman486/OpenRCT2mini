@@ -139,6 +139,27 @@ if (WIN32)
         endif ()
         # Hardcode some of the libraries used by mingw builds
         target_link_libraries(openrct2 imm32 winmm setupapi version)
+
+        # OPENRCT2MINI Windows cross-build: SDL2 wires the entry point on Windows
+        # by redefining `main` → `SDL_main` in <SDL.h>. We need libSDL2main to
+        # provide a real WinMain that parses GetCommandLineW() into UTF-8 argv
+        # and calls our SDL_main (= Ui.cpp's `int main`). mingw32 must come
+        # before SDL2main in the link list per SDL2 docs.
+        find_library(SDL2MAIN_LIBRARY SDL2main)
+        if (SDL2MAIN_LIBRARY)
+            target_link_libraries(openrct2 mingw32 ${SDL2MAIN_LIBRARY})
+        endif ()
+
+        # OPENRCT2MINI Windows cross-build: compile resources/OpenRCT2.rc via
+        # windres so the produced .exe carries the IDI_ICON resource
+        # (UiContext.Win32.cpp:81), the VS_VERSION_INFO block read by
+        # Explorer's "Properties" tab, and the embedded merged manifest
+        # (DPI awareness + Common-Controls v6 — the latter is what the
+        # MSBuild path achieves via #pragma comment(linker, "/manifestdependency:...")
+        # which mingw-w64-gcc silently drops). CMake invokes the configured
+        # CMAKE_RC_COMPILER automatically for .rc files when the toolchain
+        # is set to a Windows target.
+        target_sources(openrct2 PRIVATE ${ROOT_DIR}/resources/OpenRCT2.rc)
     endif ()
 endif ()
 if (MSVC)

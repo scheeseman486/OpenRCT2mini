@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+
+  <!--
+    OPENRCT2MINI Windows cross-build manifest.
+    Merge of two sources from upstream's MSBuild path:
+      (1) src/openrct2-win/openrct2-win.manifest — DPI awareness +
+          supportedOS for Windows 10+.
+      (2) the Common-Controls v6 manifestdependency declared via
+          #pragma comment(linker, "/manifestdependency:...") in both
+          src/openrct2/platform/Platform.Win32.cpp and
+          src/openrct2-win/openrct2-win.cpp. mingw-w64-gcc silently drops
+          #pragma comment(linker, ...) directives, so the dependency has
+          to land here in the .rc-embedded manifest to take effect.
+
+    Without the Common-Controls v6 dependency block, Windows loads the
+    legacy comctl32 v5, and buttons / edit boxes / scrollbars render in
+    the Windows 95 visual style. With it, controls get the modern theme.
+  -->
+
+  <!-- Common-Controls v6 dependency.
+       Required for modern visual styles (themed buttons, tabs, etc.). -->
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+          type="win32"
+          name="Microsoft.Windows.Common-Controls"
+          version="6.0.0.0"
+          processorArchitecture="*"
+          publicKeyToken="6595b64144ccf1df"
+          language="*" />
+    </dependentAssembly>
+  </dependency>
+
+  <!-- DPI awareness block.
+       Modern dpiAwareness (Windows 10 1703+) with fallback to PerMonitor
+       (Windows 8.1+) and legacy dpiAware true/PM (Vista+). -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!-- PerMonitorV2: Windows 10 version 1703 and newer-->
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2,PerMonitor</dpiAwareness>
+      <!-- PerMonitor:   Windows 8.1 and newer -->
+      <!-- System-aware: Windows Vista and newer -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/PM</dpiAware>
+    </windowsSettings>
+  </application>
+
+  <!-- Compatibility / supportedOS block.
+       Declares we know about Windows 10. Without this, Windows 8.1+ enters
+       compatibility shims that lie about the OS version. -->
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 and newer -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+
+</assembly>

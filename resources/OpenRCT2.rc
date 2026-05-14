@@ -91,6 +91,22 @@ END
 // remains consistent on all systems.
 IDI_ICON                ICON                    "logo\\icon.ico"
 
+/////////////////////////////////////////////////////////////////////////////
+//
+// Manifest
+//
+
+// OPENRCT2MINI Windows cross-build: embed the merged manifest. Resource ID 1
+// with type 24 = CREATEPROCESS_MANIFEST_RESOURCE_ID + RT_MANIFEST. The OS
+// loader reads this directly from the .exe's PE resources at process create
+// time. The manifest declares Common-Controls v6 (modern visual styles),
+// PerMonitorV2 DPI awareness, and Windows 10 OS compatibility — the same
+// three blocks the MSBuild path achieves via openrct2-win.manifest + two
+// #pragma comment(linker, "/manifestdependency:...") directives. We
+// consolidate them here so the mingw cross-build (which silently drops
+// #pragma comment) gets the same runtime behaviour.
+1                       24                      "openrct2.manifest"
+
 #endif    // English (United Kingdom) resources
 /////////////////////////////////////////////////////////////////////////////
 

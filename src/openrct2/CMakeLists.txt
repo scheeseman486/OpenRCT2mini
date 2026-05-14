@@ -173,9 +173,17 @@ else ()
 endif ()
 
 if (MINGW)
-    # Hardcode libraries used on mingw
-    target_link_libraries(libopenrct2 crypto ws2_32 tasn1 unistring iconv p11-kit hogweed gmp nettle)
-    # Link in libssp
+    # OPENRCT2MINI host-restoration / Windows-cross: the gnutls+iconv stack
+    # (crypto, tasn1, unistring, iconv, p11-kit, hogweed, gmp, nettle) is only
+    # needed when network/HTTP is enabled. Under our Windows cross-build
+    # profile (DISABLE_NETWORK=ON, DISABLE_HTTP=ON) none of these are present
+    # in the mingw-w64 cross-sysroot and linking against them would fail.
+    # ws2_32 is the platform crypto+winsock; only pulled when network is on.
+    if (NOT DISABLE_NETWORK OR NOT DISABLE_HTTP)
+        target_link_libraries(libopenrct2 crypto ws2_32 tasn1 unistring iconv p11-kit hogweed gmp nettle)
+    endif ()
+    # Link in libssp (stack protector runtime) — needed unconditionally
+    # since other CMake branches set -fstack-protector-strong globally.
     target_link_libraries(libopenrct2 -fstack-protector-strong)
 endif()
 
@@ -288,6 +296,12 @@ include(${ROOT_DIR}/cmake/EmbedFileAsArray.cmake)
 
 if (OPENRCT2MINI)
     set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/miyoo_mini/save")
+elseif (WIN32)
+    # Windows builds (mingw cross-compile or native MSVC CMake) get the
+    # config/windows/ seed dir. Byte-identical to config/appimage/ at the
+    # commit this branch was introduced; diverging later is a seed-file
+    # edit only (no source change).
+    set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/windows/save")
 else ()
     set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/appimage/save")
 endif ()
@@ -315,6 +329,8 @@ embed_file_as_array(
 # Consumed at runtime by src/openrct2/ui/DisabledSettings.cpp.
 if (OPENRCT2MINI)
     set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/miyoo_mini/disabled_settings.json")
+elseif (WIN32)
+    set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/windows/disabled_settings.json")
 else ()
     set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/appimage/disabled_settings.json")
 endif ()
