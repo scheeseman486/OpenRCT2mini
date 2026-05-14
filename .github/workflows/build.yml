@@ -229,3 +229,109 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows-x64:
+    name: Cross-build for Windows x64 (mingw-w64)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Same host graphics step as the ARM and AppImage jobs — the cross
+      # build can't run openrct2-cli (it's a .exe), so the .dat files are
+      # produced by a native host build first. We duplicate the recipe
+      # rather than pass artefacts between GHA jobs to keep each job
+      # independent and rebuild-able in isolation.
+      - name: Install host build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config \
+            libsdl2-dev libpng-dev libzip-dev libzstd-dev \
+            libvorbis-dev libogg-dev nlohmann-json3-dev \
+            p7zip-full python3-pil
+
+      - name: Host build (graphics target only — produces *.dat)
+        run: |
+          cmake -S . -B build-host -G Ninja \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DCMAKE_CXX_FLAGS="-Wno-error=null-dereference -Wno-error=array-bounds -Wno-error=stringop-overflow -Wno-error=stringop-overread -Wno-error=dangling-reference -Wno-error=maybe-uninitialized" \
+            -DDISABLE_NETWORK=ON -DDISABLE_HTTP=ON -DDISABLE_OPENGL=ON \
+            -DDISABLE_TTF=ON -DDISABLE_FLAC=ON -DDISABLE_DISCORD_RPC=ON \
+            -DDISABLE_GOOGLE_BENCHMARK=ON -DDISABLE_VERSION_CHECKER=ON \
+            -DENABLE_SCRIPTING=OFF -DDISABLE_ICU=ON \
+            -DDOWNLOAD_TITLE_SEQUENCES=OFF -DDOWNLOAD_OBJECTS=OFF \
+            -DDOWNLOAD_OPENSFX=OFF -DDOWNLOAD_OPENMUSIC=OFF \
+            -DOPENRCT2_USE_CCACHE=OFF
+          cmake --build build-host --target graphics
+          ls -la build-host/*.dat
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # First-run builds the mingw-w64 cross-toolchain image (~10 min for
+      # the apt install + inline cross-build of SDL2/png/zlib/zstd/vorbis/
+      # ogg/flac/freetype/zip/nlohmann_json into /opt/mingw-sysroot/).
+      # Subsequent runs reuse the cached layers via type=gha (scope=windows
+      # so it doesn't collide with the appimage scope).
+      - name: Build Windows cross-toolchain image
+        uses: docker/build-push-action@v5
+        with:
+          context: Packaging/windows
+          file: Packaging/windows/Dockerfile
+          tags: openrctmini-windows-cross:latest
+          load: true
+          push: false
+          cache-from: type=gha,scope=windows
+          cache-to: type=gha,mode=max,scope=windows
+
+      # Run the cross-build. --skip-host-graphics because we already
+      # produced the .dat files above (build-host/ is shared via the
+      # bind mount that build.sh sets up automatically).
+      - name: Cross-compile openrct2 for x86_64-windows
+        run: |
+          ./Packaging/windows/build.sh --skip-host-graphics
+
+      - name: Inspect the produced artifacts
+        run: |
+          ls -la dist/
+          file dist/OpenRCT2mini-x64/openrct2.exe
+          ls -la dist/OpenRCT2mini-*-x64.zip
+
+      - name: Upload portable zip as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenRCT2mini-x64-${{ github.sha }}
+          path: dist/OpenRCT2mini-*-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      # Idempotent release-on-tag flow — softprops/action-gh-release
+      # appends to the existing release on the tag if one already
+      # exists (created by the ARM or AppImage job that ran first).
+      - name: Resolve release body path
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: relbody
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          if [ -f "release-notes-${tag}.md" ]; then
+              echo "path=release-notes-${tag}.md" >> "$GITHUB_OUTPUT"
+              echo "Using release-notes-${tag}.md"
+          else
+              echo "path=" >> "$GITHUB_OUTPUT"
+              echo "No release-notes-${tag}.md — falling back to auto-generated notes."
+          fi
+
+      - name: Create release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/OpenRCT2mini-*-x64.zip
+          body_path: ${{ steps.relbody.outputs.path }}
+          generate_release_notes: ${{ steps.relbody.outputs.path == '' }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
