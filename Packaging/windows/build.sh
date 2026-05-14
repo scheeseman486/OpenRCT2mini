@@ -233,18 +233,30 @@ docker run --rm --user "$(id -u):$(id -g)" \
         # the openrct2-ui strong override, which CLI doesn't link).
         ninja openrct2 -j\$(nproc)
 
-        echo '==[ ninja install DESTDIR=AppDir ]============================='
+        echo '==[ install (openrct2 + data only, skip openrct2-cli) ]========'
         rm -rf AppDir
-        DESTDIR=AppDir ninja install
+        # 'ninja install' would pull in openrct2-cli which fails to link
+        # (see weak-symbol note above). Use cmake --install to selectively
+        # install just the components we need. Fall back to a manual copy
+        # if the install machinery insists on building openrct2-cli first.
+        if ! DESTDIR=AppDir cmake --install . --component openrct2 2>&1; then
+            echo 'cmake --install --component failed, falling back to manual layout'
+            mkdir -p AppDir/install/bin AppDir/install/share/openrct2
+            cp /src/build-windows/openrct2.exe AppDir/install/bin/
+            # Copy the data tree from the source (CMake install would normally
+            # do this from the build's staged data/ but ninja install dies
+            # before reaching that target).
+            cp -r /src/data/* AppDir/install/share/openrct2/ 2>/dev/null || true
+        fi
 
-        echo '==[ produced binaries ]========================================'
-        ls -la /src/build-windows/openrct2.exe /src/build-windows/openrct2-cli.exe
+        echo '==[ produced binary ]=========================================='
+        ls -la /src/build-windows/openrct2.exe
         file /src/build-windows/openrct2.exe
     "
 
 echo
 echo "==[ post-build inspection (host side) ]============================"
-ls -la "$BUILD_DIR/openrct2.exe" "$BUILD_DIR/openrct2-cli.exe"
+ls -la "$BUILD_DIR/openrct2.exe"
 
 # Optional packaging step.
 if printf '%s\n' "$@" | grep -q -- '--no-package'; then

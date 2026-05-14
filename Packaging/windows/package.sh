@@ -37,7 +37,11 @@ VERSION=$(git -C "$PROJECT_ROOT" describe --tags --always --dirty 2>/dev/null ||
 ##############################################################################
 echo "==[ executables ]==============================================="
 cp "$BUILD_DIR/openrct2.exe"     "$STAGE_DIR/openrct2.exe"
-cp "$BUILD_DIR/openrct2-cli.exe" "$STAGE_DIR/openrct2-cli.exe"
+# openrct2-cli.exe is not built in the cross — the weak-symbol bridge
+# (drawFocusOutlineIfActive) doesn't work the same on PE as on ELF, so
+# the CLI link fails. The .dat files were produced by the host build at
+# stage 0; the cross binary doesn't need a CLI counterpart.
+# cp "$BUILD_DIR/openrct2-cli.exe" "$STAGE_DIR/openrct2-cli.exe"
 
 # .exe/.com split — duplicate openrct2.exe as openrct2.com with the PE
 # subsystem field flipped to console. cmd.exe resolves .com before .exe
@@ -86,17 +90,22 @@ cp "$PROJECT_ROOT/build-host"/{g2,fonts,palettes,tracks}.dat "$STAGE_DIR/"
 #    install step laid out under AppDir/install/share/openrct2/.
 ##############################################################################
 echo "==[ data tree ]================================================="
-DATA_SRC="$APPDIR/install/share/openrct2"
-if [ ! -d "$DATA_SRC" ]; then
-    # Fallback path — install layouts vary between CMake versions.
-    DATA_SRC=$(find "$APPDIR" -type d -name openrct2 -path '*/share/openrct2' | head -1)
+# The install step may not have run (e.g. when openrct2-cli won't link).
+# We assemble data/ from whatever directories are present. The static
+# parts (language, scenario_patches, shaders) always live in the source
+# tree. Downloaded asset packs (sequence, object, assetpack) land in
+# build-windows/data/ from DOWNLOAD_* configure steps.
+echo "  source data/ tree -> $STAGE_DIR/data/"
+if [ -d "$PROJECT_ROOT/data" ]; then
+    cp -r "$PROJECT_ROOT/data"/* "$STAGE_DIR/data/" 2>/dev/null || true
 fi
-if [ -z "$DATA_SRC" ] || [ ! -d "$DATA_SRC" ]; then
-    echo "ERROR: cannot locate installed data tree under AppDir/" >&2
-    ls -la "$APPDIR/" 2>&1 | head -10
-    exit 1
-fi
-cp -r "$DATA_SRC"/* "$STAGE_DIR/data/"
+echo "  CMake-downloaded asset packs -> $STAGE_DIR/data/"
+for src in "$BUILD_DIR/data" "$APPDIR/install/share/openrct2"; do
+    if [ -d "$src" ]; then
+        echo "    from $src"
+        cp -r "$src"/* "$STAGE_DIR/data/" 2>/dev/null || true
+    fi
+done
 
 ##############################################################################
 # 5) Documentation.

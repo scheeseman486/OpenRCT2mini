@@ -64,14 +64,19 @@ add_definitions(-DFLAC__NO_DLL)
 
 # Static-archive link-order pain on mingw-w64. ld processes archives
 # left-to-right, so a static lib must be listed AFTER any object that
-# references its symbols. CMake's target_link_libraries propagation
-# doesn't guarantee correct topological order across libopenrct2.a +
-# libzip.a + libbcrypt, libvorbisfile + libvorbis + libogg, etc.
-# --start-group/--end-group makes ld iterate the wrapped archives until
-# no more new symbols resolve. Slight performance hit at link time,
-# but the only sane way to handle our dependency graph without
-# hand-tuning every target_link_libraries line.
-add_link_options("-Wl,--start-group" "-Wl,--end-group")
+# references its symbols. CMake's target_link_libraries order doesn't
+# guarantee correct topological resolution across libopenrct2.a +
+# libzip.a + libbcrypt, libvorbisfile + libvorbis + libogg.
+#
+# The fix: tell ld to keep iterating until no more new symbols resolve.
+# Done via CMAKE_C_LINK_EXECUTABLE / CMAKE_CXX_LINK_EXECUTABLE override
+# that wraps the entire <LINK_LIBRARIES> slot with --start-group/--end-group.
+# This is the standard mingw cross-compile workaround and is documented
+# in the CMake faq.
+set(CMAKE_CXX_LINK_EXECUTABLE
+    "<CMAKE_CXX_COMPILER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_PATH> -Wl,--start-group <LINK_LIBRARIES> -Wl,--end-group")
+set(CMAKE_C_LINK_EXECUTABLE
+    "<CMAKE_C_COMPILER> <FLAGS> <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_PATH> -Wl,--start-group <LINK_LIBRARIES> -Wl,--end-group")
 
 # Demote -Werror for warnings GCC newer than what upstream OpenRCT2 was last
 # tested against. Same set the AppImage host-graphics build uses (see
