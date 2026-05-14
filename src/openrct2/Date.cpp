@@ -13,6 +13,11 @@
 #include "GameState.h"
 #include "core/Guard.hpp"
 
+// OPENRCT2MINI Windows cross-build: time()/localtime() come from <ctime>.
+// On Linux + MSVC these are transitively pulled in via Game.h's broader
+// include set, but mingw-w64's headers don't surface them. Be explicit.
+#include <ctime>
+
 using namespace OpenRCT2;
 
 constexpr int32_t kMonthTicksIncrement = 4;

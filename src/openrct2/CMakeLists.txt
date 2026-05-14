@@ -185,6 +185,11 @@ if (MINGW)
     # Link in libssp (stack protector runtime) — needed unconditionally
     # since other CMake branches set -fstack-protector-strong globally.
     target_link_libraries(libopenrct2 -fstack-protector-strong)
+    # bcrypt: libzip's zip_crypto_win.c uses Windows BCrypt API for AES.
+    # Listed as a transitive dep so it lands adjacent to libzip in the
+    # link line; without this, ld processes -lbcrypt before libzip.a and
+    # fails to resolve __imp_BCryptHashData etc.
+    target_link_libraries(libopenrct2 bcrypt)
 endif()
 
 if (UNIX AND NOT HAIKU AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "BSD")

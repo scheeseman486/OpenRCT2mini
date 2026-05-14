@@ -224,7 +224,14 @@ docker run --rm --user "$(id -u):$(id -g)" \
         # The 'graphics' target is gated out by CMAKE_CROSSCOMPILING (root
         # CMakeLists.txt:493) so we don't ask for it here — the .dat files
         # were copied in from build-host/ in the step above.
-        ninja openrct2 openrct2-cli -j\$(nproc)
+        # Build openrct2 only — openrct2-cli is needed at host arch for
+        # the graphics .dat generation (stage 0 above already produced
+        # build-host/*.dat). Building openrct2-cli for Windows would also
+        # require working around the weak-symbol-on-PE-isn't-overridable
+        # quirk that mingw-w64-ld doesn't handle the same way Linux ELF
+        # does (drawFocusOutlineIfActive in WidgetFocusBridge.cpp expects
+        # the openrct2-ui strong override, which CLI doesn't link).
+        ninja openrct2 -j\$(nproc)
 
         echo '==[ ninja install DESTDIR=AppDir ]============================='
         rm -rf AppDir

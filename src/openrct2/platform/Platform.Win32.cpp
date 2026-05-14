@@ -35,7 +35,11 @@
 
     #include <cassert>
     #include <cstring>
-    #include <format>
+    // OPENRCT2MINI Windows cross-build: <format> is C++20. The Mini source
+    // is C++17 (cut 33) for the OnionUI toolchain's older GCC; the Windows
+    // mingw build inherits the same C++17 baseline. Use ostringstream-based
+    // wstring concat for the two std::format call sites below instead.
+    #include <sstream>
     #include <iterator>
     #include <locale>
 
@@ -435,7 +439,10 @@ namespace OpenRCT2::Platform
             return false;
         }
         // [hRootKey\OpenRCT2.ext\DefaultIcon]
-        const std::wstring szIconW = std::format(L"\"{}\",{}", dllPathW, iconIndex);
+        // C++17 equivalent of std::format(L"\"{}\",{}", dllPathW, iconIndex)
+        std::wostringstream szIconSS;
+        szIconSS << L"\"" << dllPathW << L"\"," << iconIndex;
+        const std::wstring szIconW = szIconSS.str();
         if (RegSetValueW(hKey, L"DefaultIcon", REG_SZ, szIconW.c_str(), 0) != ERROR_SUCCESS)
         {
             RegCloseKey(hKey);
@@ -460,7 +467,10 @@ namespace OpenRCT2::Platform
         }
 
         // [hRootKey\OpenRCT2.sv6\shell\open\command]
-        const std::wstring szCommandW = std::format(L"\"{}\" {}", exePathW, commandArgsW);
+        // C++17 equivalent of std::format(L"\"{}\" {}", exePathW, commandArgsW)
+        std::wostringstream szCommandSS;
+        szCommandSS << L"\"" << exePathW << L"\" " << commandArgsW;
+        const std::wstring szCommandW = szCommandSS.str();
         if (RegSetValueW(hKey, L"shell\\open\\command", REG_SZ, szCommandW.c_str(), 0) != ERROR_SUCCESS)
         {
             RegCloseKey(hKey);
@@ -876,7 +886,10 @@ namespace OpenRCT2::Platform
                     {
                         // [hRootKey\openrct2\shell\open\command]
                         const std::wstring& exePathW = WIN32_GetModuleFileNameW(nullptr);
-                        const std::wstring handle_uri_string = std::format(L"\"{}\" handle-uri \"%1\"", exePathW);
+                        // C++17 equivalent of std::format(L"\"{}\" handle-uri \"%1\"", exePathW)
+                        std::wostringstream handleUriSS;
+                        handleUriSS << L"\"" << exePathW << L"\" handle-uri \"%1\"";
+                        const std::wstring handle_uri_string = handleUriSS.str();
                         if (RegSetValueW(hClassKey, L"shell\\open\\command", REG_SZ, handle_uri_string.c_str(), 0)
                             == ERROR_SUCCESS)
                         {
@@ -885,7 +898,10 @@ namespace OpenRCT2::Platform
                             HKEY hMuiCacheKey;
                             if (RegCreateKeyW(hRootKey, MUI_CACHE, &hMuiCacheKey) == ERROR_SUCCESS)
                             {
-                                const std::wstring friendly_apl_name = std::format(L"{}.FriendlyAppName", exePathW);
+                                // C++17 equivalent of std::format(L"{}.FriendlyAppName", exePathW)
+                                std::wostringstream friendlySS;
+                                friendlySS << exePathW << L".FriendlyAppName";
+                                const std::wstring friendly_apl_name = friendlySS.str();
                                 // mingw-w64 used to define RegSetKeyValueW's signature incorrectly
                                 // You need at least mingw-w64 5.0 including this commit:
                                 //   https://sourceforge.net/p/mingw-w64/mingw-w64/ci/da9341980a4b70be3563ac09b5927539e7da21f7/

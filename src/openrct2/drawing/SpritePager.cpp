@@ -1,10 +1,32 @@
 /*****************************************************************************
  * OpenRCT2mini Sprite Paging — implementation of mmap-backed sprite data.
+ *
+ * mmap(2) is a POSIX API. On Windows / mingw the equivalent is
+ * CreateFileMapping + MapViewOfFile, but the host-restoration profile
+ * (OPENRCT2MINI=OFF) doesn't use sprite paging — it preallocates atlas
+ * data on the heap. CSG mmap is the only remaining caller (Drawing.Sprite.cpp
+ * cut 65, revision 65) and even that has a heap-load fallback for callers
+ * that get an empty SpriteDataPtr back. So on Windows we provide a stub
+ * MmapSpriteData that returns empty; callers see the fallback path.
  *****************************************************************************/
 
 #include "SpritePager.h"
 
 #include "../Diagnostic.h"
+
+#ifdef _WIN32
+
+namespace OpenRCT2::Drawing
+{
+    SpriteDataPtr MmapSpriteData(const std::string& /*path*/, size_t /*offset*/, size_t /*size*/, size_t* outSize)
+    {
+        if (outSize != nullptr)
+            *outSize = 0;
+        return MakeEmptySpriteData();
+    }
+}
+
+#else // POSIX mmap path follows
 
 #include <cerrno>
 #include <cstdio>
@@ -116,3 +138,5 @@ namespace OpenRCT2::Drawing
         return SpriteDataPtr{ userPtr, &MmapDeleter };
     }
 }
+
+#endif // !_WIN32

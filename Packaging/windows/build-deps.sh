@@ -47,7 +47,18 @@ export WINDRES="${HOST_TRIPLE}-windres"
 export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
 # Generic optimisation. -O2 is the upstream baseline for desktop builds.
-COMMON_CFLAGS="-O2 -fstack-protector-strong"
+# We deliberately do NOT pass -fstack-protector-strong here: mingw-w64
+# resolves __stack_chk_fail from libssp, which is not enabled by default
+# in autotools/cmake link lines, and the deps' own configure scripts
+# don't know to add -lssp. SDL2's libSDL2 link fails with
+# "undefined reference to __stack_chk_fail" if the canary is enabled.
+# The Mini build's build-deps.sh has the same issue with -fstack-
+# protector-strong but works around it because the OnionUI toolchain
+# pre-baked libssp into its sysroot. We don't have that luxury here.
+# The actual openrct2.exe gets stack-canary protection from the engine
+# CMake which links -fstack-protector-strong via the if(MINGW) branch
+# in src/openrct2/CMakeLists.txt:181 (post-P1 edit).
+COMMON_CFLAGS="-O2"
 export CFLAGS="$COMMON_CFLAGS"
 export CXXFLAGS="$COMMON_CFLAGS"
 
@@ -214,13 +225,17 @@ ninja install
 popd
 
 ##############################################################################
-# nlohmann_json 3.11.3 — single header, no build needed.
+# nlohmann_json 3.11.3 — fetch both json.hpp + json_fwd.hpp.
+# OpenRCT2's core/JsonFwd.hpp does `#include <nlohmann/json_fwd.hpp>` so the
+# forward-decl-only header is mandatory. Both ship as release assets.
 ##############################################################################
 echo "==[ nlohmann_json ]============================================"
 NLOHMANN_VER=3.11.3
 mkdir -p "$PREFIX/include/nlohmann"
 wget --tries=3 --timeout=30 --no-verbose -O "$PREFIX/include/nlohmann/json.hpp" \
     "https://github.com/nlohmann/json/releases/download/v${NLOHMANN_VER}/json.hpp"
+wget --tries=3 --timeout=30 --no-verbose -O "$PREFIX/include/nlohmann/json_fwd.hpp" \
+    "https://github.com/nlohmann/json/releases/download/v${NLOHMANN_VER}/json_fwd.hpp"
 
 ##############################################################################
 # SDL2 2.30.10 — built as a DLL so we ship SDL2.dll next to openrct2.exe.

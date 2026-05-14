@@ -98,7 +98,13 @@ if (NOT DISABLE_VORBIS)
         # private requires, so add libvorbis explicitly.
         target_link_libraries(openrct2 vorbis)
     else ()
-        target_link_libraries(openrct2 ${OGG_LDFLAGS} ${VORBISFILE_LDFLAGS})
+        # Windows mingw cross-build: static link order matters. vorbisfile
+        # references vorbis which references ogg. ld --as-needed processes
+        # archives left-to-right, so put them in dependency order: high-
+        # level first, low-level last. Explicit -lvorbis between because
+        # vorbisfile.pc's Requires.private isn't traversed by pkgconfig
+        # in non-static mode (same Mini cut 36 fix as the Linux path).
+        target_link_libraries(openrct2 vorbisfile vorbis ogg)
     endif ()
 endif ()
 
@@ -137,8 +143,12 @@ if (WIN32)
         else ()
             find_library(SDL2_LDFLAGS sdl2)
         endif ()
-        # Hardcode some of the libraries used by mingw builds
-        target_link_libraries(openrct2 imm32 winmm setupapi version)
+        # Hardcode some of the libraries used by mingw builds. bcrypt is
+        # libzip's transitive dep (zip_crypto_win.c uses BCryptHashData /
+        # BCryptOpenAlgorithmProvider etc. for AES encryption of password-
+        # protected zips). MSBuild gets it via openrct2.common.props's
+        # bcrypt.lib; CMake mingw needs the explicit link.
+        target_link_libraries(openrct2 imm32 winmm setupapi version bcrypt)
 
         # OPENRCT2MINI Windows cross-build: SDL2 wires the entry point on Windows
         # by redefining `main` → `SDL_main` in <SDL.h>. We need libSDL2main to
@@ -160,6 +170,12 @@ if (WIN32)
         # CMAKE_RC_COMPILER automatically for .rc files when the toolchain
         # is set to a Windows target.
         target_sources(openrct2 PRIVATE ${ROOT_DIR}/resources/OpenRCT2.rc)
+        # windres resolves relative paths in the .rc (e.g. "logo\icon.ico")
+        # against its include path, not against the .rc file's directory.
+        # Add ${ROOT_DIR}/resources so it finds logo/icon.ico and
+        # openrct2.manifest. These are passed via the target's include
+        # directories which windres picks up too.
+        target_include_directories(openrct2 PRIVATE ${ROOT_DIR}/resources)
     endif ()
 endif ()
 if (MSVC)

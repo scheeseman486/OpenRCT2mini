@@ -479,7 +479,12 @@ if (CXX_WARN_SUGGEST_FINAL_METHODS)
 endif ()
 
 if (MINGW)
-   add_definitions(-fstack-protector-strong)
+    # OPENRCT2MINI Windows cross-build: gate -fstack-protector-strong on
+    # C/CXX languages only. add_definitions() propagates to RC compiles too,
+    # and windres rejects compiler flags ("invalid option -f"). Without
+    # this gate the .rc compile in src/openrct2-ui/CMakeLists.txt
+    # (resources/OpenRCT2.rc — icon + version + manifest) fails to build.
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-fstack-protector-strong>)
 endif ()
 
 # Include sub-projects
