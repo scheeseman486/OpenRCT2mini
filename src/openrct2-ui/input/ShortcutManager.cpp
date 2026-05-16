@@ -656,7 +656,36 @@ void ShortcutManager::processEvent(
                                     if (smode == OpenRCT2::Ui::InputManager::SelectorMode::active
                                         && isCursorId)
                                     {
-                                        break; // cursor.* suppressed in active
+                                        // OPENRCT2MINI grid-cursor-plan §12.1
+                                        // (amendment 2026-05-17): cursor.*
+                                        // pressed while the selector is
+                                        // active is the user's "give me the
+                                        // cursor back" gesture — wake the
+                                        // selector AND let the cursor.*
+                                        // action fire so the cursor reacts
+                                        // to the same press that woke it.
+                                        // Previously this filter just
+                                        // dropped the press (`break`), so
+                                        // the user had to press twice — once
+                                        // to wake, once to move. The wake
+                                        // path also clears the tool-focus
+                                        // latch (grid cursor mode) so the
+                                        // exit is symmetric with mouse
+                                        // motion (handled in
+                                        // InputManager::onTransitionEvent
+                                        // realMouseMotion).
+                                        if (im.isToolFocusSelected())
+                                        {
+                                            im.setToolFocusSelected(
+                                                false,
+                                                OpenRCT2::Ui::InputManager::SelectorTransitionSource::wakeCursorRequested);
+                                        }
+                                        im.onTransitionEvent(
+                                            OpenRCT2::Ui::InputManager::SelectorTransitionSource::wakeCursorRequested);
+                                        // Fall through to the action fire
+                                        // below so the cursor.* moves the
+                                        // (now visible) cursor on this very
+                                        // press.
                                     }
                                     if (smode == OpenRCT2::Ui::InputManager::SelectorMode::hidden
                                         && isFocusId)

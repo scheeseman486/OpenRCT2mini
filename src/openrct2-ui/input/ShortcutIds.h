@@ -199,8 +199,24 @@ namespace OpenRCT2::Ui::ShortcutId
     constexpr std::string_view kCursorClick        = "cursor.click";          // primary, mouse-left equivalent
     constexpr std::string_view kCursorCancel       = "cursor.cancel";         // secondary, mouse-right equivalent
     constexpr std::string_view kCursorFastModifier = "cursor.fast_modifier";  // held → 2.5x cursor speed
+    // OPENRCT2MINI grid-cursor-plan §5: precision modifier — held while
+    // the active context is a tool, D-pad selects a sub-tile position
+    // (corner / edge / quadrant per the tool's precisionSubset()) on
+    // the current tile instead of stepping to a neighbour tile. Mirrors
+    // the held-only modifier shape of kCursorFastModifier (empty action
+    // lambda; per-frame polled by the tool context's processFrame).
+    constexpr std::string_view kCursorPrecisionModifier = "cursor.precision_modifier";
     constexpr std::string_view kInterfaceConstructionZLock
         = "interface.general.construction_z_lock"; // held → ride/scenery Z-axis lock
+    // OPENRCT2MINI grid-cursor-plan §14.2: tool-context Z raise / lower
+    // verbs. Active context is a tool (footpath / terrain / water /
+    // scenery / wall / land-rights / ride-construction / tile-
+    // inspector); the dispatcher in ToolContext::onShortcut routes
+    // these to the tool's onRaise / onLower virtual. Default keyboard
+    // bindings PAGEUP / PAGEDOWN; no default pad binding (the chord-
+    // via-modifier flow on PAD is a follow-up).
+    constexpr std::string_view kInterfaceConstructionZRaise = "interface.general.construction_z_raise";
+    constexpr std::string_view kInterfaceConstructionZLower = "interface.general.construction_z_lower";
     constexpr std::string_view kInterfaceShadeWindowUnderCursor
         = "interface.general.shade_window_under_cursor"; // tap → toggle shade on window under cursor
     constexpr std::string_view kInterfaceToggleShadeAllWindows

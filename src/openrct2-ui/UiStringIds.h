@@ -437,6 +437,14 @@ namespace OpenRCT2
         STR_BINDING_OPTIONS_TIP = 7151,
         STR_BINDING_MODIFIER_KEY = 7152,
         STR_BINDING_MODIFIER_KEY_TIP = 7153,
+        // OPENRCT2MINI grid-cursor-plan §5 / §14.1: precision modifier
+        // + Z raise / lower verbs for tool contexts. The precision
+        // modifier (held) repurposes the D-pad as sub-tile selector;
+        // Z raise / lower bump the placement Z step (kPathHeightStep
+        // for Footpath, equivalent step for other tools).
+        STR_SHORTCUT_CURSOR_PRECISION_MODIFIER = 7154,
+        STR_SHORTCUT_CONSTRUCTION_Z_RAISE = 7155,
+        STR_SHORTCUT_CONSTRUCTION_Z_LOWER = 7156,
         STR_OR = 7000,
 
         // Widgets

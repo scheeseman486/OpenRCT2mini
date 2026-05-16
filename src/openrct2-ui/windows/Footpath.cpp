@@ -386,44 +386,54 @@ namespace OpenRCT2::Ui::Windows
                     close();
                     break;
                 case WIDX_CONSTRUCT_ON_LAND:
-                    if (_footpathConstructionMode == PathConstructionMode::onLand)
+                    if (_footpathConstructionMode != PathConstructionMode::onLand)
                     {
-                        break;
+                        _windowFootpathCost = kMoney64Undefined;
+                        ToolCancel();
+                        FootpathUpdateProvisional();
+                        gMapSelectFlags.unset(MapSelectFlag::enableConstruct);
+                        _footpathConstructionMode = PathConstructionMode::onLand;
+                        ToolSet(*this, WIDX_CONSTRUCT_ON_LAND, Tool::pathDown);
+                        gInputFlags.set(InputFlag::allowRightMouseRemoval);
+                        _footpathErrorOccured = false;
+                        WindowFootpathSetEnabledAndPressedWidgets();
                     }
-
-                    _windowFootpathCost = kMoney64Undefined;
-                    ToolCancel();
-                    FootpathUpdateProvisional();
-                    gMapSelectFlags.unset(MapSelectFlag::enableConstruct);
-                    _footpathConstructionMode = PathConstructionMode::onLand;
-                    ToolSet(*this, WIDX_CONSTRUCT_ON_LAND, Tool::pathDown);
-                    gInputFlags.set(InputFlag::allowRightMouseRemoval);
-                    _footpathErrorOccured = false;
-                    WindowFootpathSetEnabledAndPressedWidgets();
+                    // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
+                    // 2026-05-17): clicking a construction-mode
+                    // widget is the explicit "I'm ready to draw"
+                    // gesture. Engage grid-cursor mode now so the
+                    // user's next input drives the tile cursor, not
+                    // a window-widget step. We do this regardless of
+                    // whether the mode actually changed — if the
+                    // user clicks the already-selected mode button,
+                    // they're saying "back to drawing", which still
+                    // wants the grid cursor.
+                    GetInputManager().setToolFocusSelected(
+                        true, InputManager::SelectorTransitionSource::virtualUserInput);
                     break;
                 case WIDX_CONSTRUCT_DRAG_AREA:
-                    if (_footpathConstructionMode == PathConstructionMode::dragArea)
+                    if (_footpathConstructionMode != PathConstructionMode::dragArea)
                     {
-                        break;
+                        enableDragAreaMode();
                     }
-
-                    enableDragAreaMode();
+                    GetInputManager().setToolFocusSelected(
+                        true, InputManager::SelectorTransitionSource::virtualUserInput);
                     break;
                 case WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL:
-                    if (_footpathConstructionMode == PathConstructionMode::bridgeOrTunnelPick)
+                    if (_footpathConstructionMode != PathConstructionMode::bridgeOrTunnelPick)
                     {
-                        break;
+                        _windowFootpathCost = kMoney64Undefined;
+                        ToolCancel();
+                        FootpathUpdateProvisional();
+                        gMapSelectFlags.unset(MapSelectFlag::enableConstruct);
+                        _footpathConstructionMode = PathConstructionMode::bridgeOrTunnelPick;
+                        ToolSet(*this, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL, Tool::crosshair);
+                        gInputFlags.set(InputFlag::allowRightMouseRemoval);
+                        _footpathErrorOccured = false;
+                        WindowFootpathSetEnabledAndPressedWidgets();
                     }
-
-                    _windowFootpathCost = kMoney64Undefined;
-                    ToolCancel();
-                    FootpathUpdateProvisional();
-                    gMapSelectFlags.unset(MapSelectFlag::enableConstruct);
-                    _footpathConstructionMode = PathConstructionMode::bridgeOrTunnelPick;
-                    ToolSet(*this, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL, Tool::crosshair);
-                    gInputFlags.set(InputFlag::allowRightMouseRemoval);
-                    _footpathErrorOccured = false;
-                    WindowFootpathSetEnabledAndPressedWidgets();
+                    GetInputManager().setToolFocusSelected(
+                        true, InputManager::SelectorTransitionSource::virtualUserInput);
                     break;
             }
         }
@@ -1821,6 +1831,46 @@ namespace OpenRCT2::Ui::Windows
 
 #pragma region Keyboard Shortcuts Events
     public:
+        // OPENRCT2MINI grid-cursor-plan §14.2: public wrappers for
+        // the gamepad-driven FootpathContext bridge helpers. Each
+        // delegates to the private member of the same root name.
+        void RemovePublic() { WindowFootpathRemove(); }
+        bool IsBridgeOrTunnelMode() const
+        {
+            return _footpathConstructionMode == PathConstructionMode::bridgeOrTunnel;
+        }
+        // Place a footpath at the given tile centre and base Z.
+        // Bypasses the screen-pos / mouse-cursor lookup the mouse
+        // path uses (WindowFootpathPlacePathAtPoint); the gamepad
+        // path uses the grid cursor's tile as the source of truth.
+        // Reads the same gFootpathSelection state the mouse path
+        // does and dispatches a flat FootpathPlaceAction with no
+        // slope.
+        void PlaceAtTilePublic(const TileCoordsXY& tile, int32_t baseZ)
+        {
+            if (_footpathErrorOccured)
+                return;
+            FootpathUpdateProvisional();
+            const auto coords = tile.ToCoordsXY();
+            const auto centre = coords + CoordsXY{ 16, 16 };
+            auto selectedType = gFootpathSelection.getSelectedSurface();
+            PathConstructFlags constructFlags = FootpathCreateConstructFlags(selectedType);
+            FootpathSlope slope{ FootpathSlopeType::flat, 0 };
+            auto footpathPlaceAction = GameActions::FootpathPlaceAction(
+                { centre, baseZ }, slope, selectedType, gFootpathSelection.railings, kInvalidDirection, constructFlags);
+            footpathPlaceAction.SetCallback([this](const GameActions::GameAction*, const GameActions::Result* result) {
+                if (result->error == GameActions::Status::ok)
+                {
+                    if (result->cost != 0)
+                        Audio::Play3D(Audio::SoundId::placeItem, result->position);
+                }
+                else
+                {
+                    _footpathErrorOccured = true;
+                }
+            });
+            GameActions::Execute(&footpathPlaceAction, getGameState());
+        }
         void KeyboardShortcutTurnLeft()
         {
             if (isWidgetDisabled(WIDX_DIRECTION_NW) || isWidgetDisabled(WIDX_DIRECTION_NE)
@@ -2029,6 +2079,66 @@ namespace OpenRCT2::Ui::Windows
                 footpathWindow->KeyboardShortcutBuildCurrent();
             }
         }
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §14.2: bridge helpers for the
+    // gamepad-driven FootpathContext (InputManager.cpp). These are
+    // free functions (not member functions) so the input-strategy
+    // layer can call them without taking a dependency on the
+    // FootpathWindow class definition.
+
+    void WindowFootpathRemove()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w != nullptr)
+        {
+            auto* footpathWindow = static_cast<FootpathWindow*>(w);
+            if (footpathWindow != nullptr)
+            {
+                footpathWindow->RemovePublic();
+            }
+        }
+    }
+
+    void WindowFootpathPlaceAtTile(const TileCoordsXY& tile, int32_t baseZ)
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        auto* fw = static_cast<FootpathWindow*>(w);
+        fw->PlaceAtTilePublic(tile, baseZ);
+    }
+
+    void WindowFootpathAdjustPlacementZ(int32_t step)
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        auto* fw = static_cast<FootpathWindow*>(w);
+        // The FootpathWindow's _footpathPlaceZ is private; we adjust
+        // it indirectly by simulating the existing slope-up / slope-
+        // down keyboard shortcut. For railings (bridgeOrTunnel mode)
+        // that's already a Z step. For the surface modes the mouse
+        // path tracks Z implicitly via the cursor — our gamepad path
+        // doesn't currently bump _footpathPlaceZ for the surface
+        // case (no public hook), so this stays a slope adjustment.
+        if (step > 0)
+            fw->KeyboardShortcutSlopeUp();
+        else if (step < 0)
+            fw->KeyboardShortcutShortcutSlopeDown();
+    }
+
+    bool WindowFootpathIsRailingsMode()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return false;
+        const auto* fw = static_cast<const FootpathWindow*>(w);
+        return fw->IsBridgeOrTunnelMode();
     }
 
     /**

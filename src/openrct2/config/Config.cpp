@@ -551,6 +551,20 @@ namespace OpenRCT2::Config
             // per non-transparent sprite pixel — negligible for a 32×32
             // cursor at any framerate.
             model->cursorDropShadow = reader->GetBoolean("cursor_drop_shadow", true);
+            // OPENRCT2MINI grid-cursor-plan §3.4: D-pad-to-tile-step
+            // mapping mode for the gamepad-driven grid cursor.
+            // Serialised as a string ("compass" / "diagonal-left" /
+            // "diagonal-right") parallel to cursor_style above.
+            // Default `compass`.
+            {
+                const auto gcm = reader->GetString("grid_cursor_mode", "compass");
+                if (gcm == "diagonal-left")
+                    model->gridCursorMode = 1;
+                else if (gcm == "diagonal-right")
+                    model->gridCursorMode = 2;
+                else
+                    model->gridCursorMode = 0;
+            }
         }
     }
 
@@ -591,6 +605,15 @@ namespace OpenRCT2::Config
         writer->WriteString("cursor_style", styleName);
         // OPENRCT2MINI: optional drop shadow under the software cursor.
         writer->WriteBoolean("cursor_drop_shadow", model->cursorDropShadow);
+        // OPENRCT2MINI grid-cursor-plan §3.4: grid cursor mode.
+        {
+            u8string gcm{ "compass" };
+            if (model->gridCursorMode == 1)
+                gcm = "diagonal-left";
+            else if (model->gridCursorMode == 2)
+                gcm = "diagonal-right";
+            writer->WriteString("grid_cursor_mode", gcm);
+        }
     }
 
     static void ReadSound(IIniReader* reader)

@@ -17,6 +17,10 @@
         "LSHIFT",
         "PAD L3"
     ],
+    "cursor.precision_modifier": [
+        "LALT",
+        "PAD BACK"
+    ],
     "cursor.left": [
         "Left",
         "PAD STICK_L LEFT"
@@ -68,6 +72,8 @@
         "LCTRL",
         "RCTRL"
     ],
+    "interface.general.construction_z_lower": "PageDown",
+    "interface.general.construction_z_raise": "PageUp",
     "interface.general.cycle_next_window": "SHIFT+Tab",
     "interface.general.cycle_previous_window": "CTRL+Tab",
     "interface.general.dismiss": [

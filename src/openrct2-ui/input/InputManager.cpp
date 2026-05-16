@@ -16,6 +16,7 @@
 #include <SDL_gamecontroller.h>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <optional>
 #include <openrct2-ui/UiContext.h>
 #include <openrct2-ui/input/MouseInput.h>
@@ -39,6 +40,8 @@
 #include <openrct2/paint/VirtualFloor.h>
 #include <openrct2/ui/UiContext.h>
 #include <openrct2/ui/WindowManager.h>
+#include <openrct2/world/Footpath.h>
+#include <openrct2/world/Map.h>
 #include "WidgetFocus.h"
 
 using namespace OpenRCT2::Ui;
@@ -371,6 +374,28 @@ namespace
             // is reactivated.
             if (mgr.getSelectorMode() != OpenRCT2::Ui::InputManager::SelectorMode::active)
                 return Disposition::Passthrough;
+
+            // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17):
+            // confirm-into-grid shortcut. When a construction tool
+            // is armed AND the focused window is the tool's own
+            // window, pressing the generic interface.confirm
+            // shortcut engages grid-cursor mode. This is the
+            // bookend to ToolContext::exitGridCursorMode (which
+            // dismisses out) — confirm in the tool window jumps
+            // straight to drawing without making the user navigate
+            // to one of the construction-mode buttons first. We
+            // gate on the focused window being the tool window
+            // (gCurrentToolWidget.windowClassification) so confirm
+            // in other windows behaves normally even if a tool is
+            // background-armed.
+            if (id == ShortcutId::kInterfaceConfirm
+                && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive)
+                && mgr.getFocusedWindowClass() == OpenRCT2::gCurrentToolWidget.windowClassification)
+            {
+                mgr.setToolFocusSelected(
+                    true, OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
+                return Disposition::Consumed;
+            }
 
             // OPENRCT2MINI focus-mode-plan §F.10: dropdown
             // specialisation. The dropdown window has exactly one
@@ -1014,6 +1039,13 @@ namespace
     // confirmed this class fits under 200 lines, so action-map
     // indirection (Phase 3.H) is skipped — the polymorphic-context
     // design carries the rest of the tool-context work.
+    // OPENRCT2MINI grid-cursor-plan §14.2 / Phase 3.E.1: FootpathContext
+    // verb bodies. Each verb calls into the existing FootpathWindow
+    // helpers exposed by Windows.h — onPlace dispatches a
+    // FootpathPlaceAction at the grid cursor's tile (via the
+    // placeAtTile bridge), onCancel runs the mouse-path remove flow,
+    // onRotate rotates the railings cycle, onRaise / onLower adjust
+    // the placement Z, onStep walks the grid cursor.
     class FootpathContextImpl final : public ToolContext
     {
     public:
@@ -1021,8 +1053,69 @@ namespace
         {
             return InputContext::toolFootpath;
         }
-        // Verb overrides remain default (Consumed no-op) until the
-        // GameAction-wiring follow-up lands FootpathPlaceAction etc.
+
+        Disposition onPlace() override
+        {
+            const auto pos = gridCursor().getPosition();
+            // OPENRCT2MINI grid-cursor-plan §10 placement-Z fix.
+            // gridCursor().getZ() is the user-driven Z offset (0 on
+            // first entry, bumped by onRaise / onLower). On its own
+            // that's below the terrain surface and FootpathPlaceAction
+            // rejects the placement as "too low". The mouse path
+            // resolves the surface Z by sampling the terrain element
+            // under the cursor (FootpathGetOnTerrainPlacement in
+            // Footpath.cpp); the gamepad path's equivalent is to ask
+            // TileElementHeight for the surface height of the cursor's
+            // tile centre. Add the model's user-Z on top so Z-raise /
+            // Z-lower can lift the path above ground for bridges. The
+            // 16 floor mirrors `_footpathPlaceZ = std::max(mapZ, 16)`
+            // in Footpath.cpp:1068 — the engine treats Z 0 as "no
+            // override" so we need a non-zero baseline.
+            const auto worldXY = pos.ToCoordsXY();
+            const int32_t surfaceZ = OpenRCT2::TileElementHeight(worldXY);
+            const int32_t baseZ = std::max<int32_t>(surfaceZ + gridCursor().getZ(), 16);
+            Windows::WindowFootpathPlaceAtTile(pos, baseZ);
+            return Disposition::Consumed;
+        }
+
+        Disposition onCancel() override
+        {
+            Windows::WindowFootpathRemove();
+            return Disposition::Consumed;
+        }
+
+        Disposition onRotate() override
+        {
+            Windows::WindowFootpathKeyboardShortcutTurnRight();
+            return Disposition::Consumed;
+        }
+
+        Disposition onRaise() override
+        {
+            Windows::WindowFootpathAdjustPlacementZ(+1);
+            gridCursor().raiseZ(OpenRCT2::kPathHeightStep);
+            return Disposition::Consumed;
+        }
+
+        Disposition onLower() override
+        {
+            Windows::WindowFootpathAdjustPlacementZ(-1);
+            gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
+            return Disposition::Consumed;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §14.1: onStep lives on the
+        // ToolContext base — every grid-cursor / edge-cursor tool
+        // now inherits the same step body. Footpath only needs to
+        // declare its precision subset.
+
+        SubsetType precisionSubset() const override
+        {
+            // §11.1 / §11.2: footpath surface is per-tile (no sub-tile
+            // precision); railings is per-edge (edges subset). Detect
+            // mode from FootpathWindow state via the bridge helper.
+            return Windows::WindowFootpathIsRailingsMode() ? SubsetType::edges : SubsetType::none;
+        }
     };
 
     // OPENRCT2MINI input-plan Track 3 / Phase 3.F: edge-tile tool
@@ -1490,6 +1583,19 @@ void InputManager::onTransitionEvent(SelectorTransitionSource src)
             _lastInputWasRealMouse = true;
             if (_selectorMode != SelectorMode::hidden)
                 setSelectorMode(SelectorMode::hidden);
+            // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
+            // 2026-05-17): mouse motion exits grid-cursor mode too,
+            // matching the equivalent cursor.* exit path in
+            // ShortcutManager. Without this clear, moving the mouse
+            // while in grid mode would leave the latch on — the OS
+            // cursor would be visible (selector hidden) but the
+            // tool-context strategy would still own the dispatch,
+            // and the grid cursor would still render its tile-
+            // selection highlight. Symmetric to the cursor.* path:
+            // any "I'm using a real pointer now" gesture should
+            // drop both modes.
+            if (_toolFocusSelected)
+                _toolFocusSelected = false;
             break;
         case SelectorTransitionSource::realMouseClick:
             // A real-mouse click. Mark the input source so the
@@ -1534,6 +1640,19 @@ void InputManager::onTransitionEvent(SelectorTransitionSource src)
     }
 }
 
+// OPENRCT2MINI grid-cursor-plan §12.1 (amended): single-site mutator
+// for the tool-focus selector. Routes through SelectorTransitionSource
+// so future logging / SelectorMode invalidation can hook one place
+// rather than chasing writes around the source tree. `src` is
+// currently informational — we don't gate on it — but keeping it on
+// the signature mirrors onTransitionEvent's contract and gives later
+// patches a hook.
+void InputManager::setToolFocusSelected(bool selected, SelectorTransitionSource src)
+{
+    (void)src;
+    _toolFocusSelected = selected;
+}
+
 void InputManager::cycleFocusedWindow(int direction)
 {
     // Build the focusable-window list in z-order (front-of-list =
@@ -1547,8 +1666,22 @@ void InputManager::cycleFocusedWindow(int direction)
     // game, but this lambda runs from a shortcut action lambda so
     // the focus state is checked AGAINST the list snapshot we
     // capture, not against pointers that might dangle.
-    std::vector<WindowClass> focusable;
-    focusable.reserve(gWindowList.size());
+    // OPENRCT2MINI grid-cursor-plan §12.1 (amended): each cycle entry
+    // is either a real window class OR the virtual "tool viewport"
+    // sentinel. The vector stores pairs <class, isToolViewport>.
+    // The virtual entry has class == WindowClass::null + isVirtual=true.
+    // It's only added if a tool is currently armed AND a recognised
+    // tool window is in the snapshot — it sits IMMEDIATELY AFTER the
+    // entry for the armed tool window so cycle-next from the tool
+    // window steps "into the world", and cycle-next from there
+    // steps onward to the next real window.
+    struct CycleEntry
+    {
+        WindowClass cls;
+        bool isToolViewport;
+    };
+    std::vector<CycleEntry> focusable;
+    focusable.reserve(gWindowList.size() + 1);
     // OPENRCT2MINI window-set-plan §3.5: collapse set members into a
     // single cycle stop. For each window in z-order, if it's part of
     // a set we record the set's first member that's already been
@@ -1557,8 +1690,8 @@ void InputManager::cycleFocusedWindow(int direction)
     // moves between logical surfaces, not individual stickToFront /
     // stickToBack siblings.
     const auto alreadyInList = [&](WindowClass c) {
-        for (auto x : focusable)
-            if (x == c)
+        for (auto& x : focusable)
+            if (!x.isToolViewport && x.cls == c)
                 return true;
         return false;
     };
@@ -1584,9 +1717,9 @@ void InputManager::cycleFocusedWindow(int direction)
             // Skip if any earlier-seen entry is a sibling of this
             // set — the set has already been added as a stop.
             bool dup = false;
-            for (auto x : focusable)
+            for (auto& x : focusable)
             {
-                if (WidgetFocus::sameSetOrClass(x, cycleCls))
+                if (!x.isToolViewport && WidgetFocus::sameSetOrClass(x.cls, cycleCls))
                 {
                     dup = true;
                     break;
@@ -1601,38 +1734,92 @@ void InputManager::cycleFocusedWindow(int direction)
         }
         if (alreadyInList(cycleCls))
             continue;
-        focusable.push_back(cycleCls);
+        focusable.push_back({ cycleCls, false });
     }
+
+    // OPENRCT2MINI grid-cursor-plan §12.1 (amended): if a tool is
+    // armed and a tool window is in the snapshot, insert the virtual
+    // "tool viewport" entry immediately after that tool window.
+    // Footpath / Land / Water / Scenery / RideConstruction /
+    // LandRights / TileInspector are recognised — same set as
+    // resolveActiveContext's tool-context arm.
+    if (gInputFlags.has(InputFlag::toolActive))
+    {
+        static constexpr WindowClass kToolClasses[] = {
+            WindowClass::footpath,         WindowClass::land,             WindowClass::water,
+            WindowClass::scenery,          WindowClass::rideConstruction, WindowClass::landRights,
+            WindowClass::tileInspector,
+        };
+        const auto isToolWindowClass = [](WindowClass c) {
+            for (auto t : kToolClasses)
+                if (c == t)
+                    return true;
+            return false;
+        };
+        for (size_t i = 0; i < focusable.size(); i++)
+        {
+            if (!focusable[i].isToolViewport && isToolWindowClass(focusable[i].cls))
+            {
+                // Sentinel: WindowClass::null + isToolViewport=true.
+                focusable.insert(
+                    focusable.begin() + static_cast<std::ptrdiff_t>(i + 1),
+                    CycleEntry{ WindowClass::null, true });
+                break;
+            }
+        }
+    }
+
     if (focusable.empty())
         return;
     if (focusable.size() == 1)
     {
-        // Single qualifying window — snap to it if we weren't already
-        // focused there, no-op otherwise.
-        if (_focusedWindowClass != focusable[0])
+        // Single qualifying entry — snap to it if we weren't already
+        // there, no-op otherwise.
+        const auto& only = focusable[0];
+        if (only.isToolViewport)
         {
+            if (!_toolFocusSelected)
+            {
+                clearFocus();
+                setToolFocusSelected(true, SelectorTransitionSource::virtualUserInput);
+            }
+            return;
+        }
+        if (_focusedWindowClass != only.cls || _toolFocusSelected)
+        {
+            setToolFocusSelected(false, SelectorTransitionSource::virtualUserInput);
             auto* windowMgr = GetWindowManager();
             if (windowMgr != nullptr)
             {
-                auto* w = windowMgr->FindByClass(focusable[0]);
+                auto* w = windowMgr->FindByClass(only.cls);
                 if (w != nullptr)
-                    setFocus(focusable[0], WidgetFocus::firstFocusable(*w));
+                    setFocus(only.cls, WidgetFocus::firstFocusable(*w));
             }
         }
         return;
     }
 
     // Locate the current focus in the snapshot. If we're not
-    // currently focused on any qualifying window (focus cleared,
+    // currently focused on any qualifying entry (focus cleared,
     // or focused on a non-focusable window like loadSave) start
     // from "just before the front" for forward, "just after the
     // back" for backward — that way the first step lands on
     // index 0 / index size-1. Set-aware: a member of a set
-    // matches the set's entry in the cycle.
+    // matches the set's entry in the cycle. If the user is on
+    // the virtual tool entry, currentIdx finds it by isToolViewport.
     int currentIdx = -1;
     for (size_t i = 0; i < focusable.size(); i++)
     {
-        if (WidgetFocus::sameSetOrClass(focusable[i], _focusedWindowClass))
+        if (focusable[i].isToolViewport)
+        {
+            if (_toolFocusSelected)
+            {
+                currentIdx = static_cast<int>(i);
+                break;
+            }
+            continue;
+        }
+        if (!_toolFocusSelected && WidgetFocus::sameSetOrClass(focusable[i].cls, _focusedWindowClass))
         {
             currentIdx = static_cast<int>(i);
             break;
@@ -1649,7 +1836,24 @@ void InputManager::cycleFocusedWindow(int direction)
         nextIdx = ((currentIdx + direction) % n + n) % n; // safe mod for negative direction
     }
 
-    const auto nextCls = focusable[nextIdx];
+    // OPENRCT2MINI grid-cursor-plan §12.1 (amended): if we landed on
+    // the virtual tool viewport entry, set the latch and clear focus.
+    // resolveActiveContext will route to the tool's strategy because
+    // _toolFocusSelected is true AND toolActive is set; the cleared
+    // focus prevents the widgetFocus arm from firing.
+    if (focusable[nextIdx].isToolViewport)
+    {
+        clearFocus();
+        setToolFocusSelected(true, SelectorTransitionSource::virtualUserInput);
+        return;
+    }
+
+    // Landing on a real window — make sure the latch is cleared so
+    // the tool-context arm doesn't shadow widgetFocus on subsequent
+    // frames.
+    setToolFocusSelected(false, SelectorTransitionSource::virtualUserInput);
+
+    const auto nextCls = focusable[nextIdx].cls;
     auto* windowMgr = GetWindowManager();
     if (windowMgr == nullptr)
         return;
@@ -2286,6 +2490,30 @@ void InputManager::process()
     if (_focusModeRequested && _focusedWindowClass == WindowClass::null)
         _focusModeRequested = false;
 
+    // OPENRCT2MINI grid-cursor-plan §12.1 (amended): per-frame
+    // toolActive edge detection — the source of truth for the
+    // _toolFocusSelected latch's lifecycle. Window.cpp lives in the
+    // openrct2 library and can't depend on openrct2-ui's
+    // InputManager directly (wrong-direction dependency), so we
+    // detect the true→false edge here. The earlier code ALSO set
+    // the latch true on false→true (tool open) — that auto-snapped
+    // the user into grid-cursor mode whenever a tool window came
+    // up, which the UX revision (grid-cursor-plan §12.1 amendment
+    // 2026-05-17) explicitly inverts: a tool open should leave
+    // focus on the tool window's widgets so the user can pick
+    // type / mode / settings first, then engage the grid cursor
+    // deliberately via the construction-mode widgets (handled in
+    // FootpathWindow::onMouseUp). The clear-on-deactivate edge
+    // remains so that closing the tool window or cancelling the
+    // tool drops the latch and stops resolveActiveContext routing
+    // to a dead strategy.
+    {
+        const bool nowToolActive = gInputFlags.has(InputFlag::toolActive);
+        if (!nowToolActive && _previousToolActive)
+            setToolFocusSelected(false, SelectorTransitionSource::virtualUserInput);
+        _previousToolActive = nowToolActive;
+    }
+
     _activeContext = resolveActiveContext();
 
     // OPENRCT2MINI input-plan Track 3 / Phase 3.A: activation
@@ -2412,37 +2640,29 @@ InputContext InputManager::resolveActiveContext() const
     if (Windows::IsUsingWidgetTextBox())
         return InputContext::widgetTextBox;
 
-    // OPENRCT2MINI focus-mode-plan / Phase F.3: widget-focus is
-    // active whenever a focused window is live AND no text-entry
-    // modal is on top. The bootstrap + staleness pass in process()
-    // — run earlier this same frame — is what populates / clears
-    // `_focusedWindowClass`, so by the time we get here the field
-    // already mirrors the user's intent for this frame. We
-    // re-call `getFocusedWindow()` here rather than just checking
-    // the sentinel because a window could in theory die between
-    // the bootstrap pass and now (the pass holds no lock); the
-    // extra FindByClass is cheap and keeps the precondition
-    // strict.
-    if (getFocusedWindow() != nullptr)
-        return InputContext::widgetFocus;
-
-    // OPENRCT2MINI input-plan Track 3 / Phase 3.E: tool contexts.
-    // Activate the matching tool strategy when (a) the tool's window
-    // is open and (b) gInputFlags.toolActive is set. The Footpath
-    // window for example exists in two states: just-opened-but-not-
-    // armed (the user is choosing a path type, no placement active)
-    // vs armed-for-placement (the toolActive flag is set, hovering
-    // shows the build-cost ghost). Phase 3.E only routes gamepad
-    // input in the second state — the first state behaves like the
-    // world context so the user can still pan / scroll the camera
-    // while picking a path type. 3.F / 3.G add the remaining tool
-    // mappings here.
-    if (windowMgr != nullptr && gInputFlags.has(InputFlag::toolActive))
+    // OPENRCT2MINI grid-cursor-plan §12.1 (amended): tool contexts win
+    // over widgetFocus when the user has explicitly selected the tool
+    // viewport via the cycle-window UX. The previous order checked
+    // widgetFocus first (the focused-window arm below), which meant
+    // opening a tool window's widgets would always grab cursor.*
+    // drive and the FootpathContextImpl never reached — even though
+    // the user had just opened the tool with the intent of placing
+    // pieces. Now the tool-context arm fires first when the
+    // _toolFocusSelected latch is set; if false, fall through to
+    // widgetFocus as before.
+    //
+    // The latch is managed by:
+    //   - process() per-frame edge detection on gInputFlags.toolActive
+    //     (false→true snaps it true, true→false clears it)
+    //   - cycleFocusedWindow when the user cycles onto / off of the
+    //     virtual "tool viewport" entry
+    //
+    // Order roughly by frequency-of-use; Footpath / Terrain / Water /
+    // Scenery are the most common construction operations. Ride
+    // construction comes next; LandRights and TileInspector are rarer
+    // (and TileInspector is debug-only).
+    if (_toolFocusSelected && windowMgr != nullptr && gInputFlags.has(InputFlag::toolActive))
     {
-        // Order roughly by frequency-of-use; Footpath / Terrain / Water
-        // / Scenery are the most common construction operations. Ride
-        // construction comes next; LandRights and TileInspector are
-        // rarer (and TileInspector is debug-only).
         if (windowMgr->FindByClass(WindowClass::footpath) != nullptr)
             return InputContext::toolFootpath;
         if (windowMgr->FindByClass(WindowClass::land) != nullptr)
@@ -2458,6 +2678,20 @@ InputContext InputManager::resolveActiveContext() const
         if (windowMgr->FindByClass(WindowClass::tileInspector) != nullptr)
             return InputContext::toolTileInspector;
     }
+
+    // OPENRCT2MINI focus-mode-plan / Phase F.3: widget-focus is
+    // active whenever a focused window is live AND no text-entry
+    // modal is on top. The bootstrap + staleness pass in process()
+    // — run earlier this same frame — is what populates / clears
+    // `_focusedWindowClass`, so by the time we get here the field
+    // already mirrors the user's intent for this frame. We
+    // re-call `getFocusedWindow()` here rather than just checking
+    // the sentinel because a window could in theory die between
+    // the bootstrap pass and now (the pass holds no lock); the
+    // extra FindByClass is cheap and keeps the precondition
+    // strict.
+    if (getFocusedWindow() != nullptr)
+        return InputContext::widgetFocus;
 
     return InputContext::world;
 }
@@ -2641,18 +2875,21 @@ bool InputManager::isShortcutMeaningfulInContext(std::string_view shortcutId, In
         // OPENRCT2MINI input-plan Track 3 / Phase 3.E: tool contexts.
         // Each tool context lets the user navigate (cursor.up/down/
         // left/right step the grid cursor), confirm (cursor.click →
-        // onPlace), cancel (cursor.cancel → onCancel), rotate (kInter-
-        // faceRotateConstruction → onRotate), and the dismiss /
-        // confirm pair for the surrounding tool window. Everything
-        // else is suppressed so a stray world-mode shortcut can't
-        // fire mid-placement. 3.F/3.G add cases here for the other
-        // tool enum values; allow-list is intentionally narrow.
-        // Tool contexts share an allow-list: navigation + verbs +
-        // dismiss/confirm. Terrain and water additionally allow the
-        // construction Z-lock chord because their natural mapping is
-        // raise/lower-by-shoulder (Phase 3.E follow-up wires the
-        // verbs); the chord is harmless here and routed-Consumed by
-        // the tool strategy if the user has it bound to a verb.
+        // OPENRCT2MINI grid-cursor-plan §9.2 / §14.1: tool contexts are
+        // OVERLAID on top of the world view, same as widgetFocus is
+        // overlaid on a normal window. The user expects camera pan /
+        // zoom / rotate / window-cycle / save / options / etc. to keep
+        // firing while a tool is armed — only the verb dispatch needs
+        // to be intercepted. The tool strategy's onShortcut returns
+        // Consumed for the shortcuts it owns (cursor.click / cancel /
+        // focus.* / precisionModifier / ZRaise / ZLower / rotate /
+        // dismiss / confirm) and Passthrough for everything else, so
+        // the global action lambdas fire normally for non-verb
+        // shortcuts. A previous narrow allow-list suppressed all non-
+        // tool inputs (camera pan, save, etc.) and broke the tool UX
+        // — same shape as the title-scene bug Phase F.7 fixed for
+        // widgetFocus. Mirror that fix: allow everything, let the
+        // strategy decide.
         case InputContext::toolFootpath:
         case InputContext::toolTerrain:
         case InputContext::toolWater:
@@ -2660,25 +2897,7 @@ bool InputManager::isShortcutMeaningfulInContext(std::string_view shortcutId, In
         case InputContext::toolLandRights:
         case InputContext::toolTileInspector:
         case InputContext::toolRideConstruction:
-        {
-            constexpr std::array kAllowed = {
-                ShortcutId::kInterfaceDismiss,
-                ShortcutId::kInterfaceConfirm,
-                ShortcutId::kCursorUp,
-                ShortcutId::kCursorDown,
-                ShortcutId::kCursorLeft,
-                ShortcutId::kCursorRight,
-                ShortcutId::kCursorClick,
-                ShortcutId::kCursorCancel,
-                ShortcutId::kInterfaceRotateConstruction,
-                ShortcutId::kInterfaceCancelConstruction,
-                ShortcutId::kInterfaceConstructionZLock,
-            };
-            for (auto id : kAllowed)
-                if (id == shortcutId)
-                    return true;
-            return false;
-        }
+            return true;
 
         // OPENRCT2MINI focus-mode-plan / Phase F.1: widget-focus mode.
         // Unlike the modal text-entry contexts (loadSave, textInput,

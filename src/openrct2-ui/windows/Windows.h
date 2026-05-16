@@ -12,6 +12,7 @@
 #include <openrct2-ui/interface/Window.h>
 #include <openrct2/Identifiers.h>
 #include <openrct2/interface/Window.h>
+#include <openrct2/world/Location.hpp>
 #include <openrct2/world/ScenerySelection.h>
 #include <optional>
 #include <string_view>
@@ -149,6 +150,19 @@ namespace OpenRCT2::Ui::Windows
     void WindowFootpathKeyboardShortcutBuildCurrent();
     void WindowFootpathKeyboardShortcutDemolishCurrent();
     bool WindowFootpathSelectDefault();
+    // OPENRCT2MINI grid-cursor-plan §14.2: bridge helpers the tool
+    // context calls from outside Footpath.cpp. WindowFootpathRemove
+    // is declared as a free function below for the same reason.
+    void WindowFootpathRemove();
+    // Place a footpath at a specific tile coord at the given base Z,
+    // bypassing the screen-pos / mouse-cursor lookup. Used by the
+    // gamepad-driven FootpathContext.
+    void WindowFootpathPlaceAtTile(const TileCoordsXY& tile, int32_t baseZ);
+    // Adjust the placement Z by ±step (±1 = ±kPathHeightStep).
+    void WindowFootpathAdjustPlacementZ(int32_t step);
+    // True when the Footpath window's current mode targets path
+    // railings (per-edge); false for the per-tile surface modes.
+    bool WindowFootpathIsRailingsMode();
 
     // GameBottomToolbar
     extern uint8_t gToolbarDirtyFlags;

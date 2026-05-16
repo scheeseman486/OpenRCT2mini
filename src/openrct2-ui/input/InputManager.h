@@ -337,6 +337,31 @@ namespace OpenRCT2::Ui
         // snapped to dropdown and the same press hit
         // WidgetFocusContextImpl's dropdown kCursorClick branch).
         bool _autoWokeThisProcess = false;
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amended): when a tool
+        // window is open and a tool is armed (gInputFlags.toolActive),
+        // the cycle-window list grows a virtual "tool viewport" entry
+        // positioned after the tool window itself. Landing on the
+        // virtual entry sets this flag; landing on any real window
+        // clears it. resolveActiveContext consults the flag to decide
+        // whether the tool-context arm wins over the widgetFocus arm
+        // (the previous order was unconditional widgetFocus-first,
+        // which meant opening a tool window's widgets would silently
+        // steal the cursor.* drive even though the user expected the
+        // grid cursor in the tool's viewport).
+        //
+        // Lifecycle: snapped true on the toolActive false→true edge
+        // (detected per-frame in process()), cleared on the true→false
+        // edge, and overridden by cycleFocusedWindow when the user
+        // navigates to a different surface. No new shortcut — the
+        // virtual entry rides on kInterfaceCycleNextWindow /
+        // kInterfaceCyclePreviousWindow (SHIFT+TAB / CTRL+TAB).
+        bool _toolFocusSelected{ false };
+        // Cached previous-frame toolActive bit so process() can detect
+        // the false→true / true→false edges without polling every
+        // consumer separately. Updated at the same point as the
+        // _toolFocusSelected snap.
+        bool _previousToolActive{ false };
+
         // OPENRCT2MINI focus-mode-plan §F.16: history stack for
         // cancel/back navigation. Every time the selector snaps to
         // a new topmost window (because a button click opened it,
@@ -465,6 +490,20 @@ namespace OpenRCT2::Ui
             enterFocusModeRequested,
         };
         void onTransitionEvent(SelectorTransitionSource src);
+
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amended): tool-focus
+        // selector. True when the cycle-window has landed on the
+        // virtual "tool viewport" entry — resolveActiveContext routes
+        // the tool-context arm above widgetFocus when set. The setter
+        // routes through SelectorTransitionSource so future logging
+        // / SelectorMode invalidation can hook one site (parameter
+        // matches onTransitionEvent's contract for symmetry; current
+        // implementation is informational only).
+        bool isToolFocusSelected() const noexcept
+        {
+            return _toolFocusSelected;
+        }
+        void setToolFocusSelected(bool selected, SelectorTransitionSource src);
 
         // OPENRCT2MINI focus-mode-plan §F.8: cycle the focus ring to
         // the next / previous window with focusable widgets, wrapping

@@ -33,6 +33,8 @@
 #include "../Boundbox.h"
 #include "../Paint.SessionFlags.h"
 #include "Paint.TileElement.h"
+
+#include <chrono>
 #include "Segment.h"
 
 #include <cassert>
@@ -1090,7 +1092,20 @@ void PaintSurface(PaintSession& session, uint8_t direction, uint16_t height, con
     // ebp[4] = ebp;
     // ebp[8] = ebx
 
-    if (gMapSelectFlags.has(MapSelectFlag::enable))
+    // OPENRCT2MINI grid-cursor-plan §7.2 (Option A): when the
+    // gridCursor flag is also set alongside `enable`, the marker
+    // pulses on a 500 ms cycle. Pre-compute the gated "should
+    // paint" condition outside the if-block so the existing local
+    // variable initialisations don't get crossed by a goto.
+    bool gridCursorPaintGate = true;
+    if (gMapSelectFlags.has(MapSelectFlag::enable) && gMapSelectFlags.has(MapSelectFlag::gridCursor))
+    {
+        using namespace std::chrono;
+        const auto ms = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        gridCursorPaintGate = ((ms / 500) & 1) == 1;
+    }
+
+    if (gMapSelectFlags.has(MapSelectFlag::enable) && gridCursorPaintGate)
     {
         // Loc660FB8:
         const CoordsXY& pos = session.MapPosition;

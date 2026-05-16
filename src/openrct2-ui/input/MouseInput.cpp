@@ -1419,7 +1419,35 @@ namespace OpenRCT2
             if (w == nullptr)
                 ToolCancel();
             else if (InputGetState() != InputState::ViewportRight)
+            {
+                // OPENRCT2MINI grid-cursor-plan §7: when the user is in
+                // grid-cursor mode for the armed tool (cycle-window has
+                // landed on the virtual tool-viewport entry, i.e.
+                // `_toolFocusSelected == true`), suppress mouse-driven
+                // tool updates. Otherwise every polled SDL_MOUSEMOTION
+                // re-points onToolUpdate at the mouse's screen position
+                // and writes gMapSelectPositionA/B + gMapSelectType,
+                // clobbering the grid cursor's tile-aligned selection.
+                //
+                // Earlier this was keyed off `SelectorMode == active`,
+                // but that flips to `hidden` the moment the user moves
+                // the mouse (the cursor-wake transition). So once the
+                // mouse moved at all, the gate stopped firing and the
+                // grid cursor's selection got overwritten — including
+                // after cycling back to the tool, when ToolContext::
+                // onActivate's write was immediately re-clobbered by
+                // residual mouse motion on the next frame.
+                //
+                // `_toolFocusSelected` is the correct key: it's the
+                // latch resolveActiveContext consults to route tool-
+                // context shortcuts over widgetFocus, and it persists
+                // across cursor wake/sleep transitions until the user
+                // explicitly cycles away from the tool viewport.
+                auto& mgr = GetInputManager();
+                if (mgr.isToolFocusSelected())
+                    return;
                 w->onToolUpdate(gCurrentToolWidget.widgetIndex, screenCoords);
+            }
         }
     }
 

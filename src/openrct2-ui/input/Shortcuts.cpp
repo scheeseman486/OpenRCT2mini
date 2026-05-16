@@ -1029,8 +1029,25 @@ void ShortcutManager::registerDefaultShortcuts()
     registerShortcut(ShortcutId::kCursorClick,        STR_SHORTCUT_CURSOR_CLICK,        "Z",       []() {});
     registerShortcut(ShortcutId::kCursorCancel,       STR_SHORTCUT_CURSOR_CANCEL,       "X",       []() {});
     registerShortcut(ShortcutId::kCursorFastModifier, STR_SHORTCUT_CURSOR_FAST_MODIFIER, "LSHIFT", []() {});
+    // OPENRCT2MINI grid-cursor-plan §5: precision modifier. Held-only
+    // (empty action lambda — polled per frame by the tool context's
+    // processFrame). Default keyboard LALT (host) — LALT was free
+    // before this addition. Mini's PAD default registered further
+    // down below as part of the PAD defaults block.
+    registerShortcut(ShortcutId::kCursorPrecisionModifier,
+                     STR_SHORTCUT_CURSOR_PRECISION_MODIFIER,  "LALT",   []() {});
     registerShortcut(ShortcutId::kInterfaceConstructionZLock,
                      STR_SHORTCUT_CONSTRUCTION_Z_LOCK,        "LCTRL",  []() {});
+    // OPENRCT2MINI grid-cursor-plan §14.2: Z raise / lower verbs for
+    // tool contexts. Action lambdas are stub no-ops — the real
+    // dispatch goes through ToolContext::onShortcut → onRaise / onLower
+    // for whichever tool is active. Default keyboard bindings PAGEUP
+    // / PAGEDOWN; no default pad bindings (the chord-via-modifier
+    // gesture is a follow-up — users can rebind via Input Bindings).
+    registerShortcut(ShortcutId::kInterfaceConstructionZRaise,
+                     STR_SHORTCUT_CONSTRUCTION_Z_RAISE,       "PAGEUP",   []() {});
+    registerShortcut(ShortcutId::kInterfaceConstructionZLower,
+                     STR_SHORTCUT_CONSTRUCTION_Z_LOWER,       "PAGEDOWN", []() {});
     // OPENRCT2MINI hold-binding refactor: shade-window fires on tap-
     // release (binding holdMs == 0) of the bound input; shade-all fires
     // on hold-elapsed (binding holdMs == 500, set by the "HOLD " prefix
@@ -1388,6 +1405,13 @@ void ShortcutManager::registerDefaultShortcuts()
     // unaffected — vendor SDL2 emits LALT scancode for R1, picked up
     // via the kCursorFastModifier keyboard default at line ~1031).
     registerPadDefault(ShortcutId::kCursorFastModifier,                "PAD R1");
+    // OPENRCT2MINI grid-cursor-plan §5.4 (Open Question 3 = SELECT):
+    // precision modifier on PAD BACK (Mini SELECT button). PAD BACK
+    // is also bound to kInterfaceDismiss — same physical button does
+    // dual duty: dismiss when no tool is active, precision modifier
+    // when a tool is active (the tool-context allow-list keeps the
+    // dismiss-on-modal flow intact). Held-only, polled per frame.
+    registerPadDefault(ShortcutId::kCursorPrecisionModifier,           "PAD BACK");
     // kInterfaceConstructionZLock: same reasoning, no PAD default —
     // most physical buttons that make sense here already have view
     // bindings. 1.5d wires the held-state query and the user can

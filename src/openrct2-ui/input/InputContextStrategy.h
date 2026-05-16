@@ -24,11 +24,74 @@
 #include "InputManager.h"  // for InputContext, InputEvent
 #include "ShortcutIds.h"   // for ToolContext shortcut dispatch
 
+#include <openrct2/world/Location.hpp>  // TileCoordsXY, Direction
+#include <openrct2/world/MapSelection.h> // MapSelectType
+
 #include <cstdint>
 #include <string_view>
 
 namespace OpenRCT2::Ui
 {
+    // OPENRCT2MINI grid-cursor-plan §3: D-pad-to-tile-step mapping mode.
+    // Stored on Config::Interface::gridCursorMode; consulted by the
+    // stepForDirection helper each step. Default `compass` (world-
+    // relative cardinal directions).
+    enum class GridCursorMode : uint8_t
+    {
+        compass = 0,
+        diagonalLeft = 1,
+        diagonalRight = 2,
+    };
+
+    // OPENRCT2MINI grid-cursor-plan §4.1: each tool advertises which
+    // subset of the 13 sub-tile positions its precision modifier
+    // cycles through. The grid cursor consults this when the
+    // precision modifier is held.
+    enum class SubsetType : uint8_t
+    {
+        none = 0,
+        corners = 1,
+        edges = 2,
+        quadrants = 3,
+    };
+
+    // OPENRCT2MINI grid-cursor-plan §8.2: shared discrete-step rate
+    // constants. The grid cursor's per-frame held-state poll fires
+    // the first step immediately on press; subsequent steps fire
+    // kRepeatIntervalMs apart after the kInitialDelayMs hold. Future
+    // focus-mode list-step work can consume the same constants if
+    // desired.
+    namespace DiscreteStep
+    {
+        constexpr uint32_t kInitialDelayMs = 200;
+        constexpr uint32_t kRepeatIntervalMs = 80;
+        // §6.1: viewport inset margin in pixels. If the grid cursor's
+        // screen projection falls within this distance of any
+        // viewport edge after a step, scroll the camera so the
+        // cursor sits at the margin instead of off-screen.
+        constexpr int32_t kViewportMargin = 64;
+        // §11.3 / §8.4: fast-modifier multiplier. When
+        // kCursorFastModifier is held (and precision is not),
+        // multiply the step granularity by this factor.
+        constexpr int32_t kFastMultiplier = 4;
+    } // namespace DiscreteStep
+
+    // OPENRCT2MINI grid-cursor-plan §3.3 / §14.1: D-pad direction →
+    // TileCoordsXY delta under the active GridCursorMode and the
+    // camera's current rotation (0..3). dpad uses the Direction enum
+    // (uint8_t 0..3) with the canonical N/E/S/W = 0/1/2/3 mapping
+    // used by MapSelectType helpers. Result is the world-tile delta
+    // to apply on a single step.
+    TileCoordsXY stepForDirection(GridCursorMode mode, uint8_t rotation, ::Direction dpad);
+
+    // OPENRCT2MINI grid-cursor-plan §6.1: scroll the main viewport
+    // ONLY when the cursor's projected centre is within
+    // DiscreteStep::kViewportMargin of any edge. Inside that margin
+    // the camera is left alone so the user sees the highlight move
+    // across the screen. Each tool's onStep calls this after the
+    // model step so edge-approaching D-pad presses recruit a pan
+    // without every step glueing the cursor to viewport centre.
+    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY pos);
     // What the active strategy wants the dispatcher to do with this
     // shortcut event:
     //   - Passthrough: shortcut's action lambda fires as normal.
@@ -189,22 +252,127 @@ namespace OpenRCT2::Ui
         // models together.
     };
 
-    // Tile-aligned cursor. D-pad press steps one tile; analog stick
-    // continuous-steps proportional to deflection. Position stored as
-    // `TileCoordsXY`. Render layer: viewport (paint phase, below UI).
-    // Phase 3.E implements the body when FootpathContext lands.
+    // OPENRCT2MINI grid-cursor-plan §14.1 / Phase 3.E.0: tile-aligned
+    // cursor. Owns a TileCoordsXY position, a sub-tile orientation
+    // (MapSelectType — full / corner / edge / quadrant), a Z level,
+    // and a per-direction press-tracking struct for the per-frame
+    // held-state poll. Rendering is delegated to the existing
+    // gMapSelectFlags / gMapSelectType / gMapSelectPositionA/B globals
+    // (see Paint.Surface.cpp:1093-1190); this model writes those
+    // globals when active and clears them on deactivate.
     class GridCursorModel final : public ICursorModel
     {
-        // Phase 3.C: empty stub.
+    public:
+        // Per-D-pad-direction state for the per-frame held-state poll.
+        // pressStartMs = timestamp of first step in this hold burst;
+        // lastStepMs = timestamp of the last step we fired. Both zero
+        // when no press is currently held.
+        struct HoldState
+        {
+            uint32_t pressStartMs{ 0 };
+            uint32_t lastStepMs{ 0 };
+        };
+
+        GridCursorModel() = default;
+
+        void onActivate() override
+        {
+            _active = true;
+            for (auto& s : _holdState)
+                s = HoldState{};
+        }
+        void onDeactivate() override
+        {
+            _active = false;
+            for (auto& s : _holdState)
+                s = HoldState{};
+        }
+
+        bool isActive() const { return _active; }
+
+        TileCoordsXY getPosition() const { return _position; }
+        void setPosition(TileCoordsXY pos) { _position = pos; }
+
+        int32_t getZ() const { return _z; }
+        void setZ(int32_t z) { _z = z; }
+        void raiseZ(int32_t step) { _z += step; }
+        void lowerZ(int32_t step)
+        {
+            _z -= step;
+            if (_z < 0)
+                _z = 0;
+        }
+
+        MapSelectType getOrientation() const { return _orientation; }
+        void setOrientation(MapSelectType o) { _orientation = o; }
+
+        // Step the cursor by a TileCoordsXY delta. Clamps to the
+        // playable map range. Returns the new position.
+        TileCoordsXY step(TileCoordsXY delta);
+
+        HoldState& holdState(uint8_t dir)
+        {
+            return _holdState[dir & 3];
+        }
+        const HoldState& holdState(uint8_t dir) const
+        {
+            return _holdState[dir & 3];
+        }
+
+    private:
+        bool _active{ false };
+        TileCoordsXY _position{ 1, 1 };
+        // §6 sub-tile persistence: full-tile by default; precision
+        // modifier shifts to a specific sub-tile and persists across
+        // tile steps (Open Question 6 = persist).
+        MapSelectType _orientation{ MapSelectType::full };
+        int32_t _z{ 0 };
+        HoldState _holdState[4]{};
     };
 
-    // Tile-edge or tile-corner aligned cursor. Position is a tile coord
-    // plus a sub-tile orientation (N/S/E/W edge or NE/NW/SE/SW corner).
-    // Used by TerrainContext (corners) and WaterContext (edges) once
-    // Phase 3.F lands. Render layer: viewport.
+    // OPENRCT2MINI grid-cursor-plan §14.1: edge-tile cursor. Same
+    // shape as GridCursorModel but defaults the sub-tile orientation
+    // to corner0 (Terrain) — subclasses / consumers override via
+    // setOrientation. Used by Terrain / Water once Phase 3.F lands.
     class EdgeCursorModel final : public ICursorModel
     {
-        // Phase 3.C: empty stub.
+    public:
+        EdgeCursorModel() = default;
+
+        void onActivate() override
+        {
+            _active = true;
+        }
+        void onDeactivate() override
+        {
+            _active = false;
+        }
+
+        bool isActive() const { return _active; }
+
+        TileCoordsXY getPosition() const { return _position; }
+        void setPosition(TileCoordsXY pos) { _position = pos; }
+
+        int32_t getZ() const { return _z; }
+        void setZ(int32_t z) { _z = z; }
+        void raiseZ(int32_t step) { _z += step; }
+        void lowerZ(int32_t step)
+        {
+            _z -= step;
+            if (_z < 0)
+                _z = 0;
+        }
+
+        MapSelectType getOrientation() const { return _orientation; }
+        void setOrientation(MapSelectType o) { _orientation = o; }
+
+        TileCoordsXY step(TileCoordsXY delta);
+
+    private:
+        bool _active{ false };
+        TileCoordsXY _position{ 1, 1 };
+        MapSelectType _orientation{ MapSelectType::corner0 };
+        int32_t _z{ 0 };
     };
 
     // Text caret. Line + column within a textbox's content. D-pad
@@ -285,6 +453,15 @@ namespace OpenRCT2::Ui
     class ToolContext : public IInputContext
     {
         GridCursorModel _grid;
+        // OPENRCT2MINI grid-cursor-plan §7.3: remember the
+        // SelectorMode the user was in when the tool activated, so we
+        // can restore it on deactivate. Default to `active` — the
+        // common case is selector-ring mode on the Mini.
+        InputManager::SelectorMode _savedSelectorMode{ InputManager::SelectorMode::active };
+        // OPENRCT2MINI grid-cursor-plan §10.1: clear the grid cursor
+        // marker globals on deactivate so the tile-marker paint stops
+        // rendering when the tool exits.
+        bool _wroteSelection{ false };
 
     public:
         // Verbs — override as needed. Default returns Consumed so the
@@ -297,19 +474,103 @@ namespace OpenRCT2::Ui
         virtual Disposition onRotate() { return Disposition::Consumed; }
         virtual Disposition onRaise()  { return Disposition::Consumed; }
         virtual Disposition onLower()  { return Disposition::Consumed; }
+        // OPENRCT2MINI grid-cursor-plan §14.1: D-pad step (or sub-tile
+        // selection if precision is held). The directional channel
+        // routes through here from the focus.* shortcut IDs (the
+        // tool-context allow-list adds them in InputManager.cpp's
+        // gating table) and from the per-frame held-state poll.
+        //
+        // The base implementation (defined out-of-line in
+        // InputContextStrategy.cpp) handles the common case:
+        // compute the world delta via stepForDirection under the
+        // active GridCursorMode + camera rotation, step whichever
+        // cursor model getCursorModel() returns (Grid for Footpath
+        // / Scenery / LandRights / TileInspector / RideConstruction;
+        // Edge for Terrain / Water), then nudge the camera if the
+        // cursor reaches the viewport margin. Subclasses only need
+        // to override this when they want a non-default step shape
+        // (e.g. RideConstruction's segment-aligned placement).
+        virtual Disposition onStep(::Direction dpad);
+
+        // OPENRCT2MINI grid-cursor-plan §4.1 / §11: per-tool sub-tile
+        // subset that the precision modifier cycles through. Base
+        // default = none (precision modifier becomes a no-op);
+        // subclasses override (e.g. FootpathContextImpl returns
+        // edges for railings mode).
+        virtual SubsetType precisionSubset() const { return SubsetType::none; }
+
+        GridCursorModel& gridCursor() { return _grid; }
+        const GridCursorModel& gridCursor() const { return _grid; }
+
+        // OPENRCT2MINI grid-cursor-plan §10.1 / §7.3: hide the pixel
+        // cursor on tool entry, restore it on exit. Mirrors Focus
+        // mode's SelectorMode lifecycle.
+        void onActivate() override;
+        void onDeactivate() override;
+
+        // OPENRCT2MINI grid-cursor-plan §10.1: per-frame tick. The
+        // surface-paint hook gates the highlight on a 500ms blink
+        // (Paint.Surface.cpp:1101-1105), but the viewport only
+        // repaints tiles that something invalidated. Without a
+        // per-frame invalidate the framebuffer freezes at whichever
+        // blink phase last redrew, so the cursor either stays "on"
+        // forever or never reappears after a step. Invalidating the
+        // cursor's current tile every frame keeps the paint
+        // pipeline pumping at full rate; the blink-gate decides
+        // whether the highlight is drawn or skipped that frame.
+        void processFrame(uint32_t /*nowMs*/) override;
 
         // Shared shortcut routing: maps the generic shortcut IDs onto
         // verb calls. Subclasses can override to handle additional IDs
         // (e.g. TrackContext segment-extension shortcuts) but the
         // common set lives here.
+        //
+        // §14.1 routing additions:
+        //   - kFocusUp/Down/Left/Right → onStep(Direction)
+        //   - kInterfaceConstructionZRaise → onRaise
+        //   - kInterfaceConstructionZLower → onLower
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17):
+        // dismiss / cancel exits grid-cursor mode and hands focus
+        // back to the tool window — mirrors the OSK lifecycle. The
+        // tool itself stays armed (gInputFlags.toolActive remains
+        // true) so the user can swap mode buttons or re-engage the
+        // grid cursor from another mode without reopening the
+        // window. Implementation lives out-of-line so it can call
+        // GetInputManager() without dragging InputManager.h into
+        // every consumer of this header.
+        Disposition exitGridCursorMode();
+
         Disposition onShortcut(std::string_view id, const InputEvent& /*e*/) override
         {
+            // Dismiss / cancel: exit grid cursor mode and return
+            // focus to the parent tool window. Both shortcuts (the
+            // generic interface.dismiss + cursor.cancel) hit the
+            // same exit path so users on either binding scheme get
+            // the back-out behaviour.
+            if (id == ShortcutId::kInterfaceDismiss || id == ShortcutId::kCursorCancel)
+                return exitGridCursorMode();
             if (id == ShortcutId::kCursorClick)
                 return onPlace();
-            if (id == ShortcutId::kCursorCancel)
-                return onCancel();
             if (id == ShortcutId::kInterfaceRotateConstruction)
                 return onRotate();
+            if (id == ShortcutId::kInterfaceConstructionZRaise)
+                return onRaise();
+            if (id == ShortcutId::kInterfaceConstructionZLower)
+                return onLower();
+            // focus.* in a tool context drives the grid cursor.
+            // Direction values match MapSelectType helpers: 0 N,
+            // 1 E, 2 S, 3 W (compass) — see Location.hpp Direction
+            // alias. Map focus.up→0, focus.right→1, focus.down→2,
+            // focus.left→3 as the base; stepForDirection handles
+            // mode + rotation translation.
+            if (id == ShortcutId::kFocusUp)
+                return onStep(static_cast<::Direction>(0));
+            if (id == ShortcutId::kFocusRight)
+                return onStep(static_cast<::Direction>(1));
+            if (id == ShortcutId::kFocusDown)
+                return onStep(static_cast<::Direction>(2));
+            if (id == ShortcutId::kFocusLeft)
+                return onStep(static_cast<::Direction>(3));
             // Z-raise / Z-lower verbs map to the construction Z-lock
             // modifier paired with the existing height-adjust path
             // — Phase 3.E ships the verb hooks but defers the actual

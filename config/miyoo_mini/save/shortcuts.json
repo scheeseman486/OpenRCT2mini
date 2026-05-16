@@ -18,6 +18,9 @@
         "LALT",
         "PAD R1"
     ],
+    "cursor.precision_modifier": [
+        "PAD BACK"
+    ],
     "cursor.left": [
         "Left",
         "PAD DPAD_LEFT",
@@ -53,6 +56,8 @@
         "LCTRL",
         "RCTRL"
     ],
+    "interface.general.construction_z_lower": "PAGEDOWN",
+    "interface.general.construction_z_raise": "PAGEUP",
     "interface.general.cycle_next_window": [],
     "interface.general.cycle_previous_window": [],
     "interface.general.dismiss": "PAD BACK",

@@ -20,6 +20,13 @@ enum class MapSelectFlag : uint8_t
     enableConstruct,
     enableArrow,
     green,
+    // OPENRCT2MINI grid-cursor-plan §7.2 (Option A): when ALSO set
+    // alongside `enable`, the existing tile-marker paint hooks in
+    // Paint.Surface.cpp:1093-1190 add a blinking overlay so the
+    // gamepad-driven grid cursor is visually distinct from the
+    // mouse-driven tool ghost. The blink is paint-time only — the
+    // flag carries no extra state and clears on tool exit.
+    gridCursor,
 };
 using MapSelectFlags = FlagHolder<uint8_t, MapSelectFlag>;
 

@@ -274,6 +274,15 @@ namespace OpenRCT2::Config
         // OPENRCT2MINI: optional 50%-translucent drop shadow under the
         // software cursor sprite, offset (+2, +2) pixels. Default off.
         bool cursorDropShadow;
+        // OPENRCT2MINI grid-cursor-plan §3.4: D-pad-to-tile-step mapping
+        // mode for the gamepad-driven grid cursor that tool contexts
+        // use. compass (default) keeps the WORLD direction constant
+        // under camera rotation (D-pad up = world north regardless of
+        // rotation). diagonalLeft / diagonalRight keep the SCREEN
+        // direction constant (D-pad up always moves visually upward,
+        // biased NW or NE respectively). Stored as a uint8_t-backed
+        // enum; INI key `grid_cursor_mode` under [interface].
+        uint8_t gridCursorMode;
     };
 
     struct Sound
