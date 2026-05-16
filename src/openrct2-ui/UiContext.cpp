@@ -73,12 +73,11 @@ using namespace OpenRCT2::Ui;
 // bindings without going through the keyboard shortcut layer.
 void ShortcutRotateConstructionObject();
 
-#ifdef __MACOSX__
-    // macOS uses COMMAND rather than CTRL for many keyboard shortcuts
-    #define KB_PRIMARY_MODIFIER KMOD_GUI
-#else
-    #define KB_PRIMARY_MODIFIER KMOD_CTRL
-#endif
+// OPENRCT2MINI text-editing-de-hardcode: KB_PRIMARY_MODIFIER macro
+// removed. It was unused dead code left over from an earlier refactor
+// — the live consumer was always TextComposition.cpp, and that file's
+// SDL_KEYDOWN switch is now driven by bindable shortcuts rather than
+// the macro.
 
 class UiContext final : public IUiContext
 {
@@ -469,6 +468,14 @@ public:
     ShortcutManager& GetShortcutManager()
     {
         return _shortcutManager;
+    }
+
+    // OPENRCT2MINI text-editing-de-hardcode: expose the live
+    // TextComposition for the bindable caret + clipboard action lambdas
+    // in Shortcuts.cpp.
+    TextComposition& GetTextComposition()
+    {
+        return _textComposition;
     }
 
     explicit UiContext(IPlatformEnvironment& env)
@@ -2427,6 +2434,16 @@ ShortcutManager& Ui::GetShortcutManager()
 {
     auto& uiContext = static_cast<UiContext&>(GetContext()->GetUiContext());
     return uiContext.GetShortcutManager();
+}
+
+// OPENRCT2MINI text-editing-de-hardcode: free-function accessor for
+// the live TextComposition owned by UiContext. Called from the action
+// lambdas registered in Shortcuts.cpp for the new caret + clipboard
+// shortcuts.
+TextComposition& Ui::GetTextComposition()
+{
+    auto& uiContext = static_cast<UiContext&>(GetContext()->GetUiContext());
+    return uiContext.GetTextComposition();
 }
 
 // OPENRCT2MINI gamepad-plan 1.5c + hold-binding refactor: action

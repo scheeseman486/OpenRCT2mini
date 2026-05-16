@@ -2524,6 +2524,23 @@ bool InputManager::isShortcutMeaningfulInContext(std::string_view shortcutId, In
                 ShortcutId::kCursorClick,
                 ShortcutId::kCursorCancel,
                 ShortcutId::kCursorFastModifier,
+                // OPENRCT2MINI text-editing-de-hardcode: caret +
+                // clipboard shortcuts on the OSK allow-list so they
+                // fire while the OSK is up (parent textbox + OSK
+                // share the same TextInputSession via _session.Buffer
+                // — the OSK's _typing-into-active-session writes go
+                // through TextComposition just like a hardware key).
+                ShortcutId::kInterfaceCaretLeft,
+                ShortcutId::kInterfaceCaretRight,
+                ShortcutId::kInterfaceCaretWordLeft,
+                ShortcutId::kInterfaceCaretWordRight,
+                ShortcutId::kInterfaceTextBackspace,
+                ShortcutId::kInterfaceTextBackspaceWord,
+                ShortcutId::kInterfaceTextDelete,
+                ShortcutId::kInterfaceTextDeleteWord,
+                ShortcutId::kInterfaceClipboardCopy,
+                ShortcutId::kInterfaceClipboardCut,
+                ShortcutId::kInterfaceClipboardPaste,
             };
             for (auto id : kAllowed)
                 if (id == shortcutId)
@@ -2595,6 +2612,25 @@ bool InputManager::isShortcutMeaningfulInContext(std::string_view shortcutId, In
                 // dead to mouse.
                 ShortcutId::kCursorClick,
                 ShortcutId::kCursorCancel,
+                // OPENRCT2MINI text-editing-de-hardcode: caret +
+                // clipboard shortcuts allow-listed so direct typing
+                // into a widget textbox / TextInput modal / overwrite
+                // prompt routes BACKSPACE / arrows / CTRL+C/V/X /
+                // etc. through the bindable dispatcher. These used
+                // to be hardcoded in TextComposition's SDL_KEYDOWN
+                // switch; with that gone, the allow-list is what
+                // lets the new shortcuts reach the action lambdas.
+                ShortcutId::kInterfaceCaretLeft,
+                ShortcutId::kInterfaceCaretRight,
+                ShortcutId::kInterfaceCaretWordLeft,
+                ShortcutId::kInterfaceCaretWordRight,
+                ShortcutId::kInterfaceTextBackspace,
+                ShortcutId::kInterfaceTextBackspaceWord,
+                ShortcutId::kInterfaceTextDelete,
+                ShortcutId::kInterfaceTextDeleteWord,
+                ShortcutId::kInterfaceClipboardCopy,
+                ShortcutId::kInterfaceClipboardCut,
+                ShortcutId::kInterfaceClipboardPaste,
             };
             for (auto id : kAllowed)
                 if (id == shortcutId)

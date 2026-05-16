@@ -233,6 +233,30 @@ namespace OpenRCT2::Ui::ShortcutId
     constexpr std::string_view kInterfaceDismiss = "interface.general.dismiss";
     constexpr std::string_view kInterfaceConfirm = "interface.general.confirm";
 
+    // OPENRCT2MINI text-editing-de-hardcode: bindable caret movement +
+    // clipboard shortcuts for the text-input composition layer. These
+    // replace the previously-hardcoded SDL_KEYDOWN dispatch in
+    // TextComposition.cpp (BACKSPACE / HOME / END / DELETE / LEFT /
+    // RIGHT / CTRL+C / CTRL+V / CTRL+X). Each modifier+key combination
+    // is its own bindable action per the no-hardcoded-inputs principle
+    // established by tasks #372, #399, #401. Allow-listed in both
+    // OskContextImpl and WidgetTextBoxContextImpl (so caret movement
+    // works whether the OSK is up or the user is typing directly with
+    // a hardware keyboard). Ctrl-modified variants exploit the
+    // existing chord-matching machinery — listing them on the
+    // allow-list is sufficient, no special chord logic needed.
+    constexpr std::string_view kInterfaceCaretLeft = "interface.textediting.caret_left";
+    constexpr std::string_view kInterfaceCaretRight = "interface.textediting.caret_right";
+    constexpr std::string_view kInterfaceCaretWordLeft = "interface.textediting.caret_word_left";
+    constexpr std::string_view kInterfaceCaretWordRight = "interface.textediting.caret_word_right";
+    constexpr std::string_view kInterfaceTextBackspace = "interface.textediting.backspace";
+    constexpr std::string_view kInterfaceTextBackspaceWord = "interface.textediting.backspace_word";
+    constexpr std::string_view kInterfaceTextDelete = "interface.textediting.delete";
+    constexpr std::string_view kInterfaceTextDeleteWord = "interface.textediting.delete_word";
+    constexpr std::string_view kInterfaceClipboardCopy = "interface.textediting.clipboard_copy";
+    constexpr std::string_view kInterfaceClipboardCut = "interface.textediting.clipboard_cut";
+    constexpr std::string_view kInterfaceClipboardPaste = "interface.textediting.clipboard_paste";
+
     // OPENRCT2MINI mouse-input refactor: camera drag.
     // Held over the main viewport → camera pans with cursor motion.
     // Released within ~500ms → fires the context-sensitive right-click

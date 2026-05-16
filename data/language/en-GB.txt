@@ -3973,3 +3973,16 @@ STR_7136    :Show mouse cursor (exit selector)
 # OPENRCT2MINI osk-overhaul §8: Options > Controls "Enable on-screen keyboard" tickbox.
 STR_7137    :On-screen keyboard
 STR_7138    :{SMALLFONT}{BLACK}Show the on-screen keyboard when a text field opens. Disable this if you have a hardware keyboard.
+
+# OPENRCT2MINI text-editing-de-hardcode: bindable caret + clipboard shortcuts.
+STR_7139    :Move caret left
+STR_7140    :Move caret right
+STR_7141    :Move caret word left
+STR_7142    :Move caret word right
+STR_7143    :Backspace
+STR_7144    :Backspace word
+STR_7145    :Delete
+STR_7146    :Delete word
+STR_7147    :Copy
+STR_7148    :Cut
+STR_7149    :Paste

@@ -7,6 +7,7 @@
  * OpenRCT2 is licensed under the GNU General Public License version 3.
  *****************************************************************************/
 
+#include "../TextComposition.h"
 #include "../UiStringIds.h"
 #include "ShortcutIds.h"
 #include "ShortcutManager.h"
@@ -1085,6 +1086,79 @@ void ShortcutManager::registerDefaultShortcuts()
     // held state.
     registerShortcut(ShortcutId::kInterfaceCameraDrag,
                      STR_SHORTCUT_CAMERA_DRAG,                "",       []() {});
+
+    // OPENRCT2MINI text-editing-de-hardcode: bindable caret + clipboard
+    // shortcuts. Each replaces a specific case of the previously-
+    // hardcoded SDL_KEYDOWN dispatch in TextComposition.cpp. Action
+    // lambdas resolve the live TextComposition via GetTextComposition()
+    // and dispatch the corresponding method. IsActive() gates each
+    // dispatch so the lambdas no-op outside of an active text session
+    // — matching the legacy `_session.Buffer == nullptr` early-return
+    // in HandleMessage. RefreshCaret + WindowUpdateTextbox are
+    // mirrored from the original SDLK_* cases.
+    registerShortcut(ShortcutId::kInterfaceCaretLeft, STR_SHORTCUT_CARET_LEFT, "LEFT", []() {
+        auto& tc = GetTextComposition();
+        if (!tc.IsActive())
+            return;
+        tc.CaretMoveLeft();
+        GetInGameConsole().RefreshCaret(tc.GetCaretPosition());
+    });
+    registerShortcut(ShortcutId::kInterfaceCaretRight, STR_SHORTCUT_CARET_RIGHT, "RIGHT", []() {
+        auto& tc = GetTextComposition();
+        if (!tc.IsActive())
+            return;
+        tc.CaretMoveRight();
+        GetInGameConsole().RefreshCaret(tc.GetCaretPosition());
+    });
+    registerShortcut(ShortcutId::kInterfaceCaretWordLeft, STR_SHORTCUT_CARET_WORD_LEFT, "CTRL+LEFT", []() {
+        auto& tc = GetTextComposition();
+        if (!tc.IsActive())
+            return;
+        tc.CaretMoveToLeftToken();
+        GetInGameConsole().RefreshCaret(tc.GetCaretPosition());
+    });
+    registerShortcut(ShortcutId::kInterfaceCaretWordRight, STR_SHORTCUT_CARET_WORD_RIGHT, "CTRL+RIGHT", []() {
+        auto& tc = GetTextComposition();
+        if (!tc.IsActive())
+            return;
+        tc.CaretMoveToRightToken();
+        GetInGameConsole().RefreshCaret(tc.GetCaretPosition());
+    });
+    registerShortcut(ShortcutId::kInterfaceTextBackspace, STR_SHORTCUT_TEXT_BACKSPACE, "BACKSPACE", []() {
+        auto& tc = GetTextComposition();
+        if (tc.IsActive())
+            tc.BackspaceCharacter();
+    });
+    registerShortcut(ShortcutId::kInterfaceTextBackspaceWord, STR_SHORTCUT_TEXT_BACKSPACE_WORD, "CTRL+BACKSPACE", []() {
+        auto& tc = GetTextComposition();
+        if (tc.IsActive())
+            tc.BackspaceWord();
+    });
+    registerShortcut(ShortcutId::kInterfaceTextDelete, STR_SHORTCUT_TEXT_DELETE, "DELETE", []() {
+        auto& tc = GetTextComposition();
+        if (tc.IsActive())
+            tc.DeleteCharacter();
+    });
+    registerShortcut(ShortcutId::kInterfaceTextDeleteWord, STR_SHORTCUT_TEXT_DELETE_WORD, "CTRL+DELETE", []() {
+        auto& tc = GetTextComposition();
+        if (tc.IsActive())
+            tc.DeleteWord();
+    });
+    registerShortcut(ShortcutId::kInterfaceClipboardCopy, STR_SHORTCUT_CLIPBOARD_COPY, "CTRL+C", []() {
+        auto& tc = GetTextComposition();
+        if (tc.IsActive())
+            tc.ClipboardCopy();
+    });
+    registerShortcut(ShortcutId::kInterfaceClipboardCut, STR_SHORTCUT_CLIPBOARD_CUT, "CTRL+X", []() {
+        auto& tc = GetTextComposition();
+        if (tc.IsActive())
+            tc.ClipboardCut();
+    });
+    registerShortcut(ShortcutId::kInterfaceClipboardPaste, STR_SHORTCUT_CLIPBOARD_PASTE, "CTRL+V", []() {
+        auto& tc = GetTextComposition();
+        if (tc.IsActive())
+            tc.ClipboardPaste();
+    });
     // clang-format on
 
     // OPENRCT2MINI gamepad-plan 1.4: ship a conservative set of default
@@ -1340,6 +1414,16 @@ void ShortcutManager::registerDefaultShortcuts()
     // to kInterfacePause's action lambda. No conflict.
     registerPadDefault(ShortcutId::kInterfaceDismiss,                  "PAD BACK");
     registerPadDefault(ShortcutId::kInterfaceConfirm,                  "PAD START");
+
+    // OPENRCT2MINI text-editing-de-hardcode: pad defaults for caret
+    // movement. Shoulder buttons map to caret left/right so the user
+    // can navigate the textbox without having to engage focus-mode or
+    // remap arrows. Word-jump and clipboard variants intentionally
+    // have no pad defaults — they're keyboard-conventional shortcuts
+    // (CTRL+LEFT etc.) and the user can rebind via the Input Bindings
+    // UI if they want them on PAD chords.
+    registerPadDefault(ShortcutId::kInterfaceCaretLeft,                "PAD LEFTSHOULDER");
+    registerPadDefault(ShortcutId::kInterfaceCaretRight,               "PAD RIGHTSHOULDER");
 
     // OPENRCT2MINI defaults-export P4 (shortcuts cutover): override
     // everything we just registered with the per-build seed

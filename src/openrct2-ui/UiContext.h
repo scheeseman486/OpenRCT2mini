@@ -29,6 +29,7 @@ namespace OpenRCT2::Ui
     class InGameConsole;
     class InputManager;
     class ShortcutManager;
+    class TextComposition;
 
     struct IPlatformUiContext
     {
@@ -56,6 +57,10 @@ namespace OpenRCT2::Ui
     [[nodiscard]] InGameConsole& GetInGameConsole();
     [[nodiscard]] InputManager& GetInputManager();
     [[nodiscard]] ShortcutManager& GetShortcutManager();
+    // OPENRCT2MINI text-editing-de-hardcode: expose TextComposition so
+    // the bindable caret/clipboard shortcut action lambdas in
+    // Shortcuts.cpp can reach the live instance owned by UiContext.
+    [[nodiscard]] TextComposition& GetTextComposition();
 
     // OPENRCT2MINI gamepad-plan 1.5c: action bridges for shade-related
     // shortcuts. Called from action lambdas in Shortcuts.cpp.

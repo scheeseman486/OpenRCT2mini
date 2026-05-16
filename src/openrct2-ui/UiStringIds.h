@@ -417,6 +417,20 @@ namespace OpenRCT2
         // show-cursor shortcut (selector hides cursor on Mini;
         // this gives the user a way to bring it back).
         STR_SHORTCUT_SHOW_CURSOR = 7136,
+        // OPENRCT2MINI text-editing-de-hardcode: bindable caret +
+        // clipboard shortcuts. Replace previously-hardcoded SDL_KEYDOWN
+        // dispatch in TextComposition.cpp.
+        STR_SHORTCUT_CARET_LEFT = 7139,
+        STR_SHORTCUT_CARET_RIGHT = 7140,
+        STR_SHORTCUT_CARET_WORD_LEFT = 7141,
+        STR_SHORTCUT_CARET_WORD_RIGHT = 7142,
+        STR_SHORTCUT_TEXT_BACKSPACE = 7143,
+        STR_SHORTCUT_TEXT_BACKSPACE_WORD = 7144,
+        STR_SHORTCUT_TEXT_DELETE = 7145,
+        STR_SHORTCUT_TEXT_DELETE_WORD = 7146,
+        STR_SHORTCUT_CLIPBOARD_COPY = 7147,
+        STR_SHORTCUT_CLIPBOARD_CUT = 7148,
+        STR_SHORTCUT_CLIPBOARD_PASTE = 7149,
         STR_OR = 7000,
 
         // Widgets

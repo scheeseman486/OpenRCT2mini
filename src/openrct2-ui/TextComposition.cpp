@@ -22,12 +22,14 @@
 #include <openrct2/core/UTF8.h>
 #include <openrct2/ui/UiContext.h>
 
-#ifdef __MACOSX__
-    // macOS uses COMMAND rather than CTRL for many keyboard shortcuts
-    #define KB_PRIMARY_MODIFIER KMOD_GUI
-#else
-    #define KB_PRIMARY_MODIFIER KMOD_CTRL
-#endif
+// OPENRCT2MINI text-editing-de-hardcode: KB_PRIMARY_MODIFIER macro
+// removed. Every Ctrl-modified caret / clipboard action used to consult
+// this macro directly to decide whether to fire the word-jump / copy /
+// cut / paste variant. Those decisions are now made by the binding
+// system: each modifier+key combination is a separate shortcut ID with
+// its own default chord (CTRL+LEFT, CTRL+BACKSPACE, CTRL+C, etc.). On
+// macOS the user is free to rebind the shortcuts to CMD+* via the
+// Input Bindings UI — no platform-specific code path here.
 
 using namespace OpenRCT2;
 using namespace OpenRCT2::Ui;
@@ -111,16 +113,16 @@ void TextComposition::HandleMessage(const SDL_Event* e)
 {
     auto& console = GetInGameConsole();
 
-    // OPENRCT2MINI osk-overhaul §6 / C5: when the OSK is up, the OSK
-    // owns text editing. SDL_TEXTINPUT and SDL_KEYDOWN edit-key paths
-    // are gated off here so a hardware key (or scancode-emitting
-    // gamepad button) can't double-type into the textbox while the
-    // OSK is also delivering characters.
-    //
-    // We still let the events fall through to update internal state
-    // (SDL_TEXTEDITING IME buffer, SDL_KEYDOWN's UiContext::SetKeys-
-    // Pressed cache) where it's safe — but skip the buffer-edit
-    // branches at the bottom.
+    // OPENRCT2MINI osk-overhaul §6 / C5: when the OSK is up it owns
+    // text editing — the OSK feeds characters via widget activations,
+    // so SDL_TEXTINPUT must be gated off to prevent double-type when
+    // a hardware key (or scancode-emitting gamepad button) also lands
+    // in the SDL_TEXTINPUT path. SDL_KEYDOWN no longer needs gating
+    // here: every edit-key dispatch (caret movement / backspace /
+    // delete / clipboard) is now handled by bindable shortcuts whose
+    // action lambdas check TextComposition::IsActive() before
+    // mutating the buffer — and shortcuts are themselves gated by
+    // the InputContext allow-lists in InputManager.cpp.
     const bool oskOpen = Windows::OskIsActive();
 
     switch (e->type)
@@ -160,7 +162,6 @@ void TextComposition::HandleMessage(const SDL_Event* e)
                 break;
             }
 
-            uint16_t modifier = e->key.keysym.mod;
             SDL_Keycode rawKey = e->key.keysym.sym;
             SDL_Scancode rawScancode = e->key.keysym.scancode;
 
@@ -168,108 +169,16 @@ void TextComposition::HandleMessage(const SDL_Event* e)
 
             GetContext()->GetUiContext().SetKeysPressed(key, scancode);
 
-            // Text input
-            if (_session.Buffer == nullptr)
-            {
-                break;
-            }
-            // OPENRCT2MINI osk-overhaul §6 / C5: when the OSK is up, it
-            // owns text editing. Hardware-keyboard caret keys (left /
-            // right / home / end) and backspace would otherwise edit
-            // the parent textbox out-of-sync with the OSK's buffer.
-            if (oskOpen)
-            {
-                break;
-            }
-
-            switch (key)
-            {
-                case SDLK_BACKSPACE:
-                    // If backspace and we have input text with a cursor position nonzero
-                    if (_session.SelectionStart > 0)
-                    {
-                        size_t endOffset = _session.SelectionStart;
-                        if (modifier & KB_PRIMARY_MODIFIER)
-                            CaretMoveToLeftToken();
-                        else
-                            CaretMoveLeft();
-                        _session.SelectionSize = endOffset - _session.SelectionStart;
-                        Delete();
-
-                        console.RefreshCaret(_session.SelectionStart);
-                        Windows::WindowUpdateTextbox();
-                    }
-                    break;
-                case SDLK_HOME:
-                    CaretMoveToStart();
-                    console.RefreshCaret(_session.SelectionStart);
-                    break;
-                case SDLK_END:
-                    CaretMoveToEnd();
-                    console.RefreshCaret(_session.SelectionStart);
-                    break;
-                case SDLK_DELETE:
-                {
-                    size_t startOffset = _session.SelectionStart;
-                    if (modifier & KB_PRIMARY_MODIFIER)
-                        CaretMoveToRightToken();
-                    else
-                        CaretMoveRight();
-                    _session.SelectionSize = _session.SelectionStart - startOffset;
-                    _session.SelectionStart = startOffset;
-                    Delete();
-                    console.RefreshCaret(_session.SelectionStart);
-                    Windows::WindowUpdateTextbox();
-                    break;
-                }
-                // OPENRCT2MINI gamepad-plan 1.6c.6: SDLK_RETURN case
-                // removed — RETURN now flows through to InputManager,
-                // matches kInterfaceConfirm, and fires the textbox
-                // ModalHooks confirm callback (WindowCancelTextbox)
-                // installed by WindowStartTextbox. Same final
-                // behaviour, but routed through the bindable shortcut
-                // system so PAD START works for gamepad too.
-                case SDLK_LEFT:
-                    if (modifier & KB_PRIMARY_MODIFIER)
-                        CaretMoveToLeftToken();
-                    else
-                        CaretMoveLeft();
-                    console.RefreshCaret(_session.SelectionStart);
-                    break;
-                case SDLK_RIGHT:
-                    if (modifier & KB_PRIMARY_MODIFIER)
-                        CaretMoveToRightToken();
-                    else
-                        CaretMoveRight();
-                    console.RefreshCaret(_session.SelectionStart);
-                    break;
-                case SDLK_c:
-                    if ((modifier & KB_PRIMARY_MODIFIER) && _session.Length)
-                    {
-                        GetContext()->GetUiContext().SetClipboardText(_session.Buffer->c_str());
-                        ContextShowError(STR_COPY_INPUT_TO_CLIPBOARD, kStringIdNone, {});
-                    }
-                    break;
-                case SDLK_v:
-                    if ((modifier & KB_PRIMARY_MODIFIER) && SDL_HasClipboardText())
-                    {
-                        utf8* text = SDL_GetClipboardText();
-                        Insert(text);
-                        SDL_free(text);
-                        console.RefreshCaret(_session.SelectionStart);
-                        Windows::WindowUpdateTextbox();
-                    }
-                    break;
-                case SDLK_x:
-                    if ((modifier & KB_PRIMARY_MODIFIER) && _session.Length)
-                    {
-                        GetContext()->GetUiContext().SetClipboardText(_session.Buffer->c_str());
-                        Clear();
-                        Windows::WindowUpdateTextbox();
-                        ContextShowError(STR_COPY_INPUT_TO_CLIPBOARD, kStringIdNone, {});
-                    }
-                    break;
-            }
+            // OPENRCT2MINI text-editing-de-hardcode: SDL_KEYDOWN switch
+            // for BACKSPACE / HOME / END / DELETE / LEFT / RIGHT /
+            // CTRL+C / CTRL+V / CTRL+X removed. Each is now its own
+            // bindable shortcut (interface.textediting.*) whose action
+            // lambda dispatches the relevant TextComposition method.
+            // RETURN was already removed earlier (gamepad-plan 1.6c.6)
+            // and is handled by kInterfaceConfirm + textbox ModalHooks.
+            // The remaining work in SDL_KEYDOWN is just the SetKeys-
+            // Pressed cache update above — that still happens here so
+            // the legacy keyboard-state polling code keeps working.
         }
     }
 }
@@ -533,4 +442,111 @@ void TextComposition::Delete()
 void TextComposition::RecalculateLength()
 {
     _session.Length = String::lengthOf(_session.Buffer->c_str());
+}
+
+// OPENRCT2MINI text-editing-de-hardcode: clipboard operations
+// promoted out of the SDL_KEYDOWN switch in HandleMessage. Each is
+// now invoked by the matching bindable shortcut's action lambda in
+// Shortcuts.cpp. Behaviour is byte-for-byte identical to the legacy
+// SDLK_c / SDLK_v / SDLK_x cases.
+void TextComposition::ClipboardCopy()
+{
+    if (_session.Buffer == nullptr || _session.Length == 0)
+        return;
+
+    GetContext()->GetUiContext().SetClipboardText(_session.Buffer->c_str());
+    ContextShowError(STR_COPY_INPUT_TO_CLIPBOARD, kStringIdNone, {});
+}
+
+void TextComposition::ClipboardCut()
+{
+    if (_session.Buffer == nullptr || _session.Length == 0)
+        return;
+
+    GetContext()->GetUiContext().SetClipboardText(_session.Buffer->c_str());
+    Clear();
+    Windows::WindowUpdateTextbox();
+    ContextShowError(STR_COPY_INPUT_TO_CLIPBOARD, kStringIdNone, {});
+}
+
+void TextComposition::ClipboardPaste()
+{
+    if (_session.Buffer == nullptr || !SDL_HasClipboardText())
+        return;
+
+    auto& console = GetInGameConsole();
+    utf8* text = SDL_GetClipboardText();
+    Insert(text);
+    SDL_free(text);
+    console.RefreshCaret(_session.SelectionStart);
+    Windows::WindowUpdateTextbox();
+}
+
+// OPENRCT2MINI text-editing-de-hardcode: backspace + delete composite
+// operations. Each runs the sequence that used to live inline in the
+// SDL_KEYDOWN switch — caret move, set SelectionSize, Delete, refresh
+// console caret + textbox. Keeping this inside the class lets us
+// continue to mutate the private _session fields between the caret
+// move and the Delete.
+void TextComposition::BackspaceCharacter()
+{
+    if (_session.Buffer == nullptr || _session.SelectionStart == 0)
+        return;
+
+    size_t endOffset = _session.SelectionStart;
+    CaretMoveLeft();
+    _session.SelectionSize = endOffset - _session.SelectionStart;
+    Delete();
+
+    GetInGameConsole().RefreshCaret(_session.SelectionStart);
+    Windows::WindowUpdateTextbox();
+}
+
+void TextComposition::BackspaceWord()
+{
+    if (_session.Buffer == nullptr || _session.SelectionStart == 0)
+        return;
+
+    size_t endOffset = _session.SelectionStart;
+    CaretMoveToLeftToken();
+    _session.SelectionSize = endOffset - _session.SelectionStart;
+    Delete();
+
+    GetInGameConsole().RefreshCaret(_session.SelectionStart);
+    Windows::WindowUpdateTextbox();
+}
+
+void TextComposition::DeleteCharacter()
+{
+    if (_session.Buffer == nullptr)
+        return;
+
+    size_t startOffset = _session.SelectionStart;
+    CaretMoveRight();
+    _session.SelectionSize = _session.SelectionStart - startOffset;
+    _session.SelectionStart = startOffset;
+    Delete();
+
+    GetInGameConsole().RefreshCaret(_session.SelectionStart);
+    Windows::WindowUpdateTextbox();
+}
+
+void TextComposition::DeleteWord()
+{
+    if (_session.Buffer == nullptr)
+        return;
+
+    size_t startOffset = _session.SelectionStart;
+    CaretMoveToRightToken();
+    _session.SelectionSize = _session.SelectionStart - startOffset;
+    _session.SelectionStart = startOffset;
+    Delete();
+
+    GetInGameConsole().RefreshCaret(_session.SelectionStart);
+    Windows::WindowUpdateTextbox();
+}
+
+size_t TextComposition::GetCaretPosition() const
+{
+    return _session.SelectionStart;
 }
