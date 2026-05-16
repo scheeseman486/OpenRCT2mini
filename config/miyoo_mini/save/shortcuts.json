@@ -107,6 +107,17 @@
     "interface.open.tileinspector": [],
     "interface.open.transparency_options": [],
     "interface.open.water": [],
+    "interface.textediting.backspace": "Backspace",
+    "interface.textediting.backspace_word": "CTRL+Backspace",
+    "interface.textediting.caret_left": ["Left", "PAD LEFTSHOULDER"],
+    "interface.textediting.caret_right": ["Right", "PAD RIGHTSHOULDER"],
+    "interface.textediting.caret_word_left": "CTRL+Left",
+    "interface.textediting.caret_word_right": "CTRL+Right",
+    "interface.textediting.clipboard_copy": "CTRL+C",
+    "interface.textediting.clipboard_cut": "CTRL+X",
+    "interface.textediting.clipboard_paste": "CTRL+V",
+    "interface.textediting.delete": "Delete",
+    "interface.textediting.delete_word": "CTRL+Delete",
     "view.general.rotate_anticlockwise": [
         "PAD L1",
         "W"

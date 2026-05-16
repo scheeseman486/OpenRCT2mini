@@ -309,6 +309,10 @@ ShortcutInput::ShortcutInput(std::string_view value)
             axisThreshold = t;
             axisDirection = d;
         }
+        // OPENRCT2MINI per-binding Modifier mode: chord-shaped PAD
+        // bindings default to is_modifier=true. Single-button PAD
+        // bindings default to false (N/A — no modifier portion).
+        isModifier = !chordModifiers.empty();
         return;
     }
 
@@ -446,6 +450,17 @@ ShortcutInput::ShortcutInput(std::string_view value)
                 button = SDLK_RALT;
         }
     }
+
+    // OPENRCT2MINI per-binding Modifier mode: chord-shaped keyboard
+    // bindings (any modifier mask set, e.g. CTRL+C) default to
+    // is_modifier=true; single-key bindings default to false (N/A).
+    // Mouse / joyHat single-input bindings also default to false.
+    // The chord-shape decision is "has more than one input element"
+    // which we approximate as "modifiers!=0 OR chordModifiers
+    // non-empty". chordModifiers is only populated by the PAD branch
+    // above (returns early), so for the keyboard/mouse fall-through
+    // here we only need to test `modifiers`.
+    isModifier = (modifiers != 0);
 }
 
 std::string_view ShortcutInput::getModifierName(uint32_t key, bool localised)
@@ -900,5 +915,12 @@ std::optional<ShortcutInput> ShortcutInput::fromInputEvent(const InputEvent& e)
         result.axisDirection = (e.axisValue >= 0) ? +1 : -1;
         result.axisThreshold = kPadAxisPressThreshold;
     }
+    // OPENRCT2MINI per-binding Modifier mode: chord-shaped captures
+    // (keyboard with a modifier mask, or PAD with chord modifiers
+    // applied later by commitPendingCapture) default to isModifier=
+    // true. Single-input captures default to false. commitPendingCapture
+    // re-applies the default after writing chordModifiers because the
+    // chord-modifier list isn't known here.
+    result.isModifier = (result.modifiers != 0);
     return result;
 }

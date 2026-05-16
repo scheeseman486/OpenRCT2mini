@@ -3986,3 +3986,7 @@ STR_7146    :Delete word
 STR_7147    :Copy
 STR_7148    :Cut
 STR_7149    :Paste
+STR_7150    :Binding Options
+STR_7151    :Configure this binding's behaviour
+STR_7152    :Modifier Key
+STR_7153    :When enabled, this binding only fires if the modifier keys are held BEFORE the trigger key is pressed. When disabled, the binding fires regardless of key order.

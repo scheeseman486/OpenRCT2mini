@@ -3451,6 +3451,65 @@ bool InputManager::getState(const ShortcutInput& shortcut) const
     return false;
 }
 
+// OPENRCT2MINI per-binding Modifier mode: query whether the modifier
+// portion of a shortcut's chord is currently held. "Modifier portion"
+// = every key in the chord EXCEPT the trigger (action) key. Returns
+// true if any of the shortcut's bindings has at least 2 keys AND all
+// of its modifier keys are presently held — irrespective of trigger.
+bool InputManager::isShortcutModifierHeld(std::string_view id) const
+{
+    constexpr uint32_t kUsefulModifiers = KMOD_SHIFT | KMOD_CTRL | KMOD_ALT | KMOD_GUI;
+    const uint32_t actualMods = SDL_GetModState() & kUsefulModifiers;
+
+    auto& mgr = GetShortcutManager();
+    auto* shortcut = mgr.getShortcut(id);
+    if (shortcut == nullptr)
+        return false;
+
+    for (const auto& binding : shortcut->current)
+    {
+        // Keyboard / mouse path: chord = modifier mask + button. Modifier
+        // portion is non-empty iff modifier mask != 0.
+        if (binding.kind == InputDeviceKind::keyboard || binding.kind == InputDeviceKind::mouse)
+        {
+            if (binding.modifiers == 0)
+                continue;
+            auto matchGroup = [&](uint32_t left, uint32_t right) {
+                const uint32_t shortcutBits = binding.modifiers & (left | right);
+                if (shortcutBits == 0)
+                    return true;
+                return (actualMods & shortcutBits) != 0;
+            };
+            if (matchGroup(KMOD_LCTRL, KMOD_RCTRL) && matchGroup(KMOD_LSHIFT, KMOD_RSHIFT)
+                && matchGroup(KMOD_LALT, KMOD_RALT) && matchGroup(KMOD_LGUI, KMOD_RGUI))
+            {
+                return true;
+            }
+        }
+        else if (binding.kind == InputDeviceKind::joyButton || binding.kind == InputDeviceKind::joyAxis)
+        {
+            // Gamepad path: modifier portion = chordModifiers vector
+            // (non-empty when the chord has ≥ 2 keys).
+            if (binding.chordModifiers.empty())
+                continue;
+            bool allHeld = true;
+            for (uint32_t mod : binding.chordModifiers)
+            {
+                if (_heldGamepadButtons.find(mod) == _heldGamepadButtons.end())
+                {
+                    allHeld = false;
+                    break;
+                }
+            }
+            if (allHeld)
+                return true;
+        }
+        // joyHat bindings only ever have 1 effective input — no modifier
+        // portion. Same for unbound / unrecognised kinds.
+    }
+    return false;
+}
+
 bool InputManager::hasTextInputFocus() const
 {
     if (Windows::IsUsingWidgetTextBox() || gChatOpen)

@@ -196,6 +196,9 @@ namespace OpenRCT2::Ui
         // post-rename) — no new theme-window StringIds needed.
         { WindowClass::haptics,                     "WC_HAPTICS",                        STR_HAPTICS,                                      { opaque(Drawing::Colour::lightBlue),               opaque(Drawing::Colour::lightBlue)                                                                                   } },
         { WindowClass::led,                         "WC_LED",                            STR_LED,                                          { opaque(Drawing::Colour::lightBlue),               opaque(Drawing::Colour::lightBlue)                                                                                   } },
+        // OPENRCT2MINI per-binding Modifier mode: BindingOptions window
+        // matches the Input Bindings list's lightBlue family.
+        { WindowClass::bindingOptions,              "WC_BINDING_OPTIONS",                STR_BINDING_OPTIONS,                              { opaque(Drawing::Colour::lightBlue),               opaque(Drawing::Colour::lightBlue)                                                                                   } },
         { WindowClass::map,                         "WC_MAP",                            STR_THEMES_WINDOW_MAP,                            { opaque(Drawing::Colour::darkGreen),               opaque(Drawing::Colour::darkBrown)                                                                                   } },
         { WindowClass::banner,                      "WC_BANNER",                         STR_THEMES_WINDOW_BANNER,                         { opaque(Drawing::Colour::darkBrown),               opaque(Drawing::Colour::darkBrown),               opaque(Drawing::Colour::darkBrown)                                          } },
         { WindowClass::editorObjectSelection,       "WC_EDITOR_OBJECT_SELECTION",        STR_THEMES_WINDOW_EDITOR_OBJECT_SELECTION,        { opaque(Drawing::Colour::lightPurple),             opaque(Drawing::Colour::grey),                     opaque(Drawing::Colour::grey)                                                } },
@@ -237,7 +240,7 @@ namespace OpenRCT2::Ui
 
 #pragma region Pre-defined Themes
 
-    static constexpr std::array kPredefinedThemeRCT1Entries = std::array<UIThemeWindowEntry, 25>{{
+    static constexpr std::array kPredefinedThemeRCT1Entries = std::array<UIThemeWindowEntry, 26>{{
         { WindowClass::topToolbar,             { opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::grey),                opaque(Drawing::Colour::grey),     opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::bottomToolbar,          { translucent(Drawing::Colour::grey),        opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::voidBackground),                opaque(Drawing::Colour::yellow),   opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::ride,                   { opaque(Drawing::Colour::bordeauxRed),     opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::saturatedGreen),     opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
@@ -260,6 +263,7 @@ namespace OpenRCT2::Ui
         // to the same grey/darkBrown family as the Input Bindings list.
         { WindowClass::haptics,                { opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::led,                    { opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
+        { WindowClass::bindingOptions,         { opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::recentNews,             { opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::grey),                opaque(Drawing::Colour::voidBackground),     opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::trackDesignList,        { opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::darkBrown),          opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },
         { WindowClass::map,                    { opaque(Drawing::Colour::darkBrown),       opaque(Drawing::Colour::grey),             opaque(Drawing::Colour::grey),                opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black),    opaque(Drawing::Colour::black) } },

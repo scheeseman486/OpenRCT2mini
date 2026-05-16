@@ -431,6 +431,12 @@ namespace OpenRCT2
         STR_SHORTCUT_CLIPBOARD_COPY = 7147,
         STR_SHORTCUT_CLIPBOARD_CUT = 7148,
         STR_SHORTCUT_CLIPBOARD_PASTE = 7149,
+        // OPENRCT2MINI per-binding Modifier mode: BindingOptions window
+        // strings (window title + checkbox + tooltips).
+        STR_BINDING_OPTIONS = 7150,
+        STR_BINDING_OPTIONS_TIP = 7151,
+        STR_BINDING_MODIFIER_KEY = 7152,
+        STR_BINDING_MODIFIER_KEY_TIP = 7153,
         STR_OR = 7000,
 
         // Widgets

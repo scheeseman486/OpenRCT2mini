@@ -119,6 +119,13 @@ enum class WindowClass : uint8_t
     // button + LED-capable controller count.
     led = 144,
 
+    // OPENRCT2MINI per-binding Modifier mode: per-binding options
+    // window opened by the wrench button next to each binding cell in
+    // the Input Bindings list. Hosts a single "Modifier Key" checkbox
+    // controlling the per-binding is_modifier flag (default true for
+    // chord-shaped bindings).
+    bindingOptions = 145,
+
     // Only used for colour schemes
     staff = 220,
     editorTrackBottomToolbar = 221,

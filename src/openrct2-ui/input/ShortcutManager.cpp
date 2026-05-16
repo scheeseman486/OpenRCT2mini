@@ -962,6 +962,12 @@ void ShortcutManager::commitPendingCapture()
         return;
     }
     shortcutInput->chordModifiers = _captureMaxModifiers;
+    // OPENRCT2MINI per-binding Modifier mode: re-apply the chord-shape
+    // default now that chordModifiers has been populated. fromInputEvent
+    // sees only the keyboard modifier mask and can't know about the
+    // gamepad chord modifiers that this commit path attaches.
+    if (!shortcutInput->chordModifiers.empty())
+        shortcutInput->isModifier = true;
     // OPENRCT2MINI hold-binding capture: the 5-second hold-elapsed
     // path in updatePendingCapture flips _captureCommitAsHold = true
     // before calling here, so the captured binding serialises with a
@@ -1294,6 +1300,39 @@ void ShortcutManager::loadLegacyBindings(const fs::path& path)
     }
 }
 
+// OPENRCT2MINI per-binding Modifier mode: parse one binding-entry from
+// JSON. Accepts either a string (legacy form — defaults apply) or an
+// object {"binding":"<chord>","is_modifier":<bool>} where the boolean
+// overrides the auto-default derived by ShortcutInput's parser.
+//
+// Bogus entries (missing/empty "binding" key, non-string binding,
+// non-bool is_modifier) fall back to defaults wherever possible:
+// the chord-default isModifier from ShortcutInput is preserved if
+// is_modifier is absent or malformed; an entirely-broken object
+// yields no entry (caller skips).
+static std::optional<OpenRCT2::Ui::ShortcutInput> parseShortcutEntry(const json_t& value)
+{
+    using OpenRCT2::Ui::ShortcutInput;
+    if (value.is_string())
+    {
+        return ShortcutInput(value.get<std::string>());
+    }
+    if (value.is_object())
+    {
+        auto bindingIt = value.find("binding");
+        if (bindingIt == value.end() || !bindingIt->is_string())
+            return std::nullopt;
+        ShortcutInput parsed(bindingIt->get<std::string>());
+        auto modIt = value.find("is_modifier");
+        if (modIt != value.end() && modIt->is_boolean())
+        {
+            parsed.isModifier = modIt->get<bool>();
+        }
+        return parsed;
+    }
+    return std::nullopt;
+}
+
 void ShortcutManager::loadUserBindings(const fs::path& path)
 {
     auto root = Json::ReadFromFile(path.u8string());
@@ -1308,16 +1347,18 @@ void ShortcutManager::loadUserBindings(const fs::path& path)
             if (shortcut != nullptr)
             {
                 shortcut->current.clear();
-                if (value.is_string())
-                {
-                    shortcut->current.emplace_back(value.get<std::string>());
-                }
-                else if (value.is_array())
+                if (value.is_array())
                 {
                     for (auto& subValue : value)
                     {
-                        shortcut->current.emplace_back(subValue.get<std::string>());
+                        if (auto parsed = parseShortcutEntry(subValue); parsed.has_value())
+                            shortcut->current.push_back(std::move(parsed.value()));
                     }
+                }
+                else
+                {
+                    if (auto parsed = parseShortcutEntry(value); parsed.has_value())
+                        shortcut->current.push_back(std::move(parsed.value()));
                 }
             }
         }
@@ -1337,6 +1378,28 @@ void ShortcutManager::saveUserBindings()
     }
 }
 
+// OPENRCT2MINI per-binding Modifier mode: serialise one binding. If
+// isModifier matches the chord-default (chord-shaped → true, single-
+// input → false), emit the plain string form; otherwise emit the
+// object form with both fields. Minimises diff against user shortcut
+// files where the default behaviour applies.
+static json_t serialiseShortcutEntry(const OpenRCT2::Ui::ShortcutInput& binding)
+{
+    using OpenRCT2::Ui::InputDeviceKind;
+    const bool isKeyboardChord
+        = (binding.kind == InputDeviceKind::keyboard) && (binding.modifiers != 0);
+    const bool isPadChord
+        = (binding.kind == InputDeviceKind::joyButton || binding.kind == InputDeviceKind::joyAxis)
+        && !binding.chordModifiers.empty();
+    const bool defaultIsModifier = isKeyboardChord || isPadChord;
+    if (binding.isModifier == defaultIsModifier)
+        return binding.toString();
+    json_t obj = json_t::object();
+    obj["binding"] = binding.toString();
+    obj["is_modifier"] = binding.isModifier;
+    return obj;
+}
+
 void ShortcutManager::saveUserBindings(const fs::path& path)
 {
     json_t root;
@@ -1350,14 +1413,14 @@ void ShortcutManager::saveUserBindings(const fs::path& path)
         auto& jShortcut = root[shortcut.second.id];
         if (shortcut.second.current.size() == 1)
         {
-            jShortcut = shortcut.second.current[0].toString();
+            jShortcut = serialiseShortcutEntry(shortcut.second.current[0]);
         }
         else
         {
             jShortcut = nlohmann::json::array();
             for (const auto& binding : shortcut.second.current)
             {
-                jShortcut.push_back(binding.toString());
+                jShortcut.push_back(serialiseShortcutEntry(binding));
             }
         }
     }

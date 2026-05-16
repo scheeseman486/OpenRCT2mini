@@ -1161,6 +1161,16 @@ public:
                         break;
 #endif
                     _textComposition.HandleMessage(&e);
+                    // OPENRCT2MINI per-binding Modifier mode: filter OS
+                    // key auto-repeat (SDL sets e.key.repeat > 0 for
+                    // OS-generated repeat-while-held events). Chord
+                    // / modifier-mode bindings need rising-edge-only
+                    // dispatch so that holding CTRL+C doesn't fire the
+                    // chord again at the OS repeat rate. TextComposition
+                    // above already handled the repeat for backspace /
+                    // caret-move purposes via its own SDL_KEYDOWN path.
+                    if (e.key.repeat != 0)
+                        break;
                     auto ie = GetInputEventFromSDLEvent(e);
                     ie.state = InputEventState::down;
                     _inputManager.queueInputEvent(std::move(ie));

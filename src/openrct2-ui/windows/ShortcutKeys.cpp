@@ -53,7 +53,12 @@ namespace OpenRCT2::Ui::Windows
     // benefits the leftmost (action name) column where long shortcut
     // names actually need the room — the binding columns are
     // already sized for the longest typical chord strings.
-    static constexpr int32_t kBindingColumnWidth = 120;
+    // OPENRCT2MINI per-binding Modifier mode: grew this from 120 → 132
+    // to absorb the new 12 px wrench cell on each binding column. The
+    // displayed text width per column (kBindingColumnWidth - kBin-
+    // Reserve) is still close to the original ≈106 px so chord
+    // strings retain their wrapping behaviour.
+    static constexpr int32_t kBindingColumnWidth = 132;
     static constexpr int32_t kColumnGap = 4;
 
     enum WindowShortcutWidgetIdx
@@ -410,15 +415,23 @@ namespace OpenRCT2::Ui::Windows
         // cell within the row so only that cell's background tints. The
         // label column is non-interactive; the bin cells exist only
         // when the adjacent binding is non-empty.
+        // OPENRCT2MINI per-binding Modifier mode: added wrench cells
+        // (wrenchKbd / wrenchPad / wrenchMouse). Each binding column
+        // now hosts [bin][wrench][text] in that left-to-right order.
+        // Wrench opens the BindingOptions window for the first binding
+        // of that kind on this row.
         enum class Cell : uint8_t
         {
-            none = 0, // not hovering / hovering an empty bin slot
+            none = 0, // not hovering / hovering an empty cell
             label,
             binKbd,
+            wrenchKbd,
             keyboard,
             binPad,
+            wrenchPad,
             gamepad,
             binMouse,
+            wrenchMouse,
             mouse,
         };
 
@@ -602,18 +615,27 @@ namespace OpenRCT2::Ui::Windows
             const bool kHasKbd = !shortcut.KeyboardBinding.empty();
             const bool kHasPad = !shortcut.GamepadBinding.empty();
             const bool kHasMouse = !shortcut.MouseBinding.empty();
-            // Hit-test right-to-left so the bin cell takes priority over
-            // its adjacent binding column's recovered area.
+            // Hit-test right-to-left so the bin / wrench cells take
+            // priority over their adjacent binding column's recovered
+            // area when the column is empty (per-binding Modifier mode:
+            // each binding column hosts [bin][wrench][text] left-to-
+            // right, and bin+wrench collapse together when no binding).
             if (x >= cols.mouseOffset)
                 return Cell::mouse;
+            if (kHasMouse && x >= cols.wrenchMouseOffset)
+                return Cell::wrenchMouse;
             if (kHasMouse && x >= cols.binMouseOffset)
                 return Cell::binMouse;
             if (x >= cols.gamepadOffset)
                 return Cell::gamepad;
+            if (kHasPad && x >= cols.wrenchGamepadOffset)
+                return Cell::wrenchPad;
             if (kHasPad && x >= cols.binGamepadOffset)
                 return Cell::binPad;
             if (x >= cols.keyboardOffset)
                 return Cell::keyboard;
+            if (kHasKbd && x >= cols.wrenchKeyboardOffset)
+                return Cell::wrenchKbd;
             if (kHasKbd && x >= cols.binKeyboardOffset)
                 return Cell::binKbd;
             return Cell::label;
@@ -689,6 +711,15 @@ namespace OpenRCT2::Ui::Windows
                     shortcutManager.clearBindingsOfKind(shortcut.ShortcutId, PendingShortcutKind::mouse);
                     RefreshBindings();
                     break;
+                case Cell::wrenchKbd:
+                    BindingOptionsOpen(shortcut.ShortcutId, BindingOptionsKind::keyboard, 0);
+                    break;
+                case Cell::wrenchPad:
+                    BindingOptionsOpen(shortcut.ShortcutId, BindingOptionsKind::gamepad, 0);
+                    break;
+                case Cell::wrenchMouse:
+                    BindingOptionsOpen(shortcut.ShortcutId, BindingOptionsKind::mouse, 0);
+                    break;
                 case Cell::label:
                 case Cell::none:
                     // Label is decorative — ignore.
@@ -696,26 +727,32 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
-        // OPENRCT2MINI list-focus-plan §3.5: per-cell focus opt-in.
-        // 7 slots per row: [label, binKbd, keyboard, binPad, gamepad,
-        // binMouse, mouse] — matches Cell enum order skipping `none`.
-        // itemIndex = row × 7 + slot. Slots return empty rect when:
+        // OPENRCT2MINI list-focus-plan §3.5 + per-binding Modifier mode:
+        // per-cell focus opt-in. 10 slots per row: [label, binKbd,
+        // wrenchKbd, keyboard, binPad, wrenchPad, gamepad, binMouse,
+        // wrenchMouse, mouse] — matches Cell enum order skipping
+        // `none`. itemIndex = row × 10 + slot. Slots return empty rect
+        // when:
         //   - the row is a separator (ShortcutId.empty())
         //   - the slot is `label` (non-interactive)
-        //   - the slot is a bin cell whose adjacent binding is empty
+        //   - the slot is a bin / wrench cell whose adjacent binding
+        //     is empty (those cells collapse together)
         // The framework's directional dispatcher skips empty-rect
         // items automatically, so navigation flows naturally past
-        // collapsed bin cells.
-        static constexpr int32_t kFocusSlotsPerRow = 7;
+        // collapsed cells.
+        static constexpr int32_t kFocusSlotsPerRow = 10;
         enum FocusSlot : int32_t
         {
             kFocusSlotLabel = 0,
             kFocusSlotBinKbd = 1,
-            kFocusSlotKeyboard = 2,
-            kFocusSlotBinPad = 3,
-            kFocusSlotGamepad = 4,
-            kFocusSlotBinMouse = 5,
-            kFocusSlotMouse = 6,
+            kFocusSlotWrenchKbd = 2,
+            kFocusSlotKeyboard = 3,
+            kFocusSlotBinPad = 4,
+            kFocusSlotWrenchPad = 5,
+            kFocusSlotGamepad = 6,
+            kFocusSlotBinMouse = 7,
+            kFocusSlotWrenchMouse = 8,
+            kFocusSlotMouse = 9,
         };
 
         int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
@@ -743,12 +780,16 @@ namespace OpenRCT2::Ui::Windows
             // onScrollMouseDown — so exclude it from focus stops.
             if (slot == kFocusSlotLabel)
                 return {};
-            // Bin cells collapse when their adjacent binding is empty.
-            if (slot == kFocusSlotBinKbd && shortcut.KeyboardBinding.empty())
+            // Bin / wrench cells collapse together when the column's
+            // binding is empty.
+            if ((slot == kFocusSlotBinKbd || slot == kFocusSlotWrenchKbd)
+                && shortcut.KeyboardBinding.empty())
                 return {};
-            if (slot == kFocusSlotBinPad && shortcut.GamepadBinding.empty())
+            if ((slot == kFocusSlotBinPad || slot == kFocusSlotWrenchPad)
+                && shortcut.GamepadBinding.empty())
                 return {};
-            if (slot == kFocusSlotBinMouse && shortcut.MouseBinding.empty())
+            if ((slot == kFocusSlotBinMouse || slot == kFocusSlotWrenchMouse)
+                && shortcut.MouseBinding.empty())
                 return {};
             const auto scrollWidth = width - kScrollBarWidth - 10;
             const auto cols = computeColumnLayout(scrollWidth);
@@ -759,6 +800,10 @@ namespace OpenRCT2::Ui::Windows
             {
                 case kFocusSlotBinKbd:
                     x0 = cols.binKeyboardOffset;
+                    x1 = cols.wrenchKeyboardOffset;
+                    break;
+                case kFocusSlotWrenchKbd:
+                    x0 = cols.wrenchKeyboardOffset;
                     x1 = cols.keyboardOffset;
                     break;
                 case kFocusSlotKeyboard:
@@ -767,6 +812,10 @@ namespace OpenRCT2::Ui::Windows
                     break;
                 case kFocusSlotBinPad:
                     x0 = cols.binGamepadOffset;
+                    x1 = cols.wrenchGamepadOffset;
+                    break;
+                case kFocusSlotWrenchPad:
+                    x0 = cols.wrenchGamepadOffset;
                     x1 = cols.gamepadOffset;
                     break;
                 case kFocusSlotGamepad:
@@ -775,6 +824,10 @@ namespace OpenRCT2::Ui::Windows
                     break;
                 case kFocusSlotBinMouse:
                     x0 = cols.binMouseOffset;
+                    x1 = cols.wrenchMouseOffset;
+                    break;
+                case kFocusSlotWrenchMouse:
+                    x0 = cols.wrenchMouseOffset;
                     x1 = cols.mouseOffset;
                     break;
                 case kFocusSlotMouse:
@@ -1053,30 +1106,43 @@ namespace OpenRCT2::Ui::Windows
             Rectangle::fill(rt, { { 0, top + 1 }, { scrollWidth, top + 1 } }, getColourMap(colours[1].colour).lightest);
         }
 
-        // OPENRCT2MINI input-bindings-rework §1.2/§2: column-layout
-        // helper. Now defines seven cells per row:
-        //   [label][binKbd][keyboard][binPad][gamepad][binMouse][mouse]
-        // The bin cells are 12px wide and sit immediately LEFT of each
-        // binding column, separated by a 2px inner gap. Per-row, a bin
-        // cell collapses (recovers its 14px = 12 bin + 2 gap into the
-        // adjacent binding column) when that column's binding is empty.
-        // ColumnLayout returns the BASE offsets assuming all three bin
-        // cells are visible; getRowOffsets() below derives the per-row
-        // actual offsets based on which bindings exist.
+        // OPENRCT2MINI input-bindings-rework §1.2/§2 + per-binding
+        // Modifier mode: column-layout helper. Now defines ten cells
+        // per row:
+        //   [label][binKbd][wrenchKbd][keyboard]
+        //          [binPad][wrenchPad][gamepad]
+        //          [binMouse][wrenchMouse][mouse]
+        // The bin + wrench cells are 12 px wide each and sit
+        // immediately LEFT of each binding column, with a 2px inner
+        // gap between wrench and text. Per-row, the bin cell collapses
+        // (recovers its 12 px) when the column's binding is empty; the
+        // wrench cell stays present always (lets the user toggle the
+        // is_modifier flag even for currently-empty bindings is N/A,
+        // so we collapse it together with the bin for cleanliness).
+        // ColumnLayout returns the BASE offsets assuming everything is
+        // visible; getRowOffsets() below derives the per-row actual
+        // offsets based on which bindings exist.
         static constexpr int32_t kBinCellWidth = 12;
+        static constexpr int32_t kWrenchCellWidth = 12;
         static constexpr int32_t kBinInnerGap = 2;
-        static constexpr int32_t kBinReserve = kBinCellWidth + kBinInnerGap; // 14
+        // Combined left-reserve for one binding column: bin + wrench +
+        // single inner gap before the text. Was 14 (12 bin + 2 gap);
+        // now 26 (12 bin + 12 wrench + 2 gap).
+        static constexpr int32_t kBinReserve = kBinCellWidth + kWrenchCellWidth + kBinInnerGap;
 
         struct ColumnLayout
         {
             int32_t actionWidth;          // 0..actionWidth: action name
             int32_t binKeyboardOffset;    // x of bin cell preceding keyboard
-            int32_t keyboardOffset;       // x of keyboard binding text (after the bin reserve)
+            int32_t wrenchKeyboardOffset; // x of wrench cell (immediately right of bin)
+            int32_t keyboardOffset;       // x of keyboard binding text (after the bin/wrench reserve)
             int32_t binGamepadOffset;
+            int32_t wrenchGamepadOffset;
             int32_t gamepadOffset;
             int32_t binMouseOffset;
+            int32_t wrenchMouseOffset;
             int32_t mouseOffset;
-            int32_t keyboardWidth;        // base text width (post-bin-reserve)
+            int32_t keyboardWidth;        // base text width (post-bin/wrench-reserve)
             int32_t gamepadWidth;
             int32_t mouseWidth;
         };
@@ -1085,29 +1151,35 @@ namespace OpenRCT2::Ui::Windows
         {
             ColumnLayout l{};
             // Each binding column reserves kBinReserve px on its left
-            // for a bin cell + inner gap. The displayed text width is
-            // kBindingColumnWidth - kBinReserve.
+            // for bin + wrench cells + inner gap. The displayed text
+            // width is kBindingColumnWidth - kBinReserve.
             l.keyboardWidth = kBindingColumnWidth - kBinReserve;
             l.gamepadWidth = kBindingColumnWidth - kBinReserve;
             l.mouseWidth = kBindingColumnWidth - kBinReserve;
             // Anchor the mouse column to the right of the scroll area.
             const int32_t mouseColLeft = scrollWidth - kBindingColumnWidth;
             l.binMouseOffset = mouseColLeft;
+            l.wrenchMouseOffset = mouseColLeft + kBinCellWidth;
             l.mouseOffset = mouseColLeft + kBinReserve;
             const int32_t gamepadColLeft = mouseColLeft - kColumnGap - kBindingColumnWidth;
             l.binGamepadOffset = gamepadColLeft;
+            l.wrenchGamepadOffset = gamepadColLeft + kBinCellWidth;
             l.gamepadOffset = gamepadColLeft + kBinReserve;
             const int32_t keyboardColLeft = gamepadColLeft - kColumnGap - kBindingColumnWidth;
             l.binKeyboardOffset = keyboardColLeft;
+            l.wrenchKeyboardOffset = keyboardColLeft + kBinCellWidth;
             l.keyboardOffset = keyboardColLeft + kBinReserve;
             l.actionWidth = std::max(0, keyboardColLeft - kColumnGap);
             return l;
         }
 
-        // OPENRCT2MINI input-bindings-rework §2.2: per-row offsets that
-        // collapse the bin cell when the adjacent binding is empty. The
-        // bin's 14px reserve gets recovered by the binding column's
-        // displayed text width, shifting the text left by 14px.
+        // OPENRCT2MINI input-bindings-rework §2.2 + per-binding Modifier
+        // mode: per-row offsets that collapse BOTH the bin and the
+        // wrench cell together when the column's binding is empty —
+        // there's nothing to delete OR configure on an empty column.
+        // The combined 26 px reserve gets recovered by the binding
+        // column's displayed text width, shifting the text left by
+        // kBinReserve.
         struct RowOffsets
         {
             int32_t keyboardTextOffset;
@@ -1196,6 +1268,20 @@ namespace OpenRCT2::Ui::Windows
                     if (!shortcut.MouseBinding.empty())
                         tintCell(cols.binMouseOffset, kBinCellWidth);
                     break;
+                // OPENRCT2MINI per-binding Modifier mode: wrench cells
+                // mirror the bin cells' hover tint behaviour.
+                case Cell::wrenchKbd:
+                    if (!shortcut.KeyboardBinding.empty())
+                        tintCell(cols.wrenchKeyboardOffset, kWrenchCellWidth);
+                    break;
+                case Cell::wrenchPad:
+                    if (!shortcut.GamepadBinding.empty())
+                        tintCell(cols.wrenchGamepadOffset, kWrenchCellWidth);
+                    break;
+                case Cell::wrenchMouse:
+                    if (!shortcut.MouseBinding.empty())
+                        tintCell(cols.wrenchMouseOffset, kWrenchCellWidth);
+                    break;
                 case Cell::label:
                 case Cell::none:
                     // Label column never highlights (decorative).
@@ -1260,6 +1346,31 @@ namespace OpenRCT2::Ui::Windows
                 drawBin(cols.binGamepadOffset);
             if (!shortcut.MouseBinding.empty())
                 drawBin(cols.binMouseOffset);
+
+            // OPENRCT2MINI per-binding Modifier mode: wrench cell sprites.
+            // Drawn only when the adjacent binding column is non-empty
+            // (matches the bin cell collapse rule). Uses the same
+            // centred-with-baked-offset pattern as the bin cell so the
+            // sprite sits cleanly inside its 12px cell regardless of
+            // the g1 element's xOffset / yOffset.
+            const auto* wrenchG1 = GfxGetG1Element(ImageId(SPR_STAFF_ORDERS_FIX_RIDES));
+            const int32_t wrenchSpriteW = (wrenchG1 != nullptr) ? wrenchG1->width : kWrenchCellWidth;
+            const int32_t wrenchSpriteH = (wrenchG1 != nullptr) ? wrenchG1->height : kScrollableRowHeight;
+            const int32_t wrenchXOffset = (wrenchG1 != nullptr) ? wrenchG1->xOffset : 0;
+            const int32_t wrenchYOffset = (wrenchG1 != nullptr) ? wrenchG1->yOffset : 0;
+            const auto drawWrench = [&](int32_t left) {
+                const int32_t topLeftX = left + (kWrenchCellWidth - wrenchSpriteW) / 2;
+                const int32_t topLeftY = (y - 1) + (kScrollableRowHeight - wrenchSpriteH) / 2;
+                GfxDrawSprite(
+                    rt, ImageId(SPR_STAFF_ORDERS_FIX_RIDES),
+                    { topLeftX - wrenchXOffset, topLeftY - wrenchYOffset });
+            };
+            if (!shortcut.KeyboardBinding.empty())
+                drawWrench(cols.wrenchKeyboardOffset);
+            if (!shortcut.GamepadBinding.empty())
+                drawWrench(cols.wrenchGamepadOffset);
+            if (!shortcut.MouseBinding.empty())
+                drawWrench(cols.wrenchMouseOffset);
 
             // Binding column text. Use per-row offsets so a missing
             // binding's column expands left into the recovered 14px.

@@ -85,6 +85,20 @@ namespace OpenRCT2::Ui::Windows
     // lightbar responds.
     WindowBase* LedOpen();
 
+    // OPENRCT2MINI per-binding Modifier mode: BindingOptions window.
+    // Opened by the wrench button next to each binding cell in the
+    // Input Bindings list. Targets a single binding identified by
+    // (shortcutId, kind, indexWithinKind). Hosts a single "Modifier
+    // Key" checkbox controlling that binding's `is_modifier` flag.
+    enum class BindingOptionsKind : uint8_t
+    {
+        keyboard = 0,
+        mouse,
+        gamepad,
+    };
+    WindowBase* BindingOptionsOpen(
+        std::string_view shortcutId, BindingOptionsKind kind, int32_t indexWithinKind);
+
     // ClearScenery
     WindowBase* ClearSceneryOpen();
     void ToggleClearSceneryWindow();

@@ -688,6 +688,19 @@ namespace OpenRCT2::Ui
             return _activeContext;
         }
 
+        // OPENRCT2MINI per-binding Modifier mode: returns true if all
+        // the keys in `id`'s binding's chord that come before the
+        // trigger (i.e., the "modifier" portion) are currently held,
+        // regardless of trigger state. Returns false if `id` has no
+        // binding, or if the binding has fewer than 2 keys (no
+        // modifier portion). Used by action lambdas that want to
+        // detect "modifier still held after fire" for commit-on-
+        // release UX. Walks all of the shortcut's current[] bindings
+        // and returns true if ANY of them satisfies the predicate
+        // (so a shortcut bound to both keyboard CTRL+C and gamepad
+        // L1+B can be queried generically).
+        bool isShortcutModifierHeld(std::string_view id) const;
+
         // OPENRCT2MINI gamepad-plan 1.10: per-context shortcut allow-list
         // gate. Returns true if the given shortcut id is permitted to
         // fire in the currently-active input context. Used by

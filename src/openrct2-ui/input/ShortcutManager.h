@@ -102,6 +102,36 @@ namespace OpenRCT2::Ui
         // InputManager::process.
         uint16_t holdMs{};
 
+        // OPENRCT2MINI per-binding Modifier mode: when true, this binding
+        // is treated as a chord whose modifier keys (everything except
+        // the final/trigger key) must be held BEFORE the trigger fires.
+        // Default for chord-shaped bindings (modifiers!=0 for keyboard,
+        // chordModifiers non-empty for gamepad) is true; default for
+        // single-key bindings is false. The JSON parser overrides this
+        // explicit-default when an object form `{"binding":"...",
+        // "is_modifier": <bool>}` is read. Writer emits object form
+        // only when isModifier disagrees with the chord-default.
+        //
+        // Semantics:
+        //   - false (chord mode): the legacy behaviour. Today's
+        //     `matches()` logic decides; keyboard chords already fire
+        //     only on trigger-key press while modifier mask matches;
+        //     gamepad chords already require chord modifiers held
+        //     while trigger button presses.
+        //   - true (modifier mode): adds an extra rising-edge gate
+        //     consulted by ShortcutManager::processEvent's per-binding
+        //     re-arm tracking. The binding fires once per
+        //     trigger-key down-edge (filtered against SDL key auto-
+        //     repeat via `repeat==0`), then re-arms on the trigger
+        //     key's release. Same effect as today's matches() check
+        //     when the user already presses modifiers first; the
+        //     "fired since trigger released" latch ensures that
+        //     repeated keydown auto-repeat events don't refire and
+        //     that the chord-mode alternative is meaningfully
+        //     different (the latter does NOT guard against re-fire
+        //     when other chord members are re-pressed).
+        bool isModifier{};
+
         ShortcutInput() = default;
         ShortcutInput(std::string_view value);
         std::string toString() const;
