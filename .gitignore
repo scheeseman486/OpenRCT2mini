@@ -22,12 +22,10 @@
 # locally without committing scratch reasoning into git history. Anything
 # user-facing (readme.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, contributors.md,
 # THIRD_PARTY_NOTICES.md) doesn't match these patterns and stays tracked.
-/*-plan.md
-/*-plan-review.md
-/*-audit.md
-/phase-*.md
-/perf-report-*.md
-/OpenRCT2mini-Plan.md
+#
+# All planning documents now live under /plans/ (gathered there during the
+# May 15 2026 evaluation pass).
+/plans/
 
 # Local game-data installs used for on-host testing. RCT1 / RCT2 are
 # Chris Sawyer / Atari / Infogrames property — not redistributable. The user
