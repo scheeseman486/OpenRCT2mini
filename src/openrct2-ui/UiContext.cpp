@@ -2042,145 +2042,15 @@ private:
             _vcursorY = static_cast<float>(_cursorState.position.y) * scale;
         }
 
-        // OPENRCT2MINI cursor-sync (2026-05-17): when the selector
-        // owns input (focus mode / grid cursor), the software pixel
-        // cursor sprite is hidden (see HardwareDisplayDrawing-
-        // Engine.cpp:407). Park the hidden cursor's underlying
-        // position at whatever the user is currently working on —
-        // the grid / edge cursor's tile in a tool context, or the
-        // focused widget's centre in widget-focus context — so a
-        // switch back to mouse input (real mouse motion or an
-        // explicit show-cursor binding) wakes the pointer where the
-        // user already had attention, not at a stale OS-pointer
-        // position from before the gamepad took over.
-        //
-        // This runs AFTER the resync-from-real-mouse block above
-        // intentionally: when the user moves the real mouse,
-        // SelectorMode flips to `hidden` first (the v2 lastInput-
-        // WasRealMouse state machine in InputManager); the sync
-        // block is gated on `selectorActive` and so no-ops on the
-        // first frame after a real mouse wake. That preserves the
-        // "cursor wakes wherever the OS pointer is when the user
-        // grabs the mouse" UX.
-        if (selectorActive)
-        {
-            std::optional<ScreenCoordsXY> syncTo;
-            // OPENRCT2MINI cursor-sync revised 2026-05-17 #2: prefer
-            // the global map-selection tile when a tool is armed —
-            // gMapSelectPositionA tracks the grid cursor's tile both
-            // when the user is engaged in grid-cursor mode (the
-            // GridCursorModel writes the globals via WriteGridCursor-
-            // Selection on each step) and when the active context is
-            // still widgetFocus (the tool's mouse-hover code writes
-            // the globals, which the gamepad also follows once the
-            // user engages). The earlier shape only consulted the
-            // active strategy's cursor model — that returned the
-            // stale PixelCursorModel for widgetFocus and the cursor
-            // parked at the focused widget instead of the selected
-            // tile.
-            if (gMapSelectFlags.has(MapSelectFlag::enable)
-                || gMapSelectFlags.has(MapSelectFlag::enableConstruct))
-            {
-                syncTo = ViewportInteractionMapToScreen(gMapSelectPositionA);
-            }
-            // Strategy cursor model fallback: kept as a backstop for
-            // edge cases where MapSelectFlag::enable isn't set (rare;
-            // some tools dispatch placement without setting the
-            // ghost). dynamic_cast on the active context's cursor
-            // model picks up GridCursorModel / EdgeCursorModel
-            // directly.
-            if (!syncTo.has_value())
-            {
-                auto& strategy = _inputManager.getActiveContextStrategy();
-                if (auto* model = strategy.getCursorModel(); model != nullptr)
-                {
-                    CoordsXY worldXY{};
-                    bool haveWorld = false;
-                    if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
-                    {
-                        worldXY = grid->getPosition().ToCoordsXY();
-                        haveWorld = true;
-                    }
-                    else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
-                    {
-                        worldXY = edge->getPosition().ToCoordsXY();
-                        haveWorld = true;
-                    }
-                    if (haveWorld)
-                        syncTo = ViewportInteractionMapToScreen(worldXY);
-                }
-            }
-            // Widget-focus fallback: only when there's no tool
-            // ghost AND no tile cursor model. Park the pixel
-            // cursor at the focused widget's centre — WidgetFocus
-            // .cpp already uses these bounds for drawing the focus
-            // ring; we reuse the same geometry so the cursor lands
-            // behind the ring.
-            //
-            // Gate on toolActive so the widget-focus fallback never
-            // overrides a tool-armed state. The previous shape ran
-            // this whenever the gMapSelectFlags / strategy paths
-            // didn't produce a syncTo — including the transient
-            // first frames after a tool is armed but before
-            // gMapSelectFlags::enable is written. In that window
-            // the sync would park at the focused tool-window
-            // button, the user would move the mouse to wake the
-            // cursor, and (because the OS pointer was warped to
-            // the focus widget — see SDL_WarpMouseInWindow below)
-            // the wake position would be the focus button, not
-            // the grid cursor. With this gate, while a tool is
-            // armed, we either park at the grid cursor's tile OR
-            // leave the cursor alone (no fallback) — never at the
-            // tool window's focused button.
-            if (!syncTo.has_value()
-                && !gInputFlags.has(InputFlag::toolActive))
-            {
-                if (auto* w = _inputManager.getFocusedWindow(); w != nullptr)
-                {
-                    const auto widgetIdx = _inputManager.getFocusedWidget();
-                    if (widgetIdx != kWidgetIndexNull && widgetIdx < w->widgets.size())
-                    {
-                        const auto& widget = w->widgets[widgetIdx];
-                        const auto cx = w->windowPos.x + (widget.left + widget.right) / 2;
-                        const auto cy = w->windowPos.y + (widget.top + widget.bottom) / 2;
-                        syncTo = ScreenCoordsXY{ cx, cy };
-                    }
-                }
-            }
-            if (syncTo.has_value())
-            {
-                // Clamp so the parked position can never escape the
-                // canvas (off-screen tile in a panned viewport, for
-                // example). Out-of-range coords would still wake at
-                // the clamped edge — usable, no crash.
-                const int32_t maxX = std::max(_width, 1) - 1;
-                const int32_t maxY = std::max(_height, 1) - 1;
-                const int32_t sx = std::clamp(syncTo->x, 0, maxX);
-                const int32_t sy = std::clamp(syncTo->y, 0, maxY);
-                _cursorState.position = { sx, sy };
-                _vcursorX = static_cast<float>(sx) * scale;
-                _vcursorY = static_cast<float>(sy) * scale;
-                _vcursorLastIntX = sx;
-                _vcursorLastIntY = sy;
-                // OPENRCT2MINI cursor-sync follow-up (2026-05-17
-                // #3): no SDL_WarpMouseInWindow. The user
-                // explicitly asked us to ignore the OS pointer's
-                // absolute coords and treat the virtual cursor
-                // (the gamepad-driven master) as the only source
-                // of truth. The next-frame _vSelectorActivePrev
-                // override above pins _cursorState.position back
-                // to the virtual coords on the wake transition,
-                // so the cursor wakes at the parked tile without
-                // having to nudge the OS pointer.
-            }
-        }
-        // Update the selector-active latch for next frame's resync
-        // override. Done outside the sync block so it tracks the
-        // transition out of selectorActive even when syncTo had
-        // no value (e.g. no tool armed, no focused widget) — we
-        // still want to skip the OS-pointer resync on the very
-        // first hidden-mode frame.
-        _vSelectorActivePrev = selectorActive;
+        // OPENRCT2MINI cursor-sync follow-up #4: the parking
+        // sync (write _vcursorX/Y from grid/focus target) now
+        // runs from ProcessVirtualGamepadCursor BEFORE the
+        // switch dispatches into here, so it covers tool
+        // contexts (which take the default arm and never call
+        // this function). The _vSelectorActivePrev override at
+        // the top of this method's resync-from-real-mouse block
+        // continues to suppress the OS-pointer pull on the
+        // active→hidden transition frame.
 
         const bool anyDir = dpadUp || dpadDown || dpadLeft || dpadRight;
         const uint32_t now = SDL_GetTicks();
@@ -2374,8 +2244,106 @@ private:
     // dispatcher's belt-and-braces against a stale "still held"
     // record from a previous OSK session synthesising a phantom
     // release the next time OSK opens.
+    // OPENRCT2MINI cursor-sync (2026-05-17 follow-up #4):
+    // park-the-hidden-cursor sync — extracted from ProcessWorld-
+    // Cursor so it runs in EVERY input context, not just the
+    // ones whose default path includes the world cursor poll
+    // (widgetFocus / world / modal). Tool contexts (toolFootpath,
+    // toolTerrain, etc.) take the `default:` arm of the switch
+    // below and return without calling ProcessWorldCursor — so
+    // the previous shape, which embedded the sync inside
+    // ProcessWorldCursor, never ran while the grid cursor was
+    // active. By the time the user moved the mouse and the
+    // active context transitioned back to widgetFocus, _vcursor
+    // X/Y was still at whatever it had been last parked at
+    // (the focused tool-window button from before grid mode
+    // engaged), and the cursor woke there.
+    //
+    // This method writes the virtual-cursor master state from
+    // the engine's MapSelection globals (preferred) or the
+    // active strategy's cursor model (backstop) or the focused
+    // widget (only when no tool is armed). Source-of-truth
+    // semantics: the virtual cursor is master, OS pointer
+    // absolute coords are ignored — see the _vSelectorActivePrev
+    // override at the top of ProcessWorldCursor's resync block.
+    void SyncHiddenCursorParking()
+    {
+        const bool selectorActive
+            = _inputManager.getSelectorMode() == InputManager::SelectorMode::active;
+        const float scale = static_cast<float>(Config::Get().general.windowScale);
+
+        if (selectorActive)
+        {
+            std::optional<ScreenCoordsXY> syncTo;
+            if (gMapSelectFlags.has(MapSelectFlag::enable)
+                || gMapSelectFlags.has(MapSelectFlag::enableConstruct))
+            {
+                syncTo = ViewportInteractionMapToScreen(gMapSelectPositionA);
+            }
+            if (!syncTo.has_value())
+            {
+                auto& strategy = _inputManager.getActiveContextStrategy();
+                if (auto* model = strategy.getCursorModel(); model != nullptr)
+                {
+                    CoordsXY worldXY{};
+                    bool haveWorld = false;
+                    if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                    {
+                        worldXY = grid->getPosition().ToCoordsXY();
+                        haveWorld = true;
+                    }
+                    else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
+                    {
+                        worldXY = edge->getPosition().ToCoordsXY();
+                        haveWorld = true;
+                    }
+                    if (haveWorld)
+                        syncTo = ViewportInteractionMapToScreen(worldXY);
+                }
+            }
+            // Widget-focus fallback only when no tool is armed —
+            // otherwise we'd park at the tool window's focused
+            // button while the grid cursor's tile is the user's
+            // actual focus.
+            if (!syncTo.has_value()
+                && !gInputFlags.has(InputFlag::toolActive))
+            {
+                if (auto* w = _inputManager.getFocusedWindow(); w != nullptr)
+                {
+                    const auto widgetIdx = _inputManager.getFocusedWidget();
+                    if (widgetIdx != kWidgetIndexNull && widgetIdx < w->widgets.size())
+                    {
+                        const auto& widget = w->widgets[widgetIdx];
+                        const auto cx = w->windowPos.x + (widget.left + widget.right) / 2;
+                        const auto cy = w->windowPos.y + (widget.top + widget.bottom) / 2;
+                        syncTo = ScreenCoordsXY{ cx, cy };
+                    }
+                }
+            }
+            if (syncTo.has_value())
+            {
+                const int32_t maxX = std::max(_width, 1) - 1;
+                const int32_t maxY = std::max(_height, 1) - 1;
+                const int32_t sx = std::clamp(syncTo->x, 0, maxX);
+                const int32_t sy = std::clamp(syncTo->y, 0, maxY);
+                _cursorState.position = { sx, sy };
+                _vcursorX = static_cast<float>(sx) * scale;
+                _vcursorY = static_cast<float>(sy) * scale;
+                _vcursorLastIntX = sx;
+                _vcursorLastIntY = sy;
+            }
+        }
+        _vSelectorActivePrev = selectorActive;
+    }
+
     void ProcessVirtualGamepadCursor()
     {
+        // OPENRCT2MINI cursor-sync follow-up #4: run the sync
+        // BEFORE the switch so it covers tool contexts (which
+        // hit the default arm and return without calling
+        // ProcessWorldCursor). Safe to run in any context — the
+        // method is gated internally on selectorActive.
+        SyncHiddenCursorParking();
         switch (_inputManager.getActiveContext())
         {
             // OPENRCT2MINI osk-overhaul bug-fix §D: route the OSK
