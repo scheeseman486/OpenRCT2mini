@@ -2084,7 +2084,24 @@ private:
             // .cpp already uses these bounds for drawing the focus
             // ring; we reuse the same geometry so the cursor lands
             // behind the ring.
-            if (!syncTo.has_value())
+            //
+            // Gate on toolActive so the widget-focus fallback never
+            // overrides a tool-armed state. The previous shape ran
+            // this whenever the gMapSelectFlags / strategy paths
+            // didn't produce a syncTo — including the transient
+            // first frames after a tool is armed but before
+            // gMapSelectFlags::enable is written. In that window
+            // the sync would park at the focused tool-window
+            // button, the user would move the mouse to wake the
+            // cursor, and (because the OS pointer was warped to
+            // the focus widget — see SDL_WarpMouseInWindow below)
+            // the wake position would be the focus button, not
+            // the grid cursor. With this gate, while a tool is
+            // armed, we either park at the grid cursor's tile OR
+            // leave the cursor alone (no fallback) — never at the
+            // tool window's focused button.
+            if (!syncTo.has_value()
+                && !gInputFlags.has(InputFlag::toolActive))
             {
                 if (auto* w = _inputManager.getFocusedWindow(); w != nullptr)
                 {
@@ -2113,6 +2130,25 @@ private:
                 _vcursorY = static_cast<float>(sy) * scale;
                 _vcursorLastIntX = sx;
                 _vcursorLastIntY = sy;
+                // Also warp the OS pointer. Writing _cursorState
+                // .position alone affects only the internal mirror;
+                // the OS pointer stays wherever the user last left
+                // it. On the next real mouse-motion event SDL
+                // reports the OS pointer's absolute coords, the
+                // resync-from-real-mouse block clobbers our
+                // parked state, and the cursor wakes at the OS
+                // pointer position — defeating the consistency
+                // guarantee. SDL_WarpMouseInWindow synchronises
+                // the OS pointer so the mouse-motion wake position
+                // is near our parked tile rather than wherever
+                // the OS pointer happened to be when the gamepad
+                // took over.
+                //
+                // Mini doesn't have a real mouse, so the warp is
+                // a no-op there; on host (windowed / fullscreen)
+                // it works as expected.
+                if (_window != nullptr)
+                    SDL_WarpMouseInWindow(_window, sx, sy);
             }
         }
 
