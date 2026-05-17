@@ -10,6 +10,8 @@
 #pragma once
 #include <openrct2/world/Location.hpp>
 
+#include <optional>
+
 namespace OpenRCT2::Ui
 {
     bool ViewportInteractionLeftOver(const ScreenCoordsXY& screenCoords);
@@ -26,6 +28,17 @@ namespace OpenRCT2::Ui
     // open semantic the mouse RMB short-press release does, but
     // sourced from the cursor's tile instead of the OS pointer.
     bool ViewportInteractionRightClickAtMapPos(const CoordsXY& mapCoords);
+
+    // OPENRCT2MINI cursor-sync (2026-05-17): project a world tile-
+    // centre onto the main viewport's screen pixel coords. Returns
+    // an empty optional if the main viewport doesn't exist yet
+    // (title scene, pre-init). Used by the per-frame pixel-cursor
+    // sync in UiContext::ProcessWorldCursor — when the grid cursor
+    // owns input and the pixel cursor is hidden, the hidden cursor's
+    // underlying position is parked at the grid cursor's screen
+    // tile, so a switch back to mouse input wakes the pointer
+    // exactly where the user was working.
+    std::optional<ScreenCoordsXY> ViewportInteractionMapToScreen(const CoordsXY& mapCoords);
 
     CoordsXY ViewportInteractionGetTileStartAtCursor(const ScreenCoordsXY& screenCoords);
 } // namespace OpenRCT2::Ui

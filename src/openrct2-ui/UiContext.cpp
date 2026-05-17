@@ -15,6 +15,7 @@
 #include "UiStringIds.h"
 #include "WindowManager.h"
 #include "drawing/engines/DrawingEngineFactory.hpp"
+#include "input/InputContextStrategy.h"
 #include "input/ShortcutIds.h"
 #include "input/ShortcutManager.h"
 #include "interface/Dropdown.h"
@@ -2006,6 +2007,86 @@ private:
         {
             _vcursorX = static_cast<float>(_cursorState.position.x) * scale;
             _vcursorY = static_cast<float>(_cursorState.position.y) * scale;
+        }
+
+        // OPENRCT2MINI cursor-sync (2026-05-17): when the selector
+        // owns input (focus mode / grid cursor), the software pixel
+        // cursor sprite is hidden (see HardwareDisplayDrawing-
+        // Engine.cpp:407). Park the hidden cursor's underlying
+        // position at whatever the user is currently working on —
+        // the grid / edge cursor's tile in a tool context, or the
+        // focused widget's centre in widget-focus context — so a
+        // switch back to mouse input (real mouse motion or an
+        // explicit show-cursor binding) wakes the pointer where the
+        // user already had attention, not at a stale OS-pointer
+        // position from before the gamepad took over.
+        //
+        // This runs AFTER the resync-from-real-mouse block above
+        // intentionally: when the user moves the real mouse,
+        // SelectorMode flips to `hidden` first (the v2 lastInput-
+        // WasRealMouse state machine in InputManager); the sync
+        // block is gated on `selectorActive` and so no-ops on the
+        // first frame after a real mouse wake. That preserves the
+        // "cursor wakes wherever the OS pointer is when the user
+        // grabs the mouse" UX.
+        if (selectorActive)
+        {
+            std::optional<ScreenCoordsXY> syncTo;
+            auto& strategy = _inputManager.getActiveContextStrategy();
+            if (auto* model = strategy.getCursorModel(); model != nullptr)
+            {
+                CoordsXY worldXY{};
+                bool haveWorld = false;
+                if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                {
+                    worldXY = grid->getPosition().ToCoordsXY();
+                    haveWorld = true;
+                }
+                else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
+                {
+                    worldXY = edge->getPosition().ToCoordsXY();
+                    haveWorld = true;
+                }
+                if (haveWorld)
+                    syncTo = ViewportInteractionMapToScreen(worldXY);
+            }
+            // Widget-focus fallback: when the active context's
+            // cursor model isn't a tile cursor (i.e. WidgetFocus
+            // or a non-tool context that's still selector-owned),
+            // park the pixel cursor at the focused widget's
+            // centre. WidgetFocus.cpp already uses these bounds
+            // for drawing the focus ring; we reuse the same
+            // geometry so the cursor lands behind the ring.
+            if (!syncTo.has_value())
+            {
+                if (auto* w = _inputManager.getFocusedWindow(); w != nullptr)
+                {
+                    const auto widgetIdx = _inputManager.getFocusedWidget();
+                    if (widgetIdx != kWidgetIndexNull && widgetIdx < w->widgets.size())
+                    {
+                        const auto& widget = w->widgets[widgetIdx];
+                        const auto cx = w->windowPos.x + (widget.left + widget.right) / 2;
+                        const auto cy = w->windowPos.y + (widget.top + widget.bottom) / 2;
+                        syncTo = ScreenCoordsXY{ cx, cy };
+                    }
+                }
+            }
+            if (syncTo.has_value())
+            {
+                // Clamp so the parked position can never escape the
+                // canvas (off-screen tile in a panned viewport, for
+                // example). Out-of-range coords would still wake at
+                // the clamped edge — usable, no crash.
+                const int32_t maxX = std::max(_width, 1) - 1;
+                const int32_t maxY = std::max(_height, 1) - 1;
+                const int32_t sx = std::clamp(syncTo->x, 0, maxX);
+                const int32_t sy = std::clamp(syncTo->y, 0, maxY);
+                _cursorState.position = { sx, sy };
+                _vcursorX = static_cast<float>(sx) * scale;
+                _vcursorY = static_cast<float>(sy) * scale;
+                _vcursorLastIntX = sx;
+                _vcursorLastIntY = sy;
+            }
         }
 
         const bool anyDir = dpadUp || dpadDown || dpadLeft || dpadRight;

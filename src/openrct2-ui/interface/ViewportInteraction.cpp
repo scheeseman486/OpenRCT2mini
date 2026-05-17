@@ -637,19 +637,33 @@ namespace OpenRCT2::Ui
     // Viewport::ScreenToViewportCoord at Viewport.cpp:1114).
     bool ViewportInteractionRightClickAtMapPos(const CoordsXY& mapCoords)
     {
+        const auto screen = ViewportInteractionMapToScreen(mapCoords);
+        if (!screen.has_value())
+            return false;
+        return ViewportInteractionRightClick(*screen);
+    }
+
+    // OPENRCT2MINI cursor-sync (2026-05-17): standalone projection
+    // helper (factored from ViewportInteractionRightClickAtMapPos).
+    // Inverse of ScreenToViewportCoord: takes a world map XY,
+    // resolves the tile-centre's surface height via TileElementHeight,
+    // does the iso 3D-to-2D projection with the current viewport
+    // rotation, then applies the inverse zoom to produce a screen
+    // pixel coord. Returns nullopt if the main viewport doesn't
+    // exist (pre-init, title scene without a main window).
+    std::optional<ScreenCoordsXY> ViewportInteractionMapToScreen(const CoordsXY& mapCoords)
+    {
         auto* main = WindowGetMain();
         if (main == nullptr || main->viewport == nullptr)
-            return false;
+            return std::nullopt;
         const auto& vp = *main->viewport;
         const auto centre = mapCoords + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
         const int32_t z = TileElementHeight(centre);
         const auto world = Translate3DTo2DWithZ(vp.rotation, CoordsXYZ{ centre, z });
-        // Inverse of ScreenToViewportCoord: viewport-space → screen pixel.
-        const ScreenCoordsXY screen{
+        return ScreenCoordsXY{
             vp.zoom.ApplyInversedTo(world.x - vp.viewPos.x) + vp.pos.x,
             vp.zoom.ApplyInversedTo(world.y - vp.viewPos.y) + vp.pos.y,
         };
-        return ViewportInteractionRightClick(screen);
     }
 
     /**
