@@ -174,6 +174,18 @@ private:
     // right-click fallback. cursor.cancel no longer drives any drag
     // begin — this poll is the sole source for all three gestures.
     bool _vCameraDragPrev = false;
+    // OPENRCT2MINI cursor-cancel-tile-action-plan §3.5 (Phase C
+    // follow-up 2026-05-17): at the rising edge of kInterfaceCameraDrag,
+    // capture whether kCursorCancel was also held by the same press
+    // (i.e. the user's physical input is bound to BOTH shortcuts —
+    // mouse RMB default, or a gamepad button rebound to overlap).
+    // Used at the falling edge: synthesise a kCursorCancel release
+    // ONLY when the shared-binding flag was set. Without this gate,
+    // a press of a camera.drag-only input (e.g. default PAD X)
+    // would short-press-synth a cursor.cancel release on every
+    // short tap and fire deletion even though that input isn't
+    // bound to cursor.cancel.
+    bool _vCameraDragSharedWithCancel = false;
 
     // OPENRCT2MINI: per-frame edge-detection state for routing host
     // gamepad cursor.* shortcuts to the OSK while it's active. See the
@@ -1681,6 +1693,22 @@ private:
                 // over at press time. cursor.cancel no longer triggers
                 // drag init — see MouseInput.cpp rightPress comment.
                 InputContextDragBeginAtCursor();
+                // §3.5 (Phase C follow-up 2026-05-17): record whether
+                // the same physical input is bound to both camera.drag
+                // and cursor.cancel. The user's bindings can route an
+                // input to either or both — mouse RMB default is both;
+                // default gamepad PAD X is camera.drag only; default
+                // gamepad PAD B is cursor.cancel only. We only want to
+                // synth kCursorCancel release on the falling edge when
+                // the press WAS shared, otherwise pressing PAD X would
+                // fire deletion in addition to its drag — and PAD B
+                // wouldn't fire deletion at all because the synthesis
+                // path is the only one wired for it.
+                const auto* cancelShortcut = _shortcutManager.getShortcut(
+                    ShortcutId::kCursorCancel);
+                _vCameraDragSharedWithCancel
+                    = (cancelShortcut != nullptr)
+                    && _inputManager.getState(*cancelShortcut);
             }
             else if (!dragNow && _vCameraDragPrev)
             {
@@ -1692,7 +1720,12 @@ private:
                 const bool wasCameraDrag = CameraDragInProgress();
                 const bool wasShortPress = wasCameraDrag && CameraDragWasShortPress();
                 InputContextDragEndCurrent();
-                if (wasShortPress)
+                // §3.5 shared-binding gate: only synthesise if the
+                // input that drove the drag is also bound to
+                // cursor.cancel. Otherwise the user pressed a
+                // camera.drag-only input (e.g. default PAD X) and
+                // expects only the drag — no destructive action.
+                if (wasShortPress && _vCameraDragSharedWithCancel)
                 {
                     // OPENRCT2MINI cursor-cancel-tile-action-plan
                     // §3.3 (Phase C): synthesise kCursorCancel into
@@ -1767,6 +1800,7 @@ private:
                         im.shouldSuppressAction(ShortcutId::kCursorCancel, ev);
                     }
                 }
+                _vCameraDragSharedWithCancel = false;
             }
             _vCameraDragPrev = dragNow;
         }

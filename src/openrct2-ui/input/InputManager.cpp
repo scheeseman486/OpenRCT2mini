@@ -384,6 +384,29 @@ namespace
                 return Disposition::Consumed;
             }
 
+            // OPENRCT2MINI cursor-cancel-tile-action-plan §3.4
+            // (Phase C follow-up 2026-05-17 #2): non-mouse
+            // cursor.cancel with a tool armed in widgetFocus must
+            // also fire the delete. Without this branch, PAD B
+            // (bound only to cursor.cancel, no overlap with
+            // camera.drag) presses fall through to the empty
+            // action lambda — no synthesis path catches it because
+            // the camera-drag poll only runs when camera.drag's
+            // binding is pressed. Non-mouse devices have no
+            // tap-vs-drag ambiguity, so fire on press immediately.
+            // Gate on toolActive so cursor.cancel in widgetFocus
+            // without a tool armed doesn't become an info-window
+            // shortcut — that case was intentionally retired with
+            // the "timer only for delete" follow-up.
+            if (id == ShortcutId::kCursorCancel
+                && e.state == InputEventState::down
+                && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive))
+            {
+                const auto pos = OpenRCT2::ContextGetCursorPosition();
+                ViewportInteractionRightClick(pos);
+                return Disposition::Consumed;
+            }
+
             // So short-circuit early when the input came from a
             // mouse: let the mouse pump own the click, return
             // Passthrough so the action lambda (typically empty)
