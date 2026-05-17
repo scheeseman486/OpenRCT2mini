@@ -416,6 +416,17 @@ namespace OpenRCT2::Ui
         {
             return &_cursor;
         }
+
+        // OPENRCT2MINI cursor-cancel-tile-action-plan §3.4 (Phase C):
+        // route kCursorCancel through the same right-click tile-action
+        // dispatcher the mouse RMB short-press already used. Position
+        // source is the OS pointer's screen coord (existing
+        // behaviour), so the world-cursor right-click semantic is
+        // preserved byte-identically — the synthetic-fire from the
+        // mouse short-press release path lands here. Defined out-of-
+        // line so the implementation can include ViewportInteraction.h
+        // without forcing it on every consumer of this header.
+        Disposition onShortcut(std::string_view id, const InputEvent& e) override;
     };
 
     // Backwards-compatibility alias for the Phase 3.A name. Anything
@@ -470,10 +481,32 @@ namespace OpenRCT2::Ui
         // 3.E development so a half-wired tool doesn't fall through to
         // a world-cursor click on the same press.
         virtual Disposition onPlace()  { return Disposition::Consumed; }
-        virtual Disposition onCancel() { return Disposition::Consumed; }
+        // OPENRCT2MINI cursor-cancel-tile-action-plan §3.5 (Phase B):
+        // default base routes cancel through the same right-click
+        // tile-action dispatcher the mouse RMB short-press uses,
+        // sourced from the cursor's tile. OSK-pattern destructive
+        // action — delete the element at the cursor without exiting
+        // grid-cursor mode. Subclasses with non-tile-delete cancel
+        // semantics (e.g. RideConstruction's segment back-step) can
+        // override. Defined out-of-line so the implementation can
+        // include ViewportInteraction.h without forcing it on
+        // every consumer of this header.
+        virtual Disposition onCancel();
         virtual Disposition onRotate() { return Disposition::Consumed; }
         virtual Disposition onRaise()  { return Disposition::Consumed; }
         virtual Disposition onLower()  { return Disposition::Consumed; }
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17):
+        // finish verb — the user is done with the tool. Default
+        // base behaviour: drop the grid-cursor latch so the strategy
+        // hands focus back to the tool window's widgets; subclasses
+        // (e.g. FootpathContextImpl) override to also close the tool
+        // window. Wired to the interface.confirm shortcut so the UX
+        // pattern is symmetric: confirm in widgetFocus engages the
+        // grid cursor, confirm in grid-cursor mode closes the tool.
+        // Distinct from IInputContext::onConfirm (the modal-hooks
+        // bool API for OSK/loadSave/etc.) — different verb, kept
+        // separate so the modal stack doesn't fire on tool confirm.
+        virtual Disposition onFinishTool() { return exitGridCursorMode(); }
         // OPENRCT2MINI grid-cursor-plan §14.1: D-pad step (or sub-tile
         // selection if precision is held). The directional channel
         // routes through here from the focus.* shortcut IDs (the
@@ -542,15 +575,25 @@ namespace OpenRCT2::Ui
 
         Disposition onShortcut(std::string_view id, const InputEvent& /*e*/) override
         {
-            // Dismiss / cancel: exit grid cursor mode and return
-            // focus to the parent tool window. Both shortcuts (the
-            // generic interface.dismiss + cursor.cancel) hit the
-            // same exit path so users on either binding scheme get
-            // the back-out behaviour.
-            if (id == ShortcutId::kInterfaceDismiss || id == ShortcutId::kCursorCancel)
+            // Dismiss = back out of grid-cursor mode to the tool
+            // window's widget focus. Mirrors OSK dismiss.
+            if (id == ShortcutId::kInterfaceDismiss)
                 return exitGridCursorMode();
+            // Confirm = "OK, I'm done with this tool". Default: drop
+            // the latch (subclasses can override to also close the
+            // window). Symmetric with the widgetFocus path where
+            // interface.confirm ENGAGES grid-cursor mode.
+            if (id == ShortcutId::kInterfaceConfirm)
+                return onFinishTool();
             if (id == ShortcutId::kCursorClick)
                 return onPlace();
+            // cursor.cancel keeps its original tool verb meaning
+            // (e.g. Footpath: remove path under cursor) — mirrors
+            // the right-click behaviour of the mouse-driven tool.
+            // For the "back out of grid mode" gesture, use
+            // interface.dismiss above.
+            if (id == ShortcutId::kCursorCancel)
+                return onCancel();
             if (id == ShortcutId::kInterfaceRotateConstruction)
                 return onRotate();
             if (id == ShortcutId::kInterfaceConstructionZRaise)

@@ -17,5 +17,15 @@ namespace OpenRCT2::Ui
     bool ViewportInteractionRightOver(const ScreenCoordsXY& screenCoords);
     bool ViewportInteractionRightClick(const ScreenCoordsXY& screenCoords);
 
+    // OPENRCT2MINI cursor-cancel-tile-action-plan §3.2: tile-coord
+    // entry point for the right-click tile-action. Reprojects the
+    // tile's centre to the main viewport's screen space, then
+    // dispatches through the same path the mouse-screen-coord
+    // entry uses. Used by the grid-cursor `onCancel` so the
+    // gamepad / keyboard path performs the same delete-/-context-
+    // open semantic the mouse RMB short-press release does, but
+    // sourced from the cursor's tile instead of the OS pointer.
+    bool ViewportInteractionRightClickAtMapPos(const CoordsXY& mapCoords);
+
     CoordsXY ViewportInteractionGetTileStartAtCursor(const ScreenCoordsXY& screenCoords);
 } // namespace OpenRCT2::Ui

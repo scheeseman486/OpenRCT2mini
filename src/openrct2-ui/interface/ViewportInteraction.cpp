@@ -553,15 +553,16 @@ namespace OpenRCT2::Ui
         return info.interactionType != ViewportInteractionItem::none;
     }
 
-    /**
-     *
-     *  rct2: 0x006E8A62
-     */
-    bool ViewportInteractionRightClick(const ScreenCoordsXY& screenCoords)
+    // OPENRCT2MINI cursor-cancel-tile-action-plan §3.2 (Phase A):
+    // pure dispatch on a resolved InteractionInfo. The screen-coord
+    // entry (ViewportInteractionRightClick) and the map-coord entry
+    // (ViewportInteractionRightClickAtMapPos) both feed their info
+    // through this switch — keeps the per-element-type semantics
+    // (delete footpath / open ride / open banner detail / etc.) in
+    // one place regardless of how the cursor's tile was discovered.
+    static bool ViewportInteractionDispatchRightClick(const InteractionInfo& info)
     {
         CoordsXYE tileElement;
-        auto info = ViewportInteractionGetItemRight(screenCoords);
-
         switch (info.interactionType)
         {
             case ViewportInteractionItem::none:
@@ -616,6 +617,39 @@ namespace OpenRCT2::Ui
         }
 
         return true;
+    }
+
+    /**
+     *
+     *  rct2: 0x006E8A62
+     */
+    bool ViewportInteractionRightClick(const ScreenCoordsXY& screenCoords)
+    {
+        return ViewportInteractionDispatchRightClick(ViewportInteractionGetItemRight(screenCoords));
+    }
+
+    // OPENRCT2MINI cursor-cancel-tile-action-plan §3.2 (Phase A):
+    // tile-coord entry. Reprojects the tile's centre through the
+    // main window's viewport to a screen pixel position, then
+    // delegates to the screen-coord path so the existing
+    // GetMapCoordinatesFromPos / allowRightMouseRemoval / priority
+    // logic is reused verbatim (§7.1 — projection inverse of
+    // Viewport::ScreenToViewportCoord at Viewport.cpp:1114).
+    bool ViewportInteractionRightClickAtMapPos(const CoordsXY& mapCoords)
+    {
+        auto* main = WindowGetMain();
+        if (main == nullptr || main->viewport == nullptr)
+            return false;
+        const auto& vp = *main->viewport;
+        const auto centre = mapCoords + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
+        const int32_t z = TileElementHeight(centre);
+        const auto world = Translate3DTo2DWithZ(vp.rotation, CoordsXYZ{ centre, z });
+        // Inverse of ScreenToViewportCoord: viewport-space → screen pixel.
+        const ScreenCoordsXY screen{
+            vp.zoom.ApplyInversedTo(world.x - vp.viewPos.x) + vp.pos.x,
+            vp.zoom.ApplyInversedTo(world.y - vp.viewPos.y) + vp.pos.y,
+        };
+        return ViewportInteractionRightClick(screen);
     }
 
     /**

@@ -1369,12 +1369,20 @@ void ShortcutManager::registerDefaultShortcuts()
     registerPadDefault(ShortcutId::kCursorRight,                       "PAD STICK_L RIGHT");
     registerPadDefault(ShortcutId::kCursorClick,                       "PAD A");
     registerPadDefault(ShortcutId::kCursorCancel,                      "PAD B");
-    // OPENRCT2MINI mouse-input refactor: gamepad camera drag default.
-    // PAD B is also bound to cursor.cancel (right-click). Holding it
-    // over the viewport pans the camera via the kInterfaceCameraDrag
-    // poll; releasing within ~500ms additionally fires the
-    // context-sensitive right-click action (delete tile element).
-    registerPadDefault(ShortcutId::kInterfaceCameraDrag,               "PAD B");
+    // OPENRCT2MINI cursor-cancel-tile-action-plan §6.2 (Phase D
+    // 2026-05-17 binding swap): drag moves off PAD B onto PAD X.
+    // PAD B is now ONLY bound to cursor.cancel — the tile-action
+    // fires immediately on press through the WorldContext /
+    // ToolContext onShortcut handlers. PAD X drives the drag state
+    // machine (camera pan / scroll-drag / window-drag); on short-
+    // press release the held-state poll in UiContext::Process-
+    // WorldCursor synthesises cursor.cancel into the dispatcher
+    // for the mouse-equivalent tile action. The old double-bind
+    // (PAD B → both cursor.cancel and kInterfaceCameraDrag) would
+    // have double-fired the tile action after Phase C: once on
+    // press (direct cursor.cancel), once on short-release
+    // (synthesised cursor.cancel).
+    registerPadDefault(ShortcutId::kInterfaceCameraDrag,               "PAD X");
     // OPENRCT2MINI gamepad-plan 1.9 follow-on: bind the right stick
     // to view-scroll. The kViewScroll* shortcuts already exist with
     // arrow-key keyboard defaults; PAD STICK_R bindings layer on

@@ -1839,6 +1839,53 @@ namespace OpenRCT2::Ui::Windows
         {
             return _footpathConstructionMode == PathConstructionMode::bridgeOrTunnel;
         }
+        // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):
+        // ghost-tile provisional setter — the gamepad equivalent
+        // of WindowFootpathSetProvisionalPathAtPoint above. Called
+        // from FootpathContextImpl::onActivate and onStep so the
+        // grid cursor renders the ghost footpath underneath the
+        // highlight, matching the mouse path's UX. Resolves the
+        // terrain placement (surface Z + slope) for the tile and
+        // dispatches FootpathProvisionalSet — the same provisional
+        // mechanism the mouse path uses; rendering happens for
+        // free via PaintProvisional.
+        void SetProvisionalAtTilePublic(const TileCoordsXY& tile)
+        {
+            if (_footpathErrorOccured)
+                return;
+
+            const auto coords = tile.ToCoordsXY();
+            auto placement = FootpathGetOnTerrainPlacement(tile);
+            if (!placement.isValid())
+            {
+                gMapSelectFlags.unset(MapSelectFlag::enable);
+                FootpathUpdateProvisional();
+                return;
+            }
+
+            // No-op if the provisional is already at this tile/Z.
+            if (_provisionalFootpath.flags.has(ProvisionalPathFlag::placed)
+                && _provisionalFootpath.positionA == coords
+                && _provisionalFootpath.startZ == placement.baseZ)
+            {
+                return;
+            }
+
+            auto pathType = gFootpathSelection.getSelectedSurface();
+            auto constructFlags = FootpathCreateConstructFlags(pathType);
+            auto footpathLoc = CoordsXYZ(coords, placement.baseZ);
+            auto tiles = std::array<ProvisionalTile, 1>({ footpathLoc, placement.slope });
+            const auto footpathCost = FootpathProvisionalSet(
+                pathType, gFootpathSelection.railings, coords, coords, placement.baseZ, tiles,
+                constructFlags);
+
+            if (_windowFootpathCost != footpathCost)
+            {
+                _windowFootpathCost = footpathCost;
+                invalidateWidget(WIDX_CONSTRUCT);
+            }
+        }
+
         // Place a footpath at the given tile centre and base Z.
         // Bypasses the screen-pos / mouse-cursor lookup the mouse
         // path uses (WindowFootpathPlacePathAtPoint); the gamepad
@@ -2109,6 +2156,49 @@ namespace OpenRCT2::Ui::Windows
             return;
         auto* fw = static_cast<FootpathWindow*>(w);
         fw->PlaceAtTilePublic(tile, baseZ);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):
+    // bridge to FootpathWindow::SetProvisionalAtTilePublic for the
+    // grid cursor's ghost-tile rendering. Called from
+    // FootpathContextImpl onActivate / onStep so the ghost
+    // footpath follows the grid cursor's position.
+    void WindowFootpathSetProvisionalAtTile(const TileCoordsXY& tile)
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        auto* fw = static_cast<FootpathWindow*>(w);
+        fw->SetProvisionalAtTilePublic(tile);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):
+    // clear the ghost-tile provisional. Called on grid-cursor mode
+    // exit so the ghost footpath disappears alongside the highlight.
+    void WindowFootpathClearProvisional()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        FootpathUpdateProvisional();
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17):
+    // close the Footpath window. Used as the grid-cursor
+    // interface.confirm verb — "OK, I'm done with this tool" closes
+    // the window outright (mirrors ToggleFootpathWindow's close
+    // branch). The tool is cancelled and the window destroyed, so
+    // _toolFocusSelected gets cleared by the toolActive
+    // false→true→false edge in InputManager::process.
+    void WindowFootpathClose()
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr->FindByClass(WindowClass::footpath) == nullptr)
+            return;
+        ToolCancel();
+        windowMgr->CloseByClass(WindowClass::footpath);
     }
 
     void WindowFootpathAdjustPlacementZ(int32_t step)

@@ -1694,13 +1694,45 @@ private:
                 InputContextDragEndCurrent();
                 if (wasShortPress)
                 {
-                    // Short tap over a viewport → fire the context-
-                    // sensitive right-click action (delete tile etc.).
-                    // Mirrors the legacy state-machine path that fired
-                    // ViewportInteractionRightClick on rightRelease in
-                    // InputState::ViewportRight.
-                    const auto cursorPos = ContextGetCursorPosition();
-                    ViewportInteractionRightClick(cursorPos);
+                    // OPENRCT2MINI cursor-cancel-tile-action-plan
+                    // §3.3 (Phase C): synthesise kCursorCancel into
+                    // the active strategy instead of calling
+                    // ViewportInteractionRightClick directly. The
+                    // active strategy decides what to do —
+                    // WorldContext::onShortcut dispatches the
+                    // screen-coord right-click (preserving the
+                    // legacy mouse-short-press behaviour);
+                    // ToolContext::onCancel dispatches the same
+                    // action at the grid cursor's tile (so a
+                    // short-press in a tool with the grid cursor
+                    // armed deletes the gamepad-pointed tile, not
+                    // the mouse-pointed one).
+                    //
+                    // §7.6 gate: only synthesise when the active
+                    // context is the world or a tool context.
+                    // Modal text contexts (OSK, loadSave,
+                    // textInput, etc.) interpret kCursorCancel as
+                    // backspace / dismiss / etc., and a mouse
+                    // right-click over a tool window's modal
+                    // text-entry should NOT eat that as a
+                    // backspace.
+                    auto& im = GetInputManager();
+                    const auto ctx = im.getActiveContext();
+                    const bool isToolCtx
+                        = ctx == InputContext::toolFootpath
+                        || ctx == InputContext::toolTerrain
+                        || ctx == InputContext::toolWater
+                        || ctx == InputContext::toolScenery
+                        || ctx == InputContext::toolLandRights
+                        || ctx == InputContext::toolTileInspector
+                        || ctx == InputContext::toolRideConstruction;
+                    if (ctx == InputContext::world || isToolCtx)
+                    {
+                        InputEvent ev{};
+                        ev.deviceKind = InputDeviceKind::mouse;
+                        ev.state = InputEventState::release;
+                        im.shouldSuppressAction(ShortcutId::kCursorCancel, ev);
+                    }
                 }
             }
             _vCameraDragPrev = dragNow;

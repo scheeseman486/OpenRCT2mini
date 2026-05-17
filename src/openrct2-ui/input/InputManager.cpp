@@ -1078,9 +1078,23 @@ namespace
             return Disposition::Consumed;
         }
 
-        Disposition onCancel() override
+        // OPENRCT2MINI cursor-cancel-tile-action-plan §3.5 (Phase B):
+        // onCancel lives on the ToolContext base now — it dispatches
+        // through ViewportInteractionRightClickAtMapPos at the grid
+        // cursor's tile, identical to what the mouse RMB short-press
+        // release does at the OS pointer's tile. The footpath remove
+        // happens via that path's footpath branch, sourced from the
+        // exact tile element the cursor is over (where the old
+        // WindowFootpathRemove used _footpathConstructFromPosition,
+        // which is only set in bridge/tunnel mode).
+
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17):
+        // finish in grid mode closes the Footpath window outright
+        // ("I'm done with this tool"). The toolActive false-edge in
+        // process() clears _toolFocusSelected as the window closes.
+        Disposition onFinishTool() override
         {
-            Windows::WindowFootpathRemove();
+            Windows::WindowFootpathClose();
             return Disposition::Consumed;
         }
 
@@ -1102,6 +1116,30 @@ namespace
             Windows::WindowFootpathAdjustPlacementZ(-1);
             gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
             return Disposition::Consumed;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):
+        // ghost-tile lifecycle. Chains to the base ToolContext for
+        // lifecycle / camera / step bookkeeping, then sets / clears
+        // the provisional footpath at the cursor's tile so the
+        // ghost renders alongside the highlight.
+        void onActivate() override
+        {
+            ToolContext::onActivate();
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition());
+        }
+
+        void onDeactivate() override
+        {
+            Windows::WindowFootpathClearProvisional();
+            ToolContext::onDeactivate();
+        }
+
+        Disposition onStep(::Direction dpad) override
+        {
+            const auto result = ToolContext::onStep(dpad);
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition());
+            return result;
         }
 
         // OPENRCT2MINI grid-cursor-plan §14.1: onStep lives on the

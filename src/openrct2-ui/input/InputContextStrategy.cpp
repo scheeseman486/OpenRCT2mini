@@ -16,12 +16,17 @@
 #include "InputContextStrategy.h"
 
 #include "../UiContext.h"
+#include "../interface/ViewportInteraction.h"
+#include "WidgetFocus.h"
 
+#include <openrct2/Context.h>
+#include <openrct2/Input.h>
 #include <openrct2/OpenRCT2.h>
 #include <openrct2/config/Config.h>
 #include <openrct2/interface/Viewport.h>
 #include <openrct2/interface/Window.h>
 #include <openrct2/interface/WindowBase.h>
+#include <openrct2/ui/WindowManager.h>
 #include <openrct2/world/Map.h>
 #include <openrct2/world/MapLimits.h>
 #include <openrct2/world/MapSelection.h>
@@ -358,11 +363,76 @@ namespace OpenRCT2::Ui
     // (gInputFlags.toolActive) is NOT cancelled — the user can
     // re-engage by clicking a mode button or cycling back to the
     // tool's virtual viewport entry.
+    // OPENRCT2MINI cursor-cancel-tile-action-plan §3.5 (Phase B):
+    // default cancel verb for every ToolContext subclass. Mirrors the
+    // mouse RMB short-press release path: ask the viewport-interaction
+    // layer to dispatch the right-click action at the cursor's tile.
+    // For Grid-cursor tools (Footpath / Scenery / etc.) that's the
+    // delete-element path. For Edge-cursor tools (Terrain / Water)
+    // those items are non-removable so the dispatch is a no-op,
+    // matching the mouse path's behaviour. Subclasses with bespoke
+    // cancel semantics override.
+    Disposition ToolContext::onCancel()
+    {
+        TileCoordsXY pos{};
+        if (auto* model = getCursorModel(); model != nullptr)
+        {
+            if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                pos = grid->getPosition();
+            else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
+                pos = edge->getPosition();
+            else
+                return Disposition::Consumed;
+        }
+        ViewportInteractionRightClickAtMapPos(pos.ToCoordsXY());
+        return Disposition::Consumed;
+    }
+
     Disposition ToolContext::exitGridCursorMode()
     {
-        GetInputManager().setToolFocusSelected(
+        auto& mgr = GetInputManager();
+        mgr.setToolFocusSelected(
             false, InputManager::SelectorTransitionSource::virtualUserInput);
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17
+        // — focus-ring redraw fix): explicitly land focus on the
+        // tool window's first focusable widget so the widgetFocus
+        // context has a target on the very next frame. Without
+        // this, exiting grid mode via cycle-to-virtual-tool-entry
+        // (which clears focus on entry) leaves the focus state
+        // empty and the focus ring doesn't draw until the user
+        // wakes it manually. gCurrentToolWidget.windowClassification
+        // tells us which window owns the armed tool — that's the
+        // window we want to return to.
+        if (gInputFlags.has(InputFlag::toolActive))
+        {
+            const auto cls = gCurrentToolWidget.windowClassification;
+            auto* windowMgr = GetWindowManager();
+            if (windowMgr != nullptr)
+            {
+                if (auto* w = windowMgr->FindByClass(cls); w != nullptr)
+                    mgr.setFocus(cls, WidgetFocus::firstFocusable(*w));
+            }
+        }
         return Disposition::Consumed;
+    }
+
+    // OPENRCT2MINI cursor-cancel-tile-action-plan §3.4 (Phase C):
+    // route kCursorCancel through ViewportInteractionRightClick at
+    // the OS pointer's screen position — same call the legacy mouse
+    // RMB short-press path made directly. The mouse-short-press
+    // release at UiContext.cpp synthesises kCursorCancel into the
+    // dispatcher; this handler is what receives it when the active
+    // context is `world`. Tool contexts have their own onCancel
+    // override that sources the tile from the grid cursor instead.
+    Disposition WorldContext::onShortcut(std::string_view id, const InputEvent& /*e*/)
+    {
+        if (id == ShortcutId::kCursorCancel)
+        {
+            const auto pos = ContextGetCursorPosition();
+            ViewportInteractionRightClick(pos);
+            return Disposition::Consumed;
+        }
+        return Disposition::Passthrough;
     }
 
     Disposition ToolContext::onStep(::Direction dpad)

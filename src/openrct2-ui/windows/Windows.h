@@ -163,6 +163,15 @@ namespace OpenRCT2::Ui::Windows
     // True when the Footpath window's current mode targets path
     // railings (per-edge); false for the per-tile surface modes.
     bool WindowFootpathIsRailingsMode();
+    // Set / clear the provisional ("ghost") footpath at a tile. The
+    // grid cursor calls these from onActivate / onStep / onDeactivate
+    // so the ghost tile renders alongside the highlight (mirrors the
+    // mouse path's hover behaviour).
+    void WindowFootpathSetProvisionalAtTile(const TileCoordsXY& tile);
+    void WindowFootpathClearProvisional();
+    // Close the Footpath window outright — used by the grid-cursor
+    // interface.confirm verb ("OK, I'm done with this tool").
+    void WindowFootpathClose();
 
     // GameBottomToolbar
     extern uint8_t gToolbarDirtyFlags;
