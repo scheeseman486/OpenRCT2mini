@@ -1699,23 +1699,45 @@ private:
                     // the active strategy instead of calling
                     // ViewportInteractionRightClick directly. The
                     // active strategy decides what to do —
-                    // WorldContext::onShortcut dispatches the
-                    // screen-coord right-click (preserving the
-                    // legacy mouse-short-press behaviour);
-                    // ToolContext::onCancel dispatches the same
-                    // action at the grid cursor's tile (so a
+                    // ToolContext::onCancel dispatches the right-
+                    // click action at the grid cursor's tile (so a
                     // short-press in a tool with the grid cursor
                     // armed deletes the gamepad-pointed tile, not
-                    // the mouse-pointed one).
+                    // the mouse-pointed one); when no grid cursor
+                    // is armed, the strategy falls back to the
+                    // screen-coord right-click — same call the
+                    // legacy mouse-short-press path made directly.
+                    //
+                    // §3.4 (Phase C follow-up 2026-05-17): the
+                    // short-press timer is only used when the
+                    // action would be a delete (tool context).
+                    // World context cursor.cancel used to bring up
+                    // info windows on RMB tap; with kInterface-
+                    // CameraDrag now owning the camera-pan
+                    // gesture on RMB, a short tap in world is
+                    // just a tap on the camera — no info window.
+                    // The user can still get peep / banner detail
+                    // dialogs by clicking the element with the
+                    // primary cursor button (cursor.click on
+                    // LMB) which dispatches the same info via the
+                    // viewport interaction left-click path.
+                    //
+                    // The poll is device-agnostic — it reacts to
+                    // any input bound to kInterfaceCameraDrag,
+                    // whether mouse, keyboard, or gamepad. So a
+                    // user who rebinds a gamepad button to BOTH
+                    // cursor.cancel and camera.drag (mirroring
+                    // the mouse RMB default) gets the same
+                    // tap-to-delete behaviour as the default
+                    // mouse setup.
                     //
                     // §7.6 gate: only synthesise when the active
-                    // context is the world or a tool context.
-                    // Modal text contexts (OSK, loadSave,
-                    // textInput, etc.) interpret kCursorCancel as
-                    // backspace / dismiss / etc., and a mouse
-                    // right-click over a tool window's modal
-                    // text-entry should NOT eat that as a
-                    // backspace.
+                    // context is a tool context. Modal text
+                    // contexts (OSK, loadSave, textInput, etc.)
+                    // interpret kCursorCancel as backspace /
+                    // dismiss / etc., and a mouse right-click
+                    // over a tool window's modal text-entry
+                    // should NOT eat that as a backspace.
                     auto& im = GetInputManager();
                     const auto ctx = im.getActiveContext();
                     const bool isToolCtx
@@ -1726,7 +1748,18 @@ private:
                         || ctx == InputContext::toolLandRights
                         || ctx == InputContext::toolTileInspector
                         || ctx == InputContext::toolRideConstruction;
-                    if (ctx == InputContext::world || isToolCtx)
+                    // Active context is `widgetFocus` whenever the
+                    // user has not explicitly cycled INTO the tool
+                    // viewport entry — including the common case of
+                    // the tool window itself being focused. A tool
+                    // can still be armed in that state
+                    // (gInputFlags.toolActive). RMB on a destroyable
+                    // element in land tool mode is exactly that
+                    // path, so include it here too.
+                    const bool armedToolInFocus
+                        = ctx == InputContext::widgetFocus
+                        && gInputFlags.has(InputFlag::toolActive);
+                    if (isToolCtx || armedToolInFocus)
                     {
                         InputEvent ev{};
                         ev.deviceKind = InputDeviceKind::mouse;

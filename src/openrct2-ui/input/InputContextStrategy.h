@@ -492,6 +492,17 @@ namespace OpenRCT2::Ui
         // include ViewportInteraction.h without forcing it on
         // every consumer of this header.
         virtual Disposition onCancel();
+        // OPENRCT2MINI cursor-cancel-tile-action-plan §3.5 (Phase C
+        // follow-up 2026-05-17): mouse cursor.cancel routes through
+        // here instead of onCancel(). The mouse user's cursor is the
+        // OS pointer, not the grid cursor, so a right-click should
+        // act on the tile under the pointer. Default base dispatches
+        // ViewportInteractionRightClick(ContextGetCursorPosition()) —
+        // same call the legacy mouse RMB short-press path made
+        // directly. Subclasses with bespoke cancel semantics
+        // override this too if they need to diverge. Defined out-of-
+        // line for the same header-hygiene reason as onCancel.
+        virtual Disposition onCancelAtScreen();
         virtual Disposition onRotate() { return Disposition::Consumed; }
         virtual Disposition onRaise()  { return Disposition::Consumed; }
         virtual Disposition onLower()  { return Disposition::Consumed; }
@@ -573,7 +584,7 @@ namespace OpenRCT2::Ui
         // every consumer of this header.
         Disposition exitGridCursorMode();
 
-        Disposition onShortcut(std::string_view id, const InputEvent& /*e*/) override
+        Disposition onShortcut(std::string_view id, const InputEvent& e) override
         {
             // Dismiss = back out of grid-cursor mode to the tool
             // window's widget focus. Mirrors OSK dismiss.
@@ -592,8 +603,31 @@ namespace OpenRCT2::Ui
             // the right-click behaviour of the mouse-driven tool.
             // For the "back out of grid mode" gesture, use
             // interface.dismiss above.
+            //
+            // OPENRCT2MINI cursor-cancel-tile-action-plan §3.5
+            // (Phase C follow-up 2026-05-17): mouse cursor.cancel
+            // needs the ~500 ms short-press disambiguation and
+            // wants to delete at the OS pointer's screen tile —
+            // legacy mouse RMB behaviour. Defer the press; the
+            // held-state poll for kInterfaceCameraDrag in
+            // UiContext::ProcessWorldCursor synthesises a release
+            // event after the short-press gate passes. The
+            // synthesised release flows through this same handler
+            // and falls into the screen-coord dispatch below.
+            // Non-mouse devices (gamepad / keyboard) fire on press
+            // immediately via the grid-cursor-aware onCancel —
+            // their cursor IS the grid cursor, so deleting at the
+            // model position is the right semantic.
             if (id == ShortcutId::kCursorCancel)
+            {
+                if (e.deviceKind == InputDeviceKind::mouse)
+                {
+                    if (e.state != InputEventState::release)
+                        return Disposition::Consumed;
+                    return onCancelAtScreen();
+                }
                 return onCancel();
+            }
             if (id == ShortcutId::kInterfaceRotateConstruction)
                 return onRotate();
             if (id == ShortcutId::kInterfaceConstructionZRaise)

@@ -23,9 +23,11 @@
 #include <openrct2-ui/input/ShortcutManager.h>
 #include <openrct2-ui/interface/Dropdown.h>
 #include <openrct2-ui/interface/InGameConsole.h>
+#include <openrct2-ui/interface/ViewportInteraction.h>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2-ui/interface/Window.h>
 #include <openrct2-ui/windows/Windows.h>
+#include <openrct2/Context.h>
 #include <openrct2/Input.h>
 #include <openrct2/OpenRCT2.h>
 #include <openrct2/haptic/HapticEvent.h>
@@ -352,6 +354,36 @@ namespace
             // no concept of "the widget under the cursor". Mouse
             // already has that concept via screen coords; the
             // shortcut layer is just a passthrough alias for it.
+            // OPENRCT2MINI cursor-cancel-tile-action-plan §3.4
+            // (Phase C follow-up 2026-05-17): mouse kCursorCancel
+            // needs to fire the tile action even when widgetFocus
+            // owns the active context — e.g. user in Land / Water /
+            // Footpath etc. mode with the tool window focused (no
+            // grid mode engaged), pressing RMB on a destroyable
+            // element. Gated on state == release so the press-time
+            // dispatch is silently swallowed; the held-state poll
+            // for cursor.cancel mouse bindings in UiContext::
+            // ProcessWorldCursor synthesises a release event after
+            // verifying short-press (<500ms). This preserves the
+            // legacy disambiguation — short tap = delete, long
+            // hold = no-op (hold-to-not-delete) — while a direct
+            // cursor.cancel binding has no drag state to fall
+            // through. Non-mouse devices (gamepad PAD B / keyboard)
+            // fire on press normally because they don't have the
+            // tap-vs-drag ambiguity.
+            if (e.deviceKind == InputDeviceKind::mouse && id == ShortcutId::kCursorCancel)
+            {
+                if (e.state == InputEventState::release)
+                {
+                    const auto pos = OpenRCT2::ContextGetCursorPosition();
+                    ViewportInteractionRightClick(pos);
+                }
+                // Swallow the press-time dispatch so the empty
+                // action lambda doesn't fire and no double-fire
+                // can leak from this path either.
+                return Disposition::Consumed;
+            }
+
             // So short-circuit early when the input came from a
             // mouse: let the mouse pump own the click, return
             // Passthrough so the action lambda (typically empty)

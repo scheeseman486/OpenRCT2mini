@@ -388,6 +388,22 @@ namespace OpenRCT2::Ui
         return Disposition::Consumed;
     }
 
+    // OPENRCT2MINI cursor-cancel-tile-action-plan §3.5 (Phase C
+    // follow-up 2026-05-17): mouse-source cancel — dispatch at the
+    // OS pointer's screen tile (legacy mouse RMB short-press path),
+    // NOT the grid cursor's model position. This is the path the
+    // user gets when they're in a tool with the tool window focused
+    // (or the viewport entry selected) and right-click on a
+    // destroyable element with the mouse: the element under the
+    // mouse is the one that should be destroyed, not whatever tile
+    // the gamepad grid cursor happens to be on.
+    Disposition ToolContext::onCancelAtScreen()
+    {
+        const auto pos = ContextGetCursorPosition();
+        ViewportInteractionRightClick(pos);
+        return Disposition::Consumed;
+    }
+
     Disposition ToolContext::exitGridCursorMode()
     {
         auto& mgr = GetInputManager();
@@ -424,10 +440,24 @@ namespace OpenRCT2::Ui
     // dispatcher; this handler is what receives it when the active
     // context is `world`. Tool contexts have their own onCancel
     // override that sources the tile from the grid cursor instead.
-    Disposition WorldContext::onShortcut(std::string_view id, const InputEvent& /*e*/)
+    Disposition WorldContext::onShortcut(std::string_view id, const InputEvent& e)
     {
         if (id == ShortcutId::kCursorCancel)
         {
+            // §3.4 (Phase C follow-up 2026-05-17): mouse needs the
+            // short-press disambiguation timer (held mouse button can
+            // be a drag, not a delete). Defer mouse presses; the
+            // held-state poll for cursor.cancel mouse bindings in
+            // UiContext::ProcessWorldCursor synthesises a release
+            // event after the < 500 ms gate passes. Non-mouse
+            // bindings (gamepad / keyboard) fire on press
+            // immediately because they have no tap-vs-drag
+            // ambiguity.
+            if (e.deviceKind == InputDeviceKind::mouse
+                && e.state != InputEventState::release)
+            {
+                return Disposition::Consumed;
+            }
             const auto pos = ContextGetCursorPosition();
             ViewportInteractionRightClick(pos);
             return Disposition::Consumed;
