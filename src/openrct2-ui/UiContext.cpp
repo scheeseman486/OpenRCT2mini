@@ -56,6 +56,7 @@
 #include <openrct2/scripting/ScriptEngine.h>
 #include <openrct2/ui/UiContext.h>
 #include <openrct2/ui/WindowManager.h>
+#include <openrct2/world/MapSelection.h>
 #include <openrct2/world/Location.hpp>
 #include <vector>
 
@@ -2032,31 +2033,57 @@ private:
         if (selectorActive)
         {
             std::optional<ScreenCoordsXY> syncTo;
-            auto& strategy = _inputManager.getActiveContextStrategy();
-            if (auto* model = strategy.getCursorModel(); model != nullptr)
+            // OPENRCT2MINI cursor-sync revised 2026-05-17 #2: prefer
+            // the global map-selection tile when a tool is armed —
+            // gMapSelectPositionA tracks the grid cursor's tile both
+            // when the user is engaged in grid-cursor mode (the
+            // GridCursorModel writes the globals via WriteGridCursor-
+            // Selection on each step) and when the active context is
+            // still widgetFocus (the tool's mouse-hover code writes
+            // the globals, which the gamepad also follows once the
+            // user engages). The earlier shape only consulted the
+            // active strategy's cursor model — that returned the
+            // stale PixelCursorModel for widgetFocus and the cursor
+            // parked at the focused widget instead of the selected
+            // tile.
+            if (gMapSelectFlags.has(MapSelectFlag::enable)
+                || gMapSelectFlags.has(MapSelectFlag::enableConstruct))
             {
-                CoordsXY worldXY{};
-                bool haveWorld = false;
-                if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
-                {
-                    worldXY = grid->getPosition().ToCoordsXY();
-                    haveWorld = true;
-                }
-                else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
-                {
-                    worldXY = edge->getPosition().ToCoordsXY();
-                    haveWorld = true;
-                }
-                if (haveWorld)
-                    syncTo = ViewportInteractionMapToScreen(worldXY);
+                syncTo = ViewportInteractionMapToScreen(gMapSelectPositionA);
             }
-            // Widget-focus fallback: when the active context's
-            // cursor model isn't a tile cursor (i.e. WidgetFocus
-            // or a non-tool context that's still selector-owned),
-            // park the pixel cursor at the focused widget's
-            // centre. WidgetFocus.cpp already uses these bounds
-            // for drawing the focus ring; we reuse the same
-            // geometry so the cursor lands behind the ring.
+            // Strategy cursor model fallback: kept as a backstop for
+            // edge cases where MapSelectFlag::enable isn't set (rare;
+            // some tools dispatch placement without setting the
+            // ghost). dynamic_cast on the active context's cursor
+            // model picks up GridCursorModel / EdgeCursorModel
+            // directly.
+            if (!syncTo.has_value())
+            {
+                auto& strategy = _inputManager.getActiveContextStrategy();
+                if (auto* model = strategy.getCursorModel(); model != nullptr)
+                {
+                    CoordsXY worldXY{};
+                    bool haveWorld = false;
+                    if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                    {
+                        worldXY = grid->getPosition().ToCoordsXY();
+                        haveWorld = true;
+                    }
+                    else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
+                    {
+                        worldXY = edge->getPosition().ToCoordsXY();
+                        haveWorld = true;
+                    }
+                    if (haveWorld)
+                        syncTo = ViewportInteractionMapToScreen(worldXY);
+                }
+            }
+            // Widget-focus fallback: only when there's no tool
+            // ghost AND no tile cursor model. Park the pixel
+            // cursor at the focused widget's centre — WidgetFocus
+            // .cpp already uses these bounds for drawing the focus
+            // ring; we reuse the same geometry so the cursor lands
+            // behind the ring.
             if (!syncTo.has_value())
             {
                 if (auto* w = _inputManager.getFocusedWindow(); w != nullptr)
