@@ -506,18 +506,23 @@ namespace OpenRCT2::Ui
         virtual Disposition onRotate() { return Disposition::Consumed; }
         virtual Disposition onRaise()  { return Disposition::Consumed; }
         virtual Disposition onLower()  { return Disposition::Consumed; }
-        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17):
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17 #2):
         // finish verb — the user is done with the tool. Default
-        // base behaviour: drop the grid-cursor latch so the strategy
-        // hands focus back to the tool window's widgets; subclasses
-        // (e.g. FootpathContextImpl) override to also close the tool
-        // window. Wired to the interface.confirm shortcut so the UX
-        // pattern is symmetric: confirm in widgetFocus engages the
-        // grid cursor, confirm in grid-cursor mode closes the tool.
+        // base behaviour: cancel the tool and close the tool window
+        // entirely, so Back in grid-cursor mode is a one-gesture
+        // exit. The toolActive false-edge in InputManager::process
+        // clears _toolFocusSelected, which switches the strategy
+        // back to widgetFocus (or world if no other focus window
+        // remains). Subclasses with special cleanup (FootpathContext
+        // owns its own close helper that also tears down the
+        // bridge / tunnel mode state) can still override.
         // Distinct from IInputContext::onConfirm (the modal-hooks
         // bool API for OSK/loadSave/etc.) — different verb, kept
-        // separate so the modal stack doesn't fire on tool confirm.
-        virtual Disposition onFinishTool() { return exitGridCursorMode(); }
+        // separate so the modal stack doesn't fire on tool finish.
+        // Defined out-of-line so the implementation can include the
+        // WindowManager headers without forcing them on every
+        // consumer of this header.
+        virtual Disposition onFinishTool();
         // OPENRCT2MINI grid-cursor-plan §14.1: D-pad step (or sub-tile
         // selection if precision is held). The directional channel
         // routes through here from the focus.* shortcut IDs (the
@@ -586,15 +591,31 @@ namespace OpenRCT2::Ui
 
         Disposition onShortcut(std::string_view id, const InputEvent& e) override
         {
-            // Dismiss = back out of grid-cursor mode to the tool
-            // window's widget focus. Mirrors OSK dismiss.
-            if (id == ShortcutId::kInterfaceDismiss)
-                return exitGridCursorMode();
-            // Confirm = "OK, I'm done with this tool". Default: drop
-            // the latch (subclasses can override to also close the
-            // window). Symmetric with the widgetFocus path where
-            // interface.confirm ENGAGES grid-cursor mode.
+            // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
+            // 2026-05-17 #2 — user feedback): the Start / Back
+            // verbs in grid-cursor mode are now symmetric with
+            // their widgetFocus-mode counterparts.
+            //
+            //   widgetFocus + tool armed:
+            //     Start (confirm)  → engage grid-cursor mode
+            //     Back  (dismiss)  → close the tool window
+            //
+            //   tool context (grid-cursor mode):
+            //     Start (confirm)  → back out to widgetFocus —
+            //                        symmetric "Start toggles
+            //                        between the two modes"
+            //     Back  (dismiss)  → "I'm done" — close the tool
+            //                        window and exit grid mode in
+            //                        one gesture
+            //
+            // Previous mapping had confirm/dismiss swapped here so
+            // Start in grid mode closed the window and Back just
+            // de-engaged — confusing because Start engages grid in
+            // the widgetFocus direction. Mirror the engage gesture:
+            // Start toggles, Back exits.
             if (id == ShortcutId::kInterfaceConfirm)
+                return exitGridCursorMode();
+            if (id == ShortcutId::kInterfaceDismiss)
                 return onFinishTool();
             if (id == ShortcutId::kCursorClick)
                 return onPlace();

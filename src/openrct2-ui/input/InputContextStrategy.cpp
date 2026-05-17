@@ -432,6 +432,26 @@ namespace OpenRCT2::Ui
         return Disposition::Consumed;
     }
 
+    // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17 #2 —
+    // user feedback): Back / interface.dismiss in grid-cursor mode now
+    // closes the tool window outright. ToolCancel() drops the engine
+    // tool latch (gInputFlags.toolActive → false); CloseByClass closes
+    // the window. The toolActive false-edge in InputManager::process
+    // clears _toolFocusSelected, and resolveActiveContext falls
+    // through to widgetFocus (on another window) or world. Subclasses
+    // can override for special teardown but the generic dispatch is
+    // sufficient for every current tool — every tool window keys off
+    // gCurrentToolWidget.windowClassification, and ToolCancel handles
+    // the tool-side cleanup the per-window close hooks expect.
+    Disposition ToolContext::onFinishTool()
+    {
+        const auto cls = gCurrentToolWidget.windowClassification;
+        ToolCancel();
+        if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
+            windowMgr->CloseByClass(cls);
+        return Disposition::Consumed;
+    }
+
     // OPENRCT2MINI cursor-cancel-tile-action-plan §3.4 (Phase C):
     // route kCursorCancel through ViewportInteractionRightClick at
     // the OS pointer's screen position — same call the legacy mouse
