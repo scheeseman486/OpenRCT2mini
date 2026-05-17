@@ -189,6 +189,22 @@ private:
     // bound to cursor.cancel.
     bool _vCameraDragSharedWithCancel = false;
 
+    // OPENRCT2MINI cursor-sync follow-up (2026-05-17 #3 — user
+    // feedback): track whether SelectorMode was `active` on the
+    // previous frame. When the selector was owning input and a
+    // real mouse-motion event flips it to `hidden` (see
+    // onTransitionEvent(realMouseMotion)), the resync-from-real-
+    // mouse block would otherwise pull the virtual cursor to
+    // wherever the OS pointer happened to be — discarding the
+    // parked grid-cursor / focus-widget position the sync set up
+    // on the last selectorActive frame. By remembering that the
+    // selector was active and override _cursorState.position back
+    // to the virtual cursor's int coords before the resync runs,
+    // the virtual cursor (the gamepad-driven master) stays the
+    // source of truth; the OS pointer's absolute coords are
+    // ignored on the transition frame.
+    bool _vSelectorActivePrev = false;
+
     // OPENRCT2MINI: per-frame edge-detection state for routing host
     // gamepad cursor.* shortcuts to the OSK while it's active. See the
     // OskIsActive() block in ProcessVirtualGamepadCursor for context —
@@ -2003,6 +2019,22 @@ private:
         // (0.75 px/frame at 60 Hz) the float never crosses the next
         // integer in the positive direction, so right/down get stuck.
         const float scale = static_cast<float>(Config::Get().general.windowScale);
+        // OPENRCT2MINI cursor-sync follow-up (2026-05-17 #3): when
+        // the selector was active on the previous frame, force
+        // _cursorState.position back to the virtual cursor's int
+        // coords BEFORE the resync block. The SDL event handler
+        // writes _cursorState.position to the OS pointer's
+        // absolute on every SDL_MOUSEMOTION, but on a transition
+        // from selectorActive→hidden the user expects the cursor
+        // to wake at the parked virtual-cursor position (grid
+        // cursor / focus widget), not at the OS pointer's stale
+        // coords. By snapping _cursorState.position back to the
+        // virtual cursor first, the resync below sees no mismatch
+        // and the virtual cursor stays as the source of truth.
+        if (_vSelectorActivePrev)
+        {
+            _cursorState.position = { _vcursorLastIntX, _vcursorLastIntY };
+        }
         if (_cursorState.position.x != _vcursorLastIntX
             || _cursorState.position.y != _vcursorLastIntY)
         {
@@ -2130,27 +2162,25 @@ private:
                 _vcursorY = static_cast<float>(sy) * scale;
                 _vcursorLastIntX = sx;
                 _vcursorLastIntY = sy;
-                // Also warp the OS pointer. Writing _cursorState
-                // .position alone affects only the internal mirror;
-                // the OS pointer stays wherever the user last left
-                // it. On the next real mouse-motion event SDL
-                // reports the OS pointer's absolute coords, the
-                // resync-from-real-mouse block clobbers our
-                // parked state, and the cursor wakes at the OS
-                // pointer position — defeating the consistency
-                // guarantee. SDL_WarpMouseInWindow synchronises
-                // the OS pointer so the mouse-motion wake position
-                // is near our parked tile rather than wherever
-                // the OS pointer happened to be when the gamepad
-                // took over.
-                //
-                // Mini doesn't have a real mouse, so the warp is
-                // a no-op there; on host (windowed / fullscreen)
-                // it works as expected.
-                if (_window != nullptr)
-                    SDL_WarpMouseInWindow(_window, sx, sy);
+                // OPENRCT2MINI cursor-sync follow-up (2026-05-17
+                // #3): no SDL_WarpMouseInWindow. The user
+                // explicitly asked us to ignore the OS pointer's
+                // absolute coords and treat the virtual cursor
+                // (the gamepad-driven master) as the only source
+                // of truth. The next-frame _vSelectorActivePrev
+                // override above pins _cursorState.position back
+                // to the virtual coords on the wake transition,
+                // so the cursor wakes at the parked tile without
+                // having to nudge the OS pointer.
             }
         }
+        // Update the selector-active latch for next frame's resync
+        // override. Done outside the sync block so it tracks the
+        // transition out of selectorActive even when syncTo had
+        // no value (e.g. no tool armed, no focused widget) — we
+        // still want to skip the OS-pointer resync on the very
+        // first hidden-mode frame.
+        _vSelectorActivePrev = selectorActive;
 
         const bool anyDir = dpadUp || dpadDown || dpadLeft || dpadRight;
         const uint32_t now = SDL_GetTicks();
