@@ -384,26 +384,33 @@ namespace
                 return Disposition::Consumed;
             }
 
-            // OPENRCT2MINI cursor-cancel-tile-action-plan §3.4
-            // (Phase C follow-up 2026-05-17 #2): non-mouse
-            // cursor.cancel with a tool armed in widgetFocus must
-            // also fire the delete. Without this branch, PAD B
-            // (bound only to cursor.cancel, no overlap with
-            // camera.drag) presses fall through to the empty
-            // action lambda — no synthesis path catches it because
-            // the camera-drag poll only runs when camera.drag's
-            // binding is pressed. Non-mouse devices have no
-            // tap-vs-drag ambiguity, so fire on press immediately.
-            // Gate on toolActive so cursor.cancel in widgetFocus
-            // without a tool armed doesn't become an info-window
-            // shortcut — that case was intentionally retired with
-            // the "timer only for delete" follow-up.
+            // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
+            // 2026-05-17 #3 — user feedback): non-mouse
+            // cursor.cancel (PAD B / keyboard X) in widgetFocus
+            // with a tool armed CLOSES the tool window. The
+            // gesture is symmetric with grid-cursor mode's
+            // Back-closes-the-window verb — pressing PAD B on
+            // the focused tool window's UI should drop the user
+            // out of the tool entirely, same as pressing it in
+            // grid-cursor mode. The "tap-to-delete-at-cursor"
+            // behaviour is reserved for grid-cursor mode (where
+            // the user has explicitly engaged a destructive
+            // workflow); in widgetFocus the user is browsing the
+            // tool window's options, and cancel-out is the
+            // expected verb.
+            //
+            // Mouse cursor.cancel above (RMB) keeps the tile-
+            // delete behaviour for legacy parity — the
+            // ~500 ms short-press timer disambiguates it from a
+            // camera drag.
             if (id == ShortcutId::kCursorCancel
                 && e.state == InputEventState::down
                 && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive))
             {
-                const auto pos = OpenRCT2::ContextGetCursorPosition();
-                ViewportInteractionRightClick(pos);
+                const auto cls = OpenRCT2::gCurrentToolWidget.windowClassification;
+                OpenRCT2::ToolCancel();
+                if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
+                    windowMgr->CloseByClass(cls);
                 return Disposition::Consumed;
             }
 
@@ -447,6 +454,25 @@ namespace
                 && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive)
                 && mgr.getFocusedWindowClass() == OpenRCT2::gCurrentToolWidget.windowClassification)
             {
+                // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
+                // 2026-05-17 #3 — user feedback): clear the
+                // focused widget when engaging grid-cursor mode
+                // so the focus ring stops drawing on the tool
+                // window. Without this, the ring stays painted
+                // on the last focused button while the user is
+                // navigating the grid cursor, which is visual
+                // noise — the user's attention is on the world
+                // tile, not the widget. exitGridCursorMode re-
+                // sets the focus to the tool window's first
+                // focusable on the way back, so toggle symmetry
+                // is preserved.
+                //
+                // Invalidate the tool window so the next redraw
+                // clears the previously-painted ring pixels.
+                const auto cls = mgr.getFocusedWindowClass();
+                mgr.clearFocus();
+                if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
+                    windowMgr->InvalidateByClass(cls);
                 mgr.setToolFocusSelected(
                     true, OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
                 return Disposition::Consumed;
