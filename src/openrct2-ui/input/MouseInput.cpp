@@ -30,6 +30,7 @@
 #include <openrct2/interface/Viewport.h>
 #include <openrct2/ui/WindowManager.h>
 #include <openrct2/world/Map.h>
+#include <openrct2/world/MapSelection.h>
 #include <optional>
 
 namespace OpenRCT2
@@ -1445,6 +1446,22 @@ namespace OpenRCT2
                 // explicitly cycles away from the tool viewport.
                 auto& mgr = GetInputManager();
                 if (mgr.isToolFocusSelected())
+                    return;
+                // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
+                // 2026-05-17 #7 — parked-cursor ghost suppression):
+                // also skip onToolUpdate when the grid cursor is
+                // in parked state (user is navigating the tool
+                // window's widgets in focus mode while the tool
+                // is armed). Without this gate, the tool's
+                // provisional ghost would draw at the cursor's
+                // synthesised mouse position, which is currently
+                // parked at the grid cursor tile — visually
+                // identical to grid-mode but with no user control.
+                // The blinking parked marker is the right visual
+                // affordance for "your cursor is here, engage to
+                // act"; the ghost on top of it implies a
+                // commitment the user hasn't made.
+                if (gMapSelectFlags.has(MapSelectFlag::gridCursorParked))
                     return;
                 w->onToolUpdate(gCurrentToolWidget.widgetIndex, screenCoords);
             }

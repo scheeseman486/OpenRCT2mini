@@ -27,6 +27,15 @@ enum class MapSelectFlag : uint8_t
     // mouse-driven tool ghost. The blink is paint-time only — the
     // flag carries no extra state and clears on tool exit.
     gridCursor,
+    // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17 #7
+    // — user feedback): when set, the grid-cursor marker is in
+    // "parked" state — the user is navigating the tool window's
+    // widgets with focus mode, not driving the cursor on the map.
+    // The Paint.Surface.cpp hook blinks the marker on a 500 ms
+    // cycle so the user can see WHERE the cursor will be when
+    // they engage grid-cursor mode, distinct from the solid
+    // marker shown while they're actively driving it.
+    gridCursorParked,
 };
 using MapSelectFlags = FlagHolder<uint8_t, MapSelectFlag>;
 

@@ -62,6 +62,13 @@ namespace OpenRCT2::Ui
         gMapSelectFlags.unset(MapSelectFlag::enableArrow);
         gMapSelectFlags.set(MapSelectFlag::enable);
         gMapSelectFlags.set(MapSelectFlag::gridCursor);
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17
+        // #7 — blinking-parked-cursor): active write (from onStep /
+        // onActivate while the tool context owns dispatch) clears
+        // the parked flag, so the marker becomes solid again. The
+        // parked flag is re-set in onDeactivate when the tool is
+        // still armed (user toggled out to widget focus).
+        gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
         gMapSelectType = orientation;
         setMapSelectRange(world);
         MapInvalidateTileFull(world);
@@ -603,11 +610,32 @@ namespace OpenRCT2::Ui
 
     void ToolContext::onDeactivate()
     {
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17 #7
+        // — blinking-parked-cursor): differentiate tool-still-armed
+        // (parked) from tool-cancelled. When parked, KEEP the
+        // gMapSelect marker visible but flip it into parked mode so
+        // the surface paint blinks it. When cancelled (tool no
+        // longer armed), clear everything as before.
+        const bool stillArmed = gInputFlags.has(InputFlag::toolActive);
         if (_wroteSelection)
         {
-            gMapSelectFlags.unset(MapSelectFlag::enable);
-            gMapSelectFlags.unset(MapSelectFlag::gridCursor);
-            _wroteSelection = false;
+            if (stillArmed)
+            {
+                // Stay visible, blink. Cursor model stays
+                // active so the position is preserved across
+                // the re-engage onActivate (per
+                // _resumeFromGridExit).
+                gMapSelectFlags.unset(MapSelectFlag::gridCursor);
+                gMapSelectFlags.set(MapSelectFlag::gridCursorParked);
+                // Don't touch enable. Don't reset _wroteSelection.
+            }
+            else
+            {
+                gMapSelectFlags.unset(MapSelectFlag::enable);
+                gMapSelectFlags.unset(MapSelectFlag::gridCursor);
+                gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
+                _wroteSelection = false;
+            }
         }
         // Deactivate the cursor model so its step() side-effects stop
         // writing the paint globals after the tool context is gone.
