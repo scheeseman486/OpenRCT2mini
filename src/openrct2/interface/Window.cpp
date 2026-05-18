@@ -19,7 +19,6 @@
 #include "../audio/Audio.h"
 #include "../config/Config.h"
 #include "../drawing/Drawing.h"
-#include "../drawing/Rectangle.h"
 #include "../interface/Cursors.h"
 #include "../ride/RideAudio.h"
 #include "../ui/UiContext.h"
@@ -895,86 +894,6 @@ static constexpr float kWindowScrollLocations[][2] = {
      * right (dx)
      * bottom (bp)
      */
-    // OPENRCT2MINI active-window-emphasis plan §2.2: reverse-iterate
-    // gWindowList looking for the topmost "user-interactive" window —
-    // the one the user is currently working with. This is shared
-    // between the drop-shadow (this file) and the titlebar-dim
-    // (Widget.cpp via the public isActiveWindowForEmphasis() wrapper
-    // below) so the two effects always agree.
-    //
-    // Filter is intentionally less strict than enterFocusModeOnTopmost's
-    // findTopmost: stickToFront chrome IS eligible. The toolbar is the
-    // active surface when nothing else is open; excluding it would
-    // make the dim effect a no-op in single-window scenes (the
-    // previous attempt's failure mode for feature 2).
-    static WindowBase* GetActiveWindowForEmphasis()
-    {
-        for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
-        {
-            auto* w = it->get();
-            if (w == nullptr)
-                continue;
-            if (w->flags.has(WindowFlag::dead))
-                continue;
-            if (w->flags.has(WindowFlag::transparent))
-                continue;
-            if (!w->isVisible)
-                continue;
-            const auto cls = w->classification;
-            if (cls == WindowClass::mainWindow || cls == WindowClass::tooltip
-                || cls == WindowClass::mapTooltip)
-                continue;
-            return w;
-        }
-        return nullptr;
-    }
-
-    bool isActiveWindowForEmphasis(const WindowBase& w)
-    {
-        return GetActiveWindowForEmphasis() == &w;
-    }
-
-    // OPENRCT2MINI active-window-emphasis plan §2.1: paint the L-shaped
-    // drop-shadow outside the active window's bottom-right edge.
-    //
-    // Two non-overlapping rects (overlap would double-darken via
-    // paletteDarken2 and visibly bend the L corner):
-    //   - Right strip:  1 wide × height tall, at (x + width, y + 2)
-    //   - Bottom strip: (width - 1) wide × 2 tall, at (x + 1, y + height)
-    //
-    // Mirrors the software-cursor drop shadow's (+1, +2) offset and
-    // paletteDarken2 intensity at src/openrct2-ui/SoftwareCursor.cpp:325
-    // — visual consistency between the two effects.
-    //
-    // Rectangle::filter clips to rt bounds (X8DrawingContext::FilterRect's
-    // range checks at Drawing/X8DrawingEngine.cpp:481+), so this is safe
-    // to call unconditionally — coordinates that fall outside the
-    // dirty-region rt just no-op.
-    static void DrawActiveWindowDropShadow(Drawing::RenderTarget& rt, const WindowBase& w)
-    {
-        constexpr int32_t kShadowOffX = 1;
-        constexpr int32_t kShadowOffY = 2;
-        const int32_t wx = w.windowPos.x;
-        const int32_t wy = w.windowPos.y;
-        const int32_t ww = w.width;
-        const int32_t wh = w.height;
-        if (ww <= 0 || wh <= 0)
-            return;
-        // Right strip — 1 wide, wh tall, starting +2 below window top.
-        Drawing::Rectangle::filter(
-            rt, { { wx + ww, wy + kShadowOffY }, { wx + ww, wy + kShadowOffY + wh - 1 } },
-            Drawing::FilterPaletteID::paletteDarken2);
-        // Bottom strip — (ww - 1) wide, 2 tall, starting +1 right of
-        // window left. Skip if ww < 2 (single-column window — no bottom
-        // strip width).
-        if (ww >= 2)
-        {
-            Drawing::Rectangle::filter(
-                rt, { { wx + kShadowOffX, wy + wh }, { wx + ww - 1, wy + wh + kShadowOffY - 1 } },
-                Drawing::FilterPaletteID::paletteDarken2);
-        }
-    }
-
     void WindowDrawAll(Drawing::RenderTarget& rt, int32_t left, int32_t top, int32_t right, int32_t bottom)
     {
         auto windowRT = rt.Crop({ left, top }, { right - left, bottom - top });
@@ -987,17 +906,6 @@ static constexpr float kWindowScrollLocations[][2] = {
                 return;
             WindowDraw(windowRT, *w, left, top, right, bottom);
         });
-        // OPENRCT2MINI active-window-emphasis plan §2.3: paint the
-        // active window's drop shadow AFTER the visitor loop so it
-        // lands on top of whatever lower window / backdrop occupies
-        // the bottom-right adjacent pixels. Hooking here (rather than
-        // inside WindowDrawSingle) dodges the WindowDrawCore clamp at
-        // Window.cpp:569 that would clip the shadow strips to the
-        // active window's own pixel rect.
-        if (auto* active = GetActiveWindowForEmphasis())
-        {
-            DrawActiveWindowDropShadow(windowRT, *active);
-        }
     }
 
     void WindowInitAll()

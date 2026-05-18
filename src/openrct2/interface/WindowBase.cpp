@@ -25,24 +25,7 @@ namespace OpenRCT2
 
     void WindowBase::invalidate()
     {
-        // OPENRCT2MINI active-window-emphasis plan §2.4(a) (2026-05-18):
-        // extend the dirty rect by the active-window drop-shadow
-        // footprint (+1 right, +2 bottom) so the dirty-block grid
-        // also re-renders the L-shaped shadow strips when this
-        // window moves / closes / changes z-order. The drop-shadow
-        // paint lives at end of WindowDrawAll and clips against the
-        // dirty region; without this extension, when only the
-        // window's interior is invalidated the dirty block won't
-        // cover the strips and they'd never repaint.
-        //
-        // The cost is two extra pixel columns / rows of dirty area
-        // per invalidate — well within the block-rounding tolerance
-        // of the invalidation grid (64×64 blocks).
-        constexpr int32_t kShadowOffX = 1;
-        constexpr int32_t kShadowOffY = 2;
-        GfxSetDirtyBlocks(
-            { windowPos,
-              windowPos + ScreenCoordsXY{ width + kShadowOffX, height + kShadowOffY } });
+        GfxSetDirtyBlocks({ windowPos, windowPos + ScreenCoordsXY{ width, height } });
     }
 
     void WindowBase::removeViewport()
