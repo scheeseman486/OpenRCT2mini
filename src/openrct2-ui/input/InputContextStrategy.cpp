@@ -429,18 +429,44 @@ namespace OpenRCT2::Ui
                 {
                     mgr.setFocus(cls, WidgetFocus::firstFocusable(*w));
                     // OPENRCT2MINI grid-cursor-plan §12.1
-                    // (amendment 2026-05-17 #4 — user feedback):
-                    // setFocus only mutates the InputManager
-                    // fields; it does NOT trigger a window
-                    // repaint. The focus ring is drawn during
-                    // the per-window paint cycle, so without
-                    // an explicit invalidation the ring stays
+                    // (amendment 2026-05-17 #5 — diagnostic
+                    // follow-up): the InvalidateByClass call
+                    // that was here is now in
+                    // ToolContext::onDeactivate. Rationale:
+                    // exitGridCursorMode runs inside the same
+                    // process() frame that processEvents
+                    // dispatched the kInterfaceConfirm to us;
+                    // _activeContext was already resolved at
+                    // the TOP of process() and is still
+                    // toolFootpath, and stays toolFootpath until
+                    // the NEXT process() pass re-resolves.
+                    // An InvalidateByClass fired here dirties
+                    // the window's screen blocks for THIS
+                    // frame's paint — but THIS frame's paint
+                    // still sees ctx == toolFootpath, so
+                    // drawFocusOutlineIfActive's gate-1 (ctx ==
+                    // widgetFocus || osk) returns early and the
+                    // ring isn't painted. NEXT frame the active
+                    // context is widgetFocus, but no fresh
+                    // invalidation fires (onDeactivate's
+                    // setSelectorMode is a no-op when
+                    // _savedSelectorMode == active == current,
+                    // so its own invalidation hook doesn't
+                    // run), and the tool window doesn't
+                    // repaint at all. Net: ring stays
                     // unpainted until something else dirties
-                    // the window (e.g. clock tick, hover-state
-                    // change). Mirror the engage-direction's
-                    // clearFocus + InvalidateByClass shape so
-                    // the ring appears on the next frame.
-                    windowMgr->InvalidateByClass(cls);
+                    // the window.
+                    //
+                    // Moving the invalidation to onDeactivate
+                    // gets the timing right — onDeactivate
+                    // runs from process()'s strategy-transition
+                    // block AFTER resolveActiveContext has
+                    // flipped _activeContext to widgetFocus,
+                    // but BEFORE that frame's paint. The
+                    // InvalidateByClass there dirties the
+                    // window's blocks for the SAME frame's
+                    // paint, which now sees ctx == widgetFocus
+                    // and the ring draws.
                 }
             }
         }
@@ -558,5 +584,31 @@ namespace OpenRCT2::Ui
         // Restore whatever SelectorMode the user was in before tool
         // entry.
         GetInputManager().setSelectorMode(_savedSelectorMode);
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17 #5
+        // — off-by-one frame fix): invalidate the tool window here so
+        // the focus ring repaints on the SAME frame that the active
+        // context flips to widgetFocus. The InvalidateByClass that
+        // used to live in exitGridCursorMode fired on the previous
+        // frame, where the paint still saw the active context as
+        // toolFootpath and drawFocusOutlineIfActive's first gate
+        // (ctx == widgetFocus || osk) returned early. By the time
+        // the next frame's paint ran, no fresh invalidation had
+        // fired (setSelectorMode here is a no-op when
+        // _savedSelectorMode == active and we're already active, so
+        // its built-in invalidation hook doesn't trigger), and the
+        // tool window's screen blocks weren't repainted at all.
+        //
+        // onDeactivate runs from InputManager::process()'s
+        // strategy-transition block AFTER resolveActiveContext has
+        // re-resolved _activeContext to widgetFocus, but BEFORE
+        // that same frame's Draw(). The InvalidateByClass here
+        // dirties the window's blocks for the SAME frame's paint,
+        // which now sees ctx == widgetFocus and draws the ring.
+        if (gInputFlags.has(InputFlag::toolActive))
+        {
+            const auto cls = gCurrentToolWidget.windowClassification;
+            if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
+                windowMgr->InvalidateByClass(cls);
+        }
     }
 } // namespace OpenRCT2::Ui
