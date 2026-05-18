@@ -44,6 +44,7 @@
 #include <openrct2/ui/WindowManager.h>
 #include <openrct2/world/Footpath.h>
 #include <openrct2/world/Map.h>
+#include <openrct2/world/MapSelection.h>
 #include "WidgetFocus.h"
 
 using namespace OpenRCT2::Ui;
@@ -2684,6 +2685,22 @@ void InputManager::process()
     // synthesise enter the event flow alongside SDL events).
     // Phase 3.A's WorldContextStub::processFrame is a no-op.
     getActiveContextStrategy().processFrame(SDL_GetTicks());
+    // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17 #8
+    // — parked-cursor blink pump): when the grid cursor is in
+    // parked state, the active strategy is widgetFocus (or world)
+    // whose default processFrame is a no-op, so ToolContext's
+    // per-frame tile invalidation doesn't run. Without that, the
+    // tile only repaints when something else invalidates it (a
+    // pan, an entity move, etc.), and the surface paint's
+    // `(ms / 500) & 1` blink gate gets frozen at whichever phase
+    // last redrew — the user sees the marker blink a few times
+    // then stop half-drawn.
+    //
+    // Fire the per-frame invalidate here, independent of which
+    // strategy is active. Cheap when the flag is off (one
+    // FlagHolder::has check).
+    if (gMapSelectFlags.has(MapSelectFlag::gridCursorParked))
+        MapInvalidateTileFull(gMapSelectPositionA);
     processEvents();
     processHoldEvents();
     handleViewScrolling();
