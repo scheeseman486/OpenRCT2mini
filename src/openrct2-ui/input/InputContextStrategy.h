@@ -473,6 +473,15 @@ namespace OpenRCT2::Ui
         // marker globals on deactivate so the tile-marker paint stops
         // rendering when the tool exits.
         bool _wroteSelection{ false };
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17
+        // #6 — position preservation): set true in onDeactivate when
+        // we're returning to widgetFocus because the user toggled OFF
+        // grid mode (the tool is still armed). On the next
+        // onActivate the seed-from-viewport-centre logic is skipped
+        // so the grid cursor resumes where the user left off. Reset
+        // to false in onActivate after the skip, so the next genuine
+        // tool start (after a tool cancel and re-arm) re-seeds.
+        bool _resumeFromGridExit{ false };
 
     public:
         // Verbs — override as needed. Default returns Consumed so the

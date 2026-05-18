@@ -455,28 +455,27 @@ namespace
                 && mgr.getFocusedWindowClass() == OpenRCT2::gCurrentToolWidget.windowClassification)
             {
                 // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
-                // 2026-05-17 #5 — user feedback): keep the focus
-                // state intact through grid-cursor mode. The
-                // earlier clearFocus() on engage was both
-                // unnecessary (drawFocusOutlineIfActive's first
-                // gate is ctx == widgetFocus, so the ring won't
-                // draw when the active context is toolXxx) AND
-                // it broke the return trip — the bootstrap re-
-                // populates focus from topmost during grid mode
-                // only when widgetFocusAlwaysOn is on, and even
-                // then the focus widget index can churn,
-                // leaving exitGridCursorMode's setFocus call
-                // with no observable change for the
-                // invalidation hook to repaint.
+                // 2026-05-17 #6 — off-by-one frame fix engage
+                // side): the InvalidateByClass that used to live
+                // here fired on the SAME frame as the
+                // setToolFocusSelected, but _activeContext had
+                // already been resolved at the top of process()
+                // and was still widgetFocus. The same-frame paint
+                // saw ctx == widgetFocus, redrew the window AND
+                // re-painted the focus ring. The active context
+                // flipped to toolFootpath on the NEXT frame, but
+                // no fresh invalidation fired, so the ring stayed
+                // painted from the previous frame.
                 //
-                // Invalidate the tool window so the next redraw
-                // clears the previously-painted ring pixels —
-                // the ring won't redraw because the active
-                // context will have flipped to toolFootpath by
-                // the time the window paints.
-                const auto cls = mgr.getFocusedWindowClass();
-                if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
-                    windowMgr->InvalidateByClass(cls);
+                // Moved the invalidation into
+                // ToolContext::onActivate, which runs from the
+                // strategy-transition block on frame N+1 AFTER
+                // resolveActiveContext flips _activeContext to
+                // toolFootpath. The invalidation dirties the
+                // window's blocks for that same frame's paint,
+                // which now sees ctx == toolFootpath and gate-1
+                // of drawFocusOutlineIfActive returns early. Ring
+                // disappears.
                 mgr.setToolFocusSelected(
                     true, OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
                 return Disposition::Consumed;

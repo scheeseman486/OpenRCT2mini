@@ -303,6 +303,16 @@ namespace OpenRCT2::Ui
         // selector's perspective (ring hidden) — keep the pixel
         // cursor off by going to active.
         mgr.setSelectorMode(InputManager::SelectorMode::active);
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17
+        // #6 — position preservation): if we're resuming from a
+        // user-initiated grid-mode exit (Start toggle), preserve
+        // the grid cursor's tile so the user picks up where they
+        // left off. The _resumeFromGridExit flag is set in
+        // onDeactivate when the tool is still armed (vs. when the
+        // tool was cancelled, where re-seeding on the next engage
+        // is the desired behaviour).
+        const bool resuming = _resumeFromGridExit;
+        _resumeFromGridExit = false;
         // §10: seed the grid cursor's initial paint state so the
         // highlight appears immediately on tool entry. Without this
         // the cursor model's _position is set but nothing pushes it
@@ -320,7 +330,12 @@ namespace OpenRCT2::Ui
             // map projection) we fall back to scrolling the camera
             // to whatever the model currently holds so the cursor
             // is at least visible.
-            const auto seed = ViewportCentreTile();
+            //
+            // On resume (toggle-back-to-grid-mode), skip the
+            // viewport-centre seed and re-emit the existing
+            // position to the gMapSelect globals so the highlight
+            // appears at the user's last grid tile.
+            const auto seed = resuming ? std::nullopt : ViewportCentreTile();
             if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
             {
                 if (seed)
@@ -339,6 +354,23 @@ namespace OpenRCT2::Ui
                     ScrollMainWindowIfCursorNearEdge(edge->getPosition());
                 _wroteSelection = true;
             }
+        }
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17
+        // #6 — engage-side off-by-one fix): invalidate the tool
+        // window so the focus ring clears on the same frame the
+        // active context flips to toolFootpath. Symmetric with the
+        // onDeactivate-side fix: onActivate runs from the
+        // strategy-transition block AFTER resolveActiveContext
+        // promoted _activeContext to toolFootpath but BEFORE this
+        // frame's Draw(). The invalidation dirties the window's
+        // screen blocks for THIS paint, which now sees ctx ==
+        // toolFootpath and drawFocusOutlineIfActive's first gate
+        // returns early — ring disappears.
+        if (gInputFlags.has(InputFlag::toolActive))
+        {
+            const auto cls = gCurrentToolWidget.windowClassification;
+            if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
+                windowMgr->InvalidateByClass(cls);
         }
     }
 
@@ -604,8 +636,15 @@ namespace OpenRCT2::Ui
         // that same frame's Draw(). The InvalidateByClass here
         // dirties the window's blocks for the SAME frame's paint,
         // which now sees ctx == widgetFocus and draws the ring.
+        //
+        // ALSO arms _resumeFromGridExit so the next onActivate
+        // preserves the grid-cursor tile (toggle UX). Only when
+        // the tool is still armed — if onDeactivate is firing
+        // because the tool was cancelled, we want the next
+        // tool engagement to re-seed at the viewport centre.
         if (gInputFlags.has(InputFlag::toolActive))
         {
+            _resumeFromGridExit = true;
             const auto cls = gCurrentToolWidget.windowClassification;
             if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
                 windowMgr->InvalidateByClass(cls);
