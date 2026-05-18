@@ -426,7 +426,22 @@ namespace OpenRCT2::Ui
             if (windowMgr != nullptr)
             {
                 if (auto* w = windowMgr->FindByClass(cls); w != nullptr)
+                {
                     mgr.setFocus(cls, WidgetFocus::firstFocusable(*w));
+                    // OPENRCT2MINI grid-cursor-plan §12.1
+                    // (amendment 2026-05-17 #4 — user feedback):
+                    // setFocus only mutates the InputManager
+                    // fields; it does NOT trigger a window
+                    // repaint. The focus ring is drawn during
+                    // the per-window paint cycle, so without
+                    // an explicit invalidation the ring stays
+                    // unpainted until something else dirties
+                    // the window (e.g. clock tick, hover-state
+                    // change). Mirror the engage-direction's
+                    // clearFocus + InvalidateByClass shape so
+                    // the ring appears on the next frame.
+                    windowMgr->InvalidateByClass(cls);
+                }
             }
         }
         return Disposition::Consumed;
