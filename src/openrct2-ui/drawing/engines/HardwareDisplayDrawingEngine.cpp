@@ -411,12 +411,27 @@ private:
         // tile's screen projection, so the sprite naturally lines up
         // with the parked tile. Cheap to re-enable since the sprite
         // path was already there.
+        //
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-18
+        // — placing-mode sprite): also keep the sprite drawn when
+        // the grid cursor is actively being controlled (gridCursor
+        // flag set, no parked flag). _uiContext.GetCursor() returns
+        // the active tool's cursor (gCurrentToolId — e.g. Footpath /
+        // Bulldozer / TreeDown) in this state, which makes the
+        // sprite a useful "tool head" indicator riding on top of
+        // the grid tile selection rectangle. Sync already runs in
+        // placing mode because SelectorMode is active, so the
+        // sprite naturally lands on the grid tile via the same
+        // gMapSelectPositionA path used for parked mode.
         const bool selectorActive
             = OpenRCT2::Ui::GetInputManager().getSelectorMode()
                 == OpenRCT2::Ui::InputManager::SelectorMode::active;
         const bool gridCursorParked
             = gMapSelectFlags.has(MapSelectFlag::gridCursorParked);
-        const bool selectorOwnsScreen = selectorActive && !gridCursorParked;
+        const bool gridCursorActive
+            = gMapSelectFlags.has(MapSelectFlag::gridCursor);
+        const bool selectorOwnsScreen
+            = selectorActive && !gridCursorParked && !gridCursorActive;
 
         if (_swCursor != nullptr && !loadingWindowVisible && !selectorOwnsScreen)
         {
@@ -432,6 +447,28 @@ private:
             _swCursor->SetStyle(Config::Get().interface.cursorStyle);
 
             CursorID cur = _uiContext.GetCursor();
+            // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-18
+            // — tool-cursor in grid states): in placing / parked grid
+            // cursor states, SelectorMode is `active`, which causes
+            // MouseInput.cpp's ProcessMouseOver to return early without
+            // ever calling SetCursor(static_cast<CursorID>(gCurrentToolId)).
+            // The cursor identity therefore stays at whatever was last
+            // set (typically Arrow from widget-focus navigation),
+            // which makes the sprite an Arrow above the parked tile
+            // instead of the tool's cursor (PathDown for Footpath,
+            // Bulldozer for Clear Scenery, etc.). Mirror MouseInput's
+            // viewport-hover behaviour here: when a tool is armed and
+            // the grid cursor flags are live, use gCurrentToolId. This
+            // also guarantees a non-Undefined cursor for the sprite
+            // path so Composite always has a valid sprite to draw —
+            // covers the "sprite not visible at all in placing mode"
+            // case if _uiContext.GetCursor() happened to be Undefined
+            // at the moment we enter a tool-armed grid state.
+            if ((gridCursorActive || gridCursorParked)
+                && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive))
+            {
+                cur = static_cast<CursorID>(gCurrentToolId);
+            }
             if (cur != _lastSwCursor)
             {
                 _swCursor->SetCursor(cur);

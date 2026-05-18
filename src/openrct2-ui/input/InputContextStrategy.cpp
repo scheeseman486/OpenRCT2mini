@@ -378,6 +378,19 @@ namespace OpenRCT2::Ui
             const auto cls = gCurrentToolWidget.windowClassification;
             if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
                 windowMgr->InvalidateByClass(cls);
+            // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-18
+            // — tool cursor identity on engage): push the tool's cursor
+            // into the global cursor identity right at tool engagement.
+            // MouseInput.cpp's ProcessMouseOver normally handles this on
+            // viewport hover, but in grid cursor mode SelectorMode is
+            // active and ProcessMouseOver returns early. Without this
+            // push, the cursor identity stays at whatever the user had
+            // before engaging the tool (Arrow from widget navigation,
+            // typically), and the software cursor sprite (now drawn at
+            // the parked / placing tile by HardwareDisplayDrawingEngine)
+            // renders as that stale Arrow instead of the tool's actual
+            // cursor — Footpath / Bulldozer / Tree etc.
+            ContextSetCurrentCursor(static_cast<CursorID>(gCurrentToolId));
         }
     }
 

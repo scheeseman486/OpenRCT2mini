@@ -1719,6 +1719,23 @@ void InputManager::onTransitionEvent(SelectorTransitionSource src)
             // drop both modes.
             if (_toolFocusSelected)
                 _toolFocusSelected = false;
+            // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-18
+            // — full grid-cursor kick-out on cursor activation): also
+            // drop the parked highlight. Without this, the realMouse-
+            // Motion handler only clears _toolFocusSelected (the latch)
+            // but the grid-cursor flags survive: ToolContext::on-
+            // Deactivate set MapSelectFlag::gridCursorParked + kept
+            // MapSelectFlag::enable when the tool was still armed, and
+            // those flags are what drive the Paint.Surface tile-blink
+            // overlay + the software cursor sprite parking. After
+            // clearing _toolFocusSelected the user is no longer in any
+            // grid-cursor strategy yet the parked tile keeps rendering
+            // — exactly the "kick out of grid cursor mode" gesture the
+            // user expects to fully end. Clear all three flags so the
+            // tile selection disappears entirely.
+            gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
+            gMapSelectFlags.unset(MapSelectFlag::gridCursor);
+            gMapSelectFlags.unset(MapSelectFlag::enable);
             break;
         case SelectorTransitionSource::realMouseClick:
             // A real-mouse click. Mark the input source so the

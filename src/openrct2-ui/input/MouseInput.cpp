@@ -1330,6 +1330,24 @@ namespace OpenRCT2
                 auto* windowMgr = GetWindowManager();
                 if (windowMgr != nullptr)
                     windowMgr->CloseByClass(WindowClass::tooltip);
+                // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-18
+                // — tool cursor identity in grid states): the early-return
+                // above (CS-R4 hover-suppression) prevents the cursor
+                // identity from ever being updated to gCurrentToolId when
+                // the user is on the tool window with the selector active
+                // and a tool armed. The software cursor sprite then shows
+                // the stale Arrow over the grid tile in parked / placing
+                // state instead of the tool's actual cursor (PathDown,
+                // Bulldozer, etc.). Push the tool cursor identity here so
+                // the sprite reflects the active tool. Mirrors the
+                // viewport-hover branch below (case WidgetType::viewport)
+                // that runs in SelectorMode::hidden.
+                if (gInputFlags.has(InputFlag::toolActive)
+                    && (gMapSelectFlags.has(MapSelectFlag::gridCursor)
+                        || gMapSelectFlags.has(MapSelectFlag::gridCursorParked)))
+                {
+                    SetCursor(static_cast<CursorID>(gCurrentToolId));
+                }
                 return;
             }
         }

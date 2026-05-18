@@ -1905,7 +1905,31 @@ private:
             {
                 dpadRight = _inputManager.getState(*right);
             }
-            if (selectorActive || capturePending)
+            // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-18
+            // — virtual cursor kick-out from parked grid cursor): if
+            // the grid cursor is in parked state (focus mode on tool
+            // window, gridCursorParked flag set) and the user presses
+            // any cursor.* directional shortcut, treat it as a request
+            // to exit grid cursor mode entirely. Without this carve-
+            // out the polled-velocity zero-out below silently eats
+            // every cursor.up / cursor.down / cursor.left / cursor.right
+            // press — the user can't "wake" the virtual cursor while
+            // parked. Mirrors realMouseMotion's exit behaviour for
+            // virtual input.
+            const bool gridCursorParkedForExit
+                = gMapSelectFlags.has(MapSelectFlag::gridCursorParked);
+            const bool anyCursorDirectional
+                = dpadUp || dpadDown || dpadLeft || dpadRight;
+            bool exitedParkedThisFrame = false;
+            if (gridCursorParkedForExit && anyCursorDirectional)
+            {
+                gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
+                gMapSelectFlags.unset(MapSelectFlag::gridCursor);
+                gMapSelectFlags.unset(MapSelectFlag::enable);
+                _inputManager.setSelectorMode(InputManager::SelectorMode::hidden);
+                exitedParkedThisFrame = true;
+            }
+            if ((selectorActive && !exitedParkedThisFrame) || capturePending)
             {
                 dpadUp = dpadDown = dpadLeft = dpadRight = false;
             }
@@ -1962,7 +1986,18 @@ private:
             // DropdownActive state will tear that down via its own
             // bottom-toolbar / escape paths, and the selector-driven
             // focus mode owns dispatch from here on.
-            if (selectorActive)
+            // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-18):
+            // skip the selector-owns click/cancel zero-out when we
+            // just exited parked grid-cursor mode this frame above —
+            // the press that triggered the exit should be allowed to
+            // flow through to handleButton so the user's gesture has
+            // a coherent click effect (e.g. cursor.click pressed
+            // during exit still synthesises a leftPress at the now-
+            // visible cursor position). selectorActive was captured
+            // before we flipped the mode to hidden, so it still
+            // reads true here — the exitedParkedThisFrame side-check
+            // is what rescues the press.
+            if (selectorActive && !exitedParkedThisFrame)
             {
                 btnA = false;
                 _vprevA = false;
@@ -2270,9 +2305,29 @@ private:
     {
         const bool selectorActive
             = _inputManager.getSelectorMode() == InputManager::SelectorMode::active;
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-18
+        // — parked-tile sprite anchoring on host): also run the sync
+        // body when the grid cursor is parked, regardless of
+        // SelectorMode. On host with widgetFocusAlwaysOn=false (the
+        // default), entering parked state via tool-window toggle
+        // leaves SelectorMode at `hidden` — ToolContext::onDeactivate
+        // restores _savedSelectorMode, which captured `hidden` at
+        // onActivate-time. Without this broadened gate the sync
+        // body never fires, _cursorState.position keeps whatever
+        // stale OS-mouse coords it had, and the software cursor
+        // sprite (now re-enabled in parked state by
+        // HardwareDisplayDrawingEngine's `selectorOwnsScreen
+        // && !gridCursorParked` carve-out) renders there instead
+        // of at the parked tile. The body's first branch already
+        // picks up gMapSelectPositionA when `enable` is set, which
+        // is always true in parked state (onDeactivate's "stay
+        // visible, blink" path keeps `enable` and adds
+        // `gridCursorParked`).
+        const bool gridCursorParked
+            = gMapSelectFlags.has(MapSelectFlag::gridCursorParked);
         const float scale = static_cast<float>(Config::Get().general.windowScale);
 
-        if (selectorActive)
+        if (selectorActive || gridCursorParked)
         {
             std::optional<ScreenCoordsXY> syncTo;
             if (gMapSelectFlags.has(MapSelectFlag::enable)
