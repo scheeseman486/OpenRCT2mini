@@ -362,32 +362,6 @@ namespace OpenRCT2::Ui
         // _toolFocusSelected snap.
         bool _previousToolActive{ false };
 
-        // OPENRCT2MINI active-window-emphasis plan §4 (2026-05-18):
-        // cycle-window outline persistence state. Set by
-        // cycleFocusedWindow when the user dispatches a cycle action;
-        // cleared at the end of process() when the armed modifier is
-        // no longer held (or after the fallback timeout for modifier-
-        // less cycle bindings).
-        //
-        // _cycleHighlightClass — which window currently has the
-        //                        cycle-highlight outline drawn on it.
-        //                        WindowClass::null when no cycle is
-        //                        in progress.
-        // _cycleHighlightModifierMask — ModifierKey bits the active
-        //                        cycle binding requires (sourced from
-        //                        the union of both kInterfaceCycle*
-        //                        bindings' ShortcutInput::modifiers,
-        //                        translated from SDL KMOD bits via
-        //                        kmodToModifierKey below). Zero means
-        //                        the binding requires no modifier →
-        //                        fallback timeout.
-        // _cycleHighlightUntilMs — Platform::GetTicks() deadline for
-        //                        the modifier-less fallback. Zero
-        //                        when not in use.
-        WindowClass _cycleHighlightClass{ static_cast<WindowClass>(255) };
-        uint8_t _cycleHighlightModifierMask{ 0 };
-        uint32_t _cycleHighlightUntilMs{ 0 };
-
         // OPENRCT2MINI focus-mode-plan §F.16: history stack for
         // cancel/back navigation. Every time the selector snaps to
         // a new topmost window (because a button click opened it,
@@ -419,18 +393,6 @@ namespace OpenRCT2::Ui
         bool isFocusModeRequested() const
         {
             return _focusModeRequested;
-        }
-
-        // OPENRCT2MINI active-window-emphasis plan §4.4 (2026-05-18):
-        // public query for the cycle-window outline persistence latch.
-        // WidgetFocus::drawFocusOutlineIfActive consults this to draw
-        // the white focus ring on the cycled-to window while the
-        // user is still holding the cycle binding's modifier —
-        // independent of SelectorMode / active-context gates. Returns
-        // WindowClass::null when no cycle is in progress.
-        WindowClass getCycleHighlightClass() const noexcept
-        {
-            return _cycleHighlightClass;
         }
 
         // OPENRCT2MINI focus-mode-plan / Phase F.3: focus state

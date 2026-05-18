@@ -1093,25 +1093,6 @@ namespace OpenRCT2::Ui
         //       that happens to share state with an old focus.
         //   (3) drawFocusOutline itself bounds-checks the widget
         //       index and skips non-focusable types — defensive.
-        // OPENRCT2MINI active-window-emphasis plan §4.4 (2026-05-18):
-        // cycle-window outline bypass. When the user just dispatched a
-        // cycle-window shortcut AND is still holding its modifier, the
-        // cycled-to window draws the focus ring regardless of the
-        // active context / SelectorMode / focused-class gates below.
-        // The user's gesture says "show me which window I just
-        // cycled to," so we honour it even in cursor mode.
-        const auto cycleClass = mgr.getCycleHighlightClass();
-        if (cycleClass != WindowClass::null && window.classification == cycleClass)
-        {
-            // Use the focused-widget framing path — same body as the
-            // normal-mode draw below. Falls through to the regular
-            // gates if cycleClass IS set but this window isn't the
-            // cycled one (an active dropdown could still draw its
-            // own ring on a non-cycled window).
-            const auto focusedWidget = mgr.getFocusedWidget();
-            WidgetFocus::drawFocusOutline(rt, window, focusedWidget);
-            return;
-        }
         const auto ctx = mgr.getActiveContext();
         if (ctx != InputContext::widgetFocus && ctx != InputContext::osk)
             return;

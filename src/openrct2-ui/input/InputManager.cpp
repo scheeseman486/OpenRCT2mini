@@ -40,7 +40,6 @@
 #include <openrct2/interface/WindowBase.h>
 #include <openrct2/interface/WindowClasses.h>
 #include <openrct2/paint/VirtualFloor.h>
-#include <openrct2/platform/Platform.h>
 #include <openrct2/ui/UiContext.h>
 #include <openrct2/ui/WindowManager.h>
 #include <openrct2/world/Footpath.h>
@@ -2028,48 +2027,6 @@ void InputManager::cycleFocusedWindow(int direction)
     // back-layered window while the topmost still draws over it.
     windowMgr->BringToFrontByClass(landingCls);
     w->invalidate();
-
-    // OPENRCT2MINI active-window-emphasis plan §4.3 (2026-05-18):
-    // arm the cycle-highlight latch so the white focus ring keeps
-    // drawing on the cycled-to window for as long as the user is
-    // still holding the cycle binding's modifier. Union both cycle
-    // bindings' modifier masks — the user might cycle with one and
-    // switch to the other mid-gesture; either being held should
-    // keep the highlight on. Modifier-less bindings get a 250 ms
-    // fallback timeout so the visual cue is at least perceptible.
-    {
-        constexpr uint32_t kCycleUsefulModifiers
-            = KMOD_SHIFT | KMOD_CTRL | KMOD_ALT | KMOD_GUI;
-        auto& shortcutMgr = GetShortcutManager();
-        uint32_t kmodUnion = 0;
-        if (const auto* sc = shortcutMgr.getShortcut(ShortcutId::kInterfaceCycleNextWindow))
-        {
-            for (const auto& input : sc->current)
-                kmodUnion |= (input.modifiers & kCycleUsefulModifiers);
-        }
-        if (const auto* sc = shortcutMgr.getShortcut(ShortcutId::kInterfaceCyclePreviousWindow))
-        {
-            for (const auto& input : sc->current)
-                kmodUnion |= (input.modifiers & kCycleUsefulModifiers);
-        }
-        // Translate SDL KMOD bits → collapsed ModifierKey bits. SDL
-        // KMOD_LSHIFT=0x0001 / KMOD_RSHIFT=0x0002 etc. are NOT bit-
-        // aligned with ModifierKey::shift=0x01 / ctrl=0x02 / etc., so
-        // a per-modifier map is mandatory.
-        uint8_t mkMask = 0;
-        if (kmodUnion & KMOD_SHIFT)
-            mkMask |= EnumValue(ModifierKey::shift);
-        if (kmodUnion & KMOD_CTRL)
-            mkMask |= EnumValue(ModifierKey::ctrl);
-        if (kmodUnion & KMOD_ALT)
-            mkMask |= EnumValue(ModifierKey::alt);
-        if (kmodUnion & KMOD_GUI)
-            mkMask |= EnumValue(ModifierKey::cmd);
-        _cycleHighlightClass = landingCls;
-        _cycleHighlightModifierMask = mkMask;
-        _cycleHighlightUntilMs
-            = (mkMask == 0) ? Platform::GetTicks() + 250 : 0;
-    }
 }
 
 bool InputManager::enterFocusModeOnTopmost()
@@ -2795,39 +2752,6 @@ void InputManager::process()
     // Submits one trailing (0,0,0) sweep on flash expiry, then
     // idles silently until the next News::AddItemToQueue call.
     Led::tickEngine(nowMs);
-
-    // OPENRCT2MINI active-window-emphasis plan §4.3 (2026-05-18):
-    // cycle-highlight release pass. Runs AFTER processEvents() so
-    // _modifierKeyState reflects the user's current frame state.
-    // Clear the latch when either (a) the armed modifier bits are
-    // no longer held, or (b) for modifier-less bindings, the 250ms
-    // fallback timeout expired. Invalidate the highlighted window
-    // before clearing _cycleHighlightClass so its ring repaints
-    // away cleanly next frame — drawFocusOutlineIfActive gates on
-    // the class field, so we need the invalidate to land while the
-    // class still matches.
-    // The WindowClass enum has no explicit `null`; the codebase uses
-    // static_cast<WindowClass>(255) as the sentinel (matches
-    // _focusedWindowClass / _lastTopmostFocusable initialisers).
-    constexpr WindowClass kCycleHighlightNoClass = static_cast<WindowClass>(255);
-    if (_cycleHighlightClass != kCycleHighlightNoClass)
-    {
-        const bool armed = (_cycleHighlightModifierMask != 0);
-        const bool keep
-            = armed ? (_modifierKeyState & _cycleHighlightModifierMask) != 0
-                    : Platform::GetTicks() < _cycleHighlightUntilMs;
-        if (!keep)
-        {
-            if (auto* windowMgr = Ui::GetWindowManager(); windowMgr != nullptr)
-            {
-                if (auto* w = windowMgr->FindByClass(_cycleHighlightClass); w != nullptr)
-                    w->invalidate();
-            }
-            _cycleHighlightClass = kCycleHighlightNoClass;
-            _cycleHighlightModifierMask = 0;
-            _cycleHighlightUntilMs = 0;
-        }
-    }
 }
 
 InputContext InputManager::resolveActiveContext() const
