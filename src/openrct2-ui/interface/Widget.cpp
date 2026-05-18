@@ -605,9 +605,20 @@ namespace OpenRCT2::Ui
             ft.Add<const utf8*>(widget->string);
         }
 
+        // OPENRCT2MINI active-window-emphasis plan §3.3 (2026-05-18):
+        // titlebar text dims to grey when the window is not the
+        // active / topmost one. White → grey is the user-visible
+        // signal that "this window is in the background." The black
+        // outline (withOutline) stays so the text is still legible
+        // regardless of the titlebar's underlying colour. Shared
+        // probe with the drop-shadow path (Window.cpp's
+        // GetActiveWindowForEmphasis) so the two effects always
+        // pick the same active window.
+        const auto captionColour
+            = OpenRCT2::isActiveWindowForEmphasis(w) ? Drawing::Colour::white : Drawing::Colour::grey;
         drawTextEllipsised(
             rt, topLeft, width, formatString, ft,
-            { ColourWithFlags{ Drawing::Colour::white }.withFlag(ColourFlag::withOutline, true), TextAlignment::centre });
+            { ColourWithFlags{ captionColour }.withFlag(ColourFlag::withOutline, true), TextAlignment::centre });
     }
 
     /**
