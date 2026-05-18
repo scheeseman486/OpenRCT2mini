@@ -455,22 +455,26 @@ namespace
                 && mgr.getFocusedWindowClass() == OpenRCT2::gCurrentToolWidget.windowClassification)
             {
                 // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
-                // 2026-05-17 #3 — user feedback): clear the
-                // focused widget when engaging grid-cursor mode
-                // so the focus ring stops drawing on the tool
-                // window. Without this, the ring stays painted
-                // on the last focused button while the user is
-                // navigating the grid cursor, which is visual
-                // noise — the user's attention is on the world
-                // tile, not the widget. exitGridCursorMode re-
-                // sets the focus to the tool window's first
-                // focusable on the way back, so toggle symmetry
-                // is preserved.
+                // 2026-05-17 #5 — user feedback): keep the focus
+                // state intact through grid-cursor mode. The
+                // earlier clearFocus() on engage was both
+                // unnecessary (drawFocusOutlineIfActive's first
+                // gate is ctx == widgetFocus, so the ring won't
+                // draw when the active context is toolXxx) AND
+                // it broke the return trip — the bootstrap re-
+                // populates focus from topmost during grid mode
+                // only when widgetFocusAlwaysOn is on, and even
+                // then the focus widget index can churn,
+                // leaving exitGridCursorMode's setFocus call
+                // with no observable change for the
+                // invalidation hook to repaint.
                 //
                 // Invalidate the tool window so the next redraw
-                // clears the previously-painted ring pixels.
+                // clears the previously-painted ring pixels —
+                // the ring won't redraw because the active
+                // context will have flipped to toolFootpath by
+                // the time the window paints.
                 const auto cls = mgr.getFocusedWindowClass();
-                mgr.clearFocus();
                 if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
                     windowMgr->InvalidateByClass(cls);
                 mgr.setToolFocusSelected(
