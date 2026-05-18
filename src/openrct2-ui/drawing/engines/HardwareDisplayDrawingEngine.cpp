@@ -30,6 +30,7 @@
 #include <openrct2/paint/Paint.h>
 #include <openrct2/ui/UiContext.h>
 #include <openrct2/ui/WindowManager.h>       // OPENRCT2MINI: cursor-during-loading suppression
+#include <openrct2/world/MapSelection.h>     // OPENRCT2MINI grid-cursor-plan §12.1
 #include <openrct2-ui/UiContext.h>           // OPENRCT2MINI cursor-selector-modal-plan §3.3
 #include <openrct2-ui/input/InputManager.h>  // OPENRCT2MINI cursor-selector-modal-plan §3.3
 #include <vector>
@@ -400,9 +401,22 @@ private:
         // on top of it would be noise. Real mouse motion transitions
         // the state machine back to `mixed`, which re-enables the
         // draw path.
-        const bool selectorOwnsScreen
+        //
+        // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17 #9
+        // — parked-cursor sprite): when the grid cursor is in parked
+        // state (user is on the tool window in focus mode), keep the
+        // software cursor sprite drawn as the visual "this is where
+        // you'll be working when you engage" indicator. The cursor
+        // sync code already parks _cursorState.position at the grid
+        // tile's screen projection, so the sprite naturally lines up
+        // with the parked tile. Cheap to re-enable since the sprite
+        // path was already there.
+        const bool selectorActive
             = OpenRCT2::Ui::GetInputManager().getSelectorMode()
                 == OpenRCT2::Ui::InputManager::SelectorMode::active;
+        const bool gridCursorParked
+            = gMapSelectFlags.has(MapSelectFlag::gridCursorParked);
+        const bool selectorOwnsScreen = selectorActive && !gridCursorParked;
 
         if (_swCursor != nullptr && !loadingWindowVisible && !selectorOwnsScreen)
         {
