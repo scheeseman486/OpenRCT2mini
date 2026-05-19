@@ -80,6 +80,12 @@ static constexpr float kWindowScrollLocations[][2] = {
     static void WindowDrawSingle(
         Drawing::RenderTarget& rt, WindowBase& w, int32_t left, int32_t top, int32_t right, int32_t bottom);
 
+    // OPENRCT2MINI AWE forward decls — used by WindowUpdateAll for
+    // per-tick transition tracking. Bodies live near WindowDrawAll
+    // because they're paint-time helpers too.
+    static WindowBase* GetActiveWindowForEmphasis();
+    static bool IsPlayfieldFocused();
+
     std::vector<std::unique_ptr<WindowBase>>::iterator WindowGetIterator(const WindowBase* w)
     {
         return std::find_if(gWindowList.begin(), gWindowList.end(), [w](auto&& w2) { return w == w2.get(); });
@@ -219,6 +225,70 @@ static constexpr float kWindowScrollLocations[][2] = {
         windowManager->UpdateMouseWheel();
 
         WindowUpdateVisibilities();
+
+        // OPENRCT2MINI AWE 2026-05-19 round 2: per-tick reliable
+        // tracking for active-window + playfield transitions. Both
+        // were previously tracked inside WindowDrawAll, but that
+        // only fires when something dirties a block. If the user
+        // engages or disengages grid cursor mode without otherwise
+        // dirtying anything (e.g. window-cycle to virtual tool
+        // viewport), the transition was missed and stale pixels
+        // (window drop shadow, screen-edge highlight) would persist
+        // until something else triggered a paint. Hooking here —
+        // WindowUpdateAll runs once per game tick regardless of
+        // paint activity — guarantees the cleanup fires.
+        {
+            // Active-window prev tracking. When active changes (incl.
+            // transitions to nullptr when playfield engages),
+            // invalidate the demoted window so its drop-shadow strips
+            // clear up. WindowBase::invalidate extends by +1/+2 to
+            // cover the shadow region.
+            static WindowClass s_prevActiveCls = static_cast<WindowClass>(255);
+            static int32_t s_prevActiveNum = 0;
+            auto* active = GetActiveWindowForEmphasis();
+            const WindowClass newCls = (active != nullptr) ? active->classification
+                                                            : static_cast<WindowClass>(255);
+            const int32_t newNum = (active != nullptr) ? active->number : 0;
+            if (newCls != s_prevActiveCls || newNum != s_prevActiveNum)
+            {
+                if (s_prevActiveCls != static_cast<WindowClass>(255))
+                {
+                    if (auto* old = windowManager->FindByNumber(s_prevActiveCls, s_prevActiveNum))
+                        old->invalidate();
+                }
+                if (active != nullptr)
+                    active->invalidate();
+                s_prevActiveCls = newCls;
+                s_prevActiveNum = newNum;
+            }
+
+            // Playfield-edge per-tick invalidation. While the
+            // playfield is the active surface (grid cursor engaged),
+            // mark the 4 edge strips dirty so the white outline
+            // re-paints every frame even if nothing else dirties the
+            // edges. On transition out, one extra invalidate clears
+            // any stale outline pixels — the fillInset draw in
+            // WindowDrawAll skips itself when playfield is no longer
+            // focused, so the next paint of the dirtied edge blocks
+            // restores them to underlying viewport / window content.
+            static bool s_prevPlayfield = false;
+            const bool playfieldNow = IsPlayfieldFocused();
+            if (playfieldNow || playfieldNow != s_prevPlayfield)
+            {
+                auto& uiContext = GetContext()->GetUiContext();
+                const int32_t sw = uiContext.GetWidth();
+                const int32_t sh = uiContext.GetHeight();
+                if (sw > 0 && sh > 0)
+                {
+                    constexpr int32_t kEdgeWidth = 2;
+                    GfxSetDirtyBlocks({ { 0, 0 }, { sw, kEdgeWidth } });
+                    GfxSetDirtyBlocks({ { 0, sh - kEdgeWidth }, { sw, sh } });
+                    GfxSetDirtyBlocks({ { 0, 0 }, { kEdgeWidth, sh } });
+                    GfxSetDirtyBlocks({ { sw - kEdgeWidth, 0 }, { sw, sh } });
+                }
+            }
+            s_prevPlayfield = playfieldNow;
+        }
     }
 
     void WindowNotifyLanguageChange()
@@ -896,8 +966,28 @@ static constexpr float kWindowScrollLocations[][2] = {
     // Main.cpp:82 + the 5 title overlays) and mainWindow/tooltip
     // classes. Toolbars use stickToFront, not stickToBack, and stay
     // eligible.
+    // OPENRCT2MINI active-window-emphasis 2026-05-19 follow-up:
+    // returns true when the "playfield" is the active surface — i.e.,
+    // the user has engaged the grid cursor mode and is targeting tiles
+    // in the world view rather than a window. Both gridCursor (driven)
+    // and gridCursorParked (engaged but stepped out to widget focus)
+    // count. The playfield is the windowing-shell-equivalent of the
+    // desktop, but RCT2-themed. When true, NO window gets the active-
+    // window drop shadow / titlebar emphasis — the playfield's own
+    // screen-edge highlight is the active cue.
+    static bool IsPlayfieldFocused()
+    {
+        return gMapSelectFlags.has(MapSelectFlag::gridCursor)
+            || gMapSelectFlags.has(MapSelectFlag::gridCursorParked);
+    }
+
     static WindowBase* GetActiveWindowForEmphasis()
     {
+        // When the playfield is the active surface, NO window gets
+        // emphasis. The screen-edge highlight (drawn at the end of
+        // WindowDrawAll) is the visual cue.
+        if (IsPlayfieldFocused())
+            return nullptr;
         for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
         {
             auto* w = it->get();
@@ -990,43 +1080,29 @@ static constexpr float kWindowScrollLocations[][2] = {
         // the WindowDrawCore clamp at lines 569-572 that would clip
         // shadow strips outside the active window's pixel rect.
         //
-        // Active-change invalidation (post-attempt-3 fix for the
-        // "shadow persists briefly after opening Options over
-        // ScenarioSelect" report). When a new non-stickToBack window
-        // is created via WindowManager::Create, BringToFront isn't
-        // called — so the demoted window's invalidate() never fires
-        // and its old shadow strips stay in the framebuffer until
-        // something else dirties that area. Tracking the previous
-        // active here and invalidating it when it changes (via the
-        // already-extended +1/+2 invalidate() rect) closes that gap.
-        // WindowDrawAll is called multiple times per frame (one per
-        // dirty block), but within a single frame the active candidate
-        // is stable, so the static converges by the end of the first
-        // call. The dirty rect queued by invalidate() takes effect
-        // on the NEXT frame, which is exactly the frame that needs
-        // to repaint the demoted window's bottom-right edge.
-        static WindowClass s_prevActiveClass = static_cast<WindowClass>(255);
-        static int32_t s_prevActiveNumber = 0;
-        auto* active = GetActiveWindowForEmphasis();
-        const WindowClass newClass = (active != nullptr) ? active->classification
-                                                          : static_cast<WindowClass>(255);
-        const int32_t newNumber = (active != nullptr) ? active->number : 0;
-        if (newClass != s_prevActiveClass || newNumber != s_prevActiveNumber)
-        {
-            if (s_prevActiveClass != static_cast<WindowClass>(255))
-            {
-                if (auto* windowMgr = Ui::GetWindowManager())
-                {
-                    if (auto* old = windowMgr->FindByNumber(s_prevActiveClass, s_prevActiveNumber))
-                        old->invalidate();
-                }
-            }
-            s_prevActiveClass = newClass;
-            s_prevActiveNumber = newNumber;
-        }
-        if (active != nullptr)
+        // Per-tick state tracking (active-window prev + playfield
+        // transitions) lives in WindowUpdateAll for reliability.
+        // Here we only DRAW: the active window's drop shadow and,
+        // when the playfield is focused, the screen-edge highlight.
+        if (auto* active = GetActiveWindowForEmphasis())
         {
             DrawActiveWindowDropShadow(windowRT, *active);
+        }
+        if (IsPlayfieldFocused())
+        {
+            auto& uiContext = GetContext()->GetUiContext();
+            const int32_t sw = uiContext.GetWidth();
+            const int32_t sh = uiContext.GetHeight();
+            if (sw > 0 && sh > 0)
+            {
+                const auto screenRect = ScreenRect{ { 0, 0 }, { sw - 1, sh - 1 } };
+                Drawing::Rectangle::fillInset(
+                    windowRT, screenRect,
+                    ColourWithFlags{ Drawing::Colour::white },
+                    Drawing::Rectangle::BorderStyle::outset,
+                    Drawing::Rectangle::FillBrightness::light,
+                    Drawing::Rectangle::FillMode::none);
+            }
         }
     }
 

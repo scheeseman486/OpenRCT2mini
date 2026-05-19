@@ -1193,6 +1193,21 @@ namespace
         {
             Windows::WindowFootpathAdjustPlacementZ(+1);
             gridCursor().raiseZ(OpenRCT2::kPathHeightStep);
+            // OPENRCT2MINI Z-plane flicker fix (2026-05-19): mirror
+            // onStep — re-run provisional placement after Z change
+            // so VirtualFloorSetHeight gets called with the new Z.
+            // Without this, the only path that updates the floor's
+            // height is the placement-tile setter inside
+            // FootpathProvisionalSet (Footpath.cpp:2307/2314/2319),
+            // which onRaise/onLower never reach via the slope
+            // mousedown path. Result: floor draws for one frame
+            // (when the engine's own animation pump dirties the
+            // centre tile), then vanishes until next provisional
+            // placement event. Re-running SetProvisionalAtTile here
+            // pushes the new Z into the floor and invalidates the
+            // 5×5 floor footprint via FootpathProvisionalSet's own
+            // VirtualFloorInvalidate path.
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition());
             return Disposition::Consumed;
         }
 
@@ -1200,6 +1215,8 @@ namespace
         {
             Windows::WindowFootpathAdjustPlacementZ(-1);
             gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
+            // Same fix as onRaise — see comment above.
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition());
             return Disposition::Consumed;
         }
 

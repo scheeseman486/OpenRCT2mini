@@ -408,16 +408,36 @@ namespace OpenRCT2::Ui::Windows
                     // user clicks the already-selected mode button,
                     // they're saying "back to drawing", which still
                     // wants the grid cursor.
-                    GetInputManager().setToolFocusSelected(
-                        true, InputManager::SelectorTransitionSource::virtualUserInput);
+                    // OPENRCT2MINI AWE follow-up (2026-05-19): grid
+                    // cursor mode lives in the focus-mode sphere. Only
+                    // engage when the user is already in focus mode
+                    // (selector active, cursor hidden). When the user
+                    // is interacting via a real or virtual cursor —
+                    // SelectorMode::hidden — retain the traditional
+                    // cursor-based tile placement model.
+                    if (GetInputManager().getSelectorMode() == InputManager::SelectorMode::active)
+                    {
+                        GetInputManager().setToolFocusSelected(
+                            true, InputManager::SelectorTransitionSource::virtualUserInput);
+                    }
                     break;
                 case WIDX_CONSTRUCT_DRAG_AREA:
                     if (_footpathConstructionMode != PathConstructionMode::dragArea)
                     {
                         enableDragAreaMode();
                     }
-                    GetInputManager().setToolFocusSelected(
-                        true, InputManager::SelectorTransitionSource::virtualUserInput);
+                    // OPENRCT2MINI AWE follow-up (2026-05-19): grid
+                    // cursor mode lives in the focus-mode sphere. Only
+                    // engage when the user is already in focus mode
+                    // (selector active, cursor hidden). When the user
+                    // is interacting via a real or virtual cursor —
+                    // SelectorMode::hidden — retain the traditional
+                    // cursor-based tile placement model.
+                    if (GetInputManager().getSelectorMode() == InputManager::SelectorMode::active)
+                    {
+                        GetInputManager().setToolFocusSelected(
+                            true, InputManager::SelectorTransitionSource::virtualUserInput);
+                    }
                     break;
                 case WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL:
                     if (_footpathConstructionMode != PathConstructionMode::bridgeOrTunnelPick)
@@ -432,8 +452,18 @@ namespace OpenRCT2::Ui::Windows
                         _footpathErrorOccured = false;
                         WindowFootpathSetEnabledAndPressedWidgets();
                     }
-                    GetInputManager().setToolFocusSelected(
-                        true, InputManager::SelectorTransitionSource::virtualUserInput);
+                    // OPENRCT2MINI AWE follow-up (2026-05-19): grid
+                    // cursor mode lives in the focus-mode sphere. Only
+                    // engage when the user is already in focus mode
+                    // (selector active, cursor hidden). When the user
+                    // is interacting via a real or virtual cursor —
+                    // SelectorMode::hidden — retain the traditional
+                    // cursor-based tile placement model.
+                    if (GetInputManager().getSelectorMode() == InputManager::SelectorMode::active)
+                    {
+                        GetInputManager().setToolFocusSelected(
+                            true, InputManager::SelectorTransitionSource::virtualUserInput);
+                    }
                     break;
             }
         }

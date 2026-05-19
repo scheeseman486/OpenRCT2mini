@@ -46,9 +46,23 @@ bool VirtualFloorIsEnabled()
 
 void VirtualFloorSetHeight(const int16_t height)
 {
-    if (VirtualFloorIsEnabled())
+    if (!VirtualFloorIsEnabled())
+        return;
+    // OPENRCT2MINI Z-plane flicker fix (2026-05-19): when the height
+    // changes, force-invalidate the floor footprint. Without this,
+    // VirtualFloorInvalidate(false) called next paint frame can miss
+    // edge tiles around the floor centre — only the centre tile is
+    // typically in the dirty grid (set by ToolContext::processFrame
+    // or the placement update), but the floor's edge sprites span a
+    // 5×5 neighbourhood. Unrepainted neighbour tiles show stale
+    // floor pixels or, when other game updates dirty them, repaint
+    // WITHOUT the floor sprite. Result: each Z change shows the
+    // floor for one frame and then the edges fade. alwaysInvalidate
+    // here forces the FULL footprint to be queued dirty.
+    if (_virtualFloorHeight != height)
     {
         _virtualFloorHeight = height;
+        VirtualFloorInvalidate(true);
     }
 }
 
