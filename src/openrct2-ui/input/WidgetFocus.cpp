@@ -1078,6 +1078,36 @@ namespace OpenRCT2::Ui
     void drawFocusOutlineIfActive(OpenRCT2::Drawing::RenderTarget& rt, const OpenRCT2::WindowBase& window)
     {
         auto& mgr = GetInputManager();
+        // OPENRCT2MINI active-window-emphasis plan §4.4 (revised
+        // post-smoke-test): cycle-window highlight is a WHITE OUTLINE
+        // around the entire window frame, NOT the existing yellow
+        // widget focus ring. The user wants a clear "this is the
+        // cycled-to window" cue at the window level — the widget
+        // focus ring is a separate concept tracking the focused
+        // widget for keyboard nav, not the cycled window.
+        //
+        // Draws additively (no early return) so the widget focus
+        // ring can ALSO appear normally if focus mode is active.
+        // The latch is held in InputManager (_cycleHighlightClass)
+        // and cleared when the modifier the cycle binding requires
+        // releases — see plan §4.3.
+        if (const auto cycleClass = mgr.getCycleHighlightClass();
+            cycleClass != WindowClass::null && window.classification == cycleClass)
+        {
+            const auto windowRect = ScreenRect{
+                { window.windowPos.x, window.windowPos.y },
+                { window.windowPos.x + window.width - 1,
+                  window.windowPos.y + window.height - 1 },
+            };
+            OpenRCT2::Drawing::Rectangle::fillInset(
+                rt, windowRect, ColourWithFlags{ OpenRCT2::Drawing::Colour::white },
+                OpenRCT2::Drawing::Rectangle::BorderStyle::outset,
+                OpenRCT2::Drawing::Rectangle::FillBrightness::light,
+                OpenRCT2::Drawing::Rectangle::FillMode::none);
+            // Fall through to the normal-mode gates so the widget
+            // focus ring also draws if widgetFocus / osk context is
+            // active and the gates pass.
+        }
         // Three-part gate:
         //   (1) Active context must be one of widgetFocus or osk —
         //       contexts that have a meaningful "focused widget"

@@ -1793,6 +1793,27 @@ void InputManager::setToolFocusSelected(bool selected, SelectorTransitionSource 
     _toolFocusSelected = selected;
 }
 
+// OPENRCT2MINI active-window-emphasis plan §4.2: convert SDL KMOD_*
+// bits (uint32_t, with separate L/R sides) to the collapsed
+// ModifierKey bit layout (uint8_t, sides collapsed). The two are NOT
+// bit-aligned — see plan §5.5 for the verified KMOD vs ModifierKey
+// table. `kUsefulModifiers` here mirrors ShortcutInput.cpp:157.
+static uint8_t KmodToModifierKey(uint32_t kmod) noexcept
+{
+    constexpr uint32_t kUsefulModifiers = KMOD_SHIFT | KMOD_CTRL | KMOD_ALT | KMOD_GUI;
+    kmod &= kUsefulModifiers;
+    uint8_t mask = 0;
+    if (kmod & KMOD_SHIFT)
+        mask |= EnumValue(ModifierKey::shift);
+    if (kmod & KMOD_CTRL)
+        mask |= EnumValue(ModifierKey::ctrl);
+    if (kmod & KMOD_ALT)
+        mask |= EnumValue(ModifierKey::alt);
+    if (kmod & KMOD_GUI)
+        mask |= EnumValue(ModifierKey::cmd);
+    return mask;
+}
+
 void InputManager::cycleFocusedWindow(int direction)
 {
     // Build the focusable-window list in z-order (front-of-list =
@@ -2027,6 +2048,53 @@ void InputManager::cycleFocusedWindow(int direction)
     // back-layered window while the topmost still draws over it.
     windowMgr->BringToFrontByClass(landingCls);
     w->invalidate();
+
+    // OPENRCT2MINI active-window-emphasis plan §4.3: arm the cycle
+    // highlight latch. The white focus outline stays drawn on
+    // `landingCls` until the user releases whichever modifier the
+    // cycle binding requires (or the fallback timeout fires for
+    // modifier-less rebinds). Source the modifier mask from the
+    // binding's own ShortcutInput::modifiers — robust against any
+    // custom rebind, doesn't depend on hardcoded shift/ctrl.
+    {
+        constexpr uint32_t kUsefulModifiers = KMOD_SHIFT | KMOD_CTRL | KMOD_ALT | KMOD_GUI;
+        auto& shortcutMgr = GetShortcutManager();
+        uint32_t kmodUnion = 0;
+        if (const auto* sc = shortcutMgr.getShortcut(ShortcutId::kInterfaceCycleNextWindow))
+            for (const auto& input : sc->current)
+                kmodUnion |= (input.modifiers & kUsefulModifiers);
+        if (const auto* sc = shortcutMgr.getShortcut(ShortcutId::kInterfaceCyclePreviousWindow))
+            for (const auto& input : sc->current)
+                kmodUnion |= (input.modifiers & kUsefulModifiers);
+        // If a previous cycle target was still highlighted, invalidate
+        // it so its outline pixels get repainted as the latch moves
+        // to the new window. Without this, a fast Shift+Tab sequence
+        // leaves stale white-outline pixels on each previously-cycled
+        // window. Same pattern as the active-window tracking in
+        // WindowDrawAll's static prev-active cleanup (plan §2.4
+        // adapted to the cycle latch).
+        constexpr WindowClass kCycleHighlightNoClassArm = static_cast<WindowClass>(255);
+        if (_cycleHighlightClass != kCycleHighlightNoClassArm
+            && _cycleHighlightClass != landingCls)
+        {
+            // windowMgr is already in scope from earlier in this
+            // function (the BringToFrontByClass call site above).
+            if (auto* prev = windowMgr->FindByClass(_cycleHighlightClass))
+                prev->invalidate();
+        }
+        _cycleHighlightClass = landingCls;
+        _cycleHighlightWidget = landingWidget;
+        _cycleHighlightModifierMask = KmodToModifierKey(kmodUnion);
+        // Minimum dwell time. Even when the cycle binding has a
+        // modifier prefix (SHIFT+TAB default), the user typically
+        // releases SHIFT within one frame of pressing TAB — too
+        // fast for the eye to register the outline. Always arm
+        // the timeout to 500 ms; the release-pass keeps the latch
+        // while EITHER the modifier is held OR nowMs < untilMs.
+        // For pure modifier-less rebinds, the modifier branch is
+        // a no-op so the 500 ms is the only persistence mechanism.
+        _cycleHighlightUntilMs = SDL_GetTicks() + 500;
+    }
 }
 
 bool InputManager::enterFocusModeOnTopmost()
@@ -2752,6 +2820,43 @@ void InputManager::process()
     // Submits one trailing (0,0,0) sweep on flash expiry, then
     // idles silently until the next News::AddItemToQueue call.
     Led::tickEngine(nowMs);
+
+    // OPENRCT2MINI active-window-emphasis plan §4.3: release pass for
+    // the cycle-window highlight latch. Runs AFTER processEvents()
+    // (line 2765) so _modifierKeyState reflects every key event from
+    // this frame. The latch clears when:
+    //   - any modifier the cycle binding requires is no longer held
+    //     (the common path — Shift+Tab / Ctrl+Tab style bindings), OR
+    //   - the fallback timeout fires (modifier-less rebinds).
+    // On clear, invalidate the highlighted window so its ring is
+    // repainted away cleanly next frame. Sentinel 255 matches the
+    // class field's default initialiser (see InputManager.h).
+    {
+        constexpr WindowClass kCycleHighlightNoClass = static_cast<WindowClass>(255);
+        if (_cycleHighlightClass != kCycleHighlightNoClass)
+        {
+            // Keep latch alive while EITHER the modifier is still
+            // held OR the minimum dwell timeout has not yet elapsed.
+            // The dwell prevents one-frame flicker on fast taps
+            // (user releases SHIFT too quickly for the eye to
+            // register a modifier-only latch).
+            const bool stillHeld = (_cycleHighlightModifierMask != 0)
+                && ((_modifierKeyState & _cycleHighlightModifierMask) != 0);
+            const bool inDwell = (nowMs < _cycleHighlightUntilMs);
+            if (!stillHeld && !inDwell)
+            {
+                if (auto* windowMgr = Ui::GetWindowManager())
+                {
+                    if (auto* w = windowMgr->FindByClass(_cycleHighlightClass))
+                        w->invalidate();
+                }
+                _cycleHighlightClass = kCycleHighlightNoClass;
+                _cycleHighlightWidget = kWidgetIndexNull;
+                _cycleHighlightModifierMask = 0;
+                _cycleHighlightUntilMs = 0;
+            }
+        }
+    }
 }
 
 InputContext InputManager::resolveActiveContext() const

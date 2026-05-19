@@ -285,6 +285,38 @@ namespace OpenRCT2::Ui
         // raise). Reset on clearFocus.
         WindowClass _lastTopmostFocusable{ static_cast<WindowClass>(255) };
 
+        // OPENRCT2MINI active-window-emphasis plan §4.2: cycle-window
+        // outline persistence. Set when cycleFocusedWindow runs,
+        // cleared at the end of process() when the modifier the
+        // cycle binding requires is released (or after the fallback
+        // timeout for modifier-less rebinds). Sentinel 255 is
+        // WindowClass::null per the existing _focusedWindowClass
+        // convention — the forward-declared WindowClass enum doesn't
+        // expose its enumerator names here, but its uint8_t underlying
+        // type does. Used by WidgetFocus::drawFocusOutlineIfActive
+        // to bypass the normal context / SelectorMode gates while
+        // the user is still cycling.
+        WindowClass _cycleHighlightClass{ static_cast<WindowClass>(255) };
+        // ModifierKey-collapsed mask (NOT SDL KMOD bits) of the
+        // modifiers the cycle binding requires. The union of
+        // kInterfaceCycleNextWindow + kInterfaceCyclePreviousWindow
+        // binding modifiers, converted via kmodToModifierKey. Zero
+        // means "binding requires no modifier" — fall back to
+        // _cycleHighlightUntilMs timeout instead.
+        uint8_t _cycleHighlightModifierMask{ 0 };
+        // Platform::GetTicks() deadline for the modifier-less
+        // fallback. Zero when the modifier-mask path is in use.
+        uint32_t _cycleHighlightUntilMs{ 0 };
+        // OPENRCT2MINI AWE post-smoke-test fix: capture the focused
+        // widget index alongside the class. The cycle bypass in
+        // WidgetFocus::drawFocusOutlineIfActive uses THIS field
+        // instead of mgr.getFocusedWidget() so the outline persists
+        // even if some other code path clears _focusedWidget between
+        // the arming frame and the user releasing the modifier (e.g.
+        // the per-frame focus bootstrap re-evaluating in a way that
+        // clears the widget index).
+        WidgetIndex _cycleHighlightWidget{ 0xFFFFu };
+
     public:
         // OPENRCT2MINI cursor-selector-modal-plan §3.1 (v2): two-
         // state visibility model.
@@ -416,6 +448,24 @@ namespace OpenRCT2::Ui
         }
         void setFocus(WindowClass cls, WidgetIndex widget);
         void clearFocus();
+
+        // OPENRCT2MINI active-window-emphasis plan §4.3: getter
+        // consulted by WidgetFocus::drawFocusOutlineIfActive
+        // (openrct2-ui/input/WidgetFocus.cpp) to gate the cycle-window
+        // outline. Returns WindowClass::null (255) when no cycle
+        // highlight is armed.
+        WindowClass getCycleHighlightClass() const noexcept
+        {
+            return _cycleHighlightClass;
+        }
+        // OPENRCT2MINI AWE post-smoke-test fix: paired with
+        // getCycleHighlightClass() — see _cycleHighlightWidget for
+        // the rationale (paint path no longer depends on the
+        // _focusedWidget lifecycle).
+        WidgetIndex getCycleHighlightWidget() const noexcept
+        {
+            return _cycleHighlightWidget;
+        }
 
         // OPENRCT2MINI list-focus-plan §2.2: getter / setter for the
         // list-mode scroll item index. Returns -1 when the focused

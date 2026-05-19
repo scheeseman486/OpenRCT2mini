@@ -325,6 +325,13 @@ namespace OpenRCT2
     void WindowDrawAll(Drawing::RenderTarget& rt, int32_t left, int32_t top, int32_t right, int32_t bottom);
     void WindowDraw(Drawing::RenderTarget& rt, WindowBase& w, int32_t left, int32_t top, int32_t right, int32_t bottom);
 
+    // OPENRCT2MINI active-window-emphasis plan §2.2 / §3.3: predicate
+    // shared between drop-shadow (Window.cpp) and titlebar-dim
+    // (Widget.cpp). Returns true iff `w` is the topmost user-
+    // interactive window per the §2.2 filter (skips dead,
+    // stickToBack, mainWindow/tooltip/mapTooltip classes).
+    bool isActiveWindowForEmphasis(const WindowBase& w);
+
     bool isToolActive(WindowClass cls);
     // OPENRCT2MINI: cut 36. Renamed from `isToolActive(cls, WindowNumber)` to
     // disambiguate from the (cls, WidgetIndex) overload — GCC 8.3 finds the

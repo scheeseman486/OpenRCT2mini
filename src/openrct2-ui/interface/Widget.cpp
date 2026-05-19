@@ -25,6 +25,7 @@
 #include <openrct2/drawing/Rectangle.h>
 #include <openrct2/drawing/Text.h>
 #include <openrct2/interface/ColourWithFlags.h>
+#include <openrct2/interface/Window.h>
 #include <openrct2/localisation/Formatter.h>
 #include <openrct2/localisation/Formatting.h>
 #include <openrct2/localisation/Language.h>
@@ -605,9 +606,28 @@ namespace OpenRCT2::Ui
             ft.Add<const utf8*>(widget->string);
         }
 
+        // OPENRCT2MINI active-window-emphasis plan §3.3 (revised
+        // round 3): combine BOTH treatments — the text base colour
+        // changes (white→grey for inactive) AND paletteDarken1 is
+        // applied over the entire caption rect. Stacking both gives
+        // the user-requested "one shade darker" text result: the
+        // grey base is already darker than white, then the filter
+        // dims it further. paletteDarken1 alone (with white base)
+        // dimmed the background nicely but left the text too bright;
+        // grey alone (without the filter) was too subtle.
+        const auto captionColour
+            = OpenRCT2::isActiveWindowForEmphasis(w) ? Drawing::Colour::white : Drawing::Colour::grey;
         drawTextEllipsised(
             rt, topLeft, width, formatString, ft,
-            { ColourWithFlags{ Drawing::Colour::white }.withFlag(ColourFlag::withOutline, true), TextAlignment::centre });
+            { ColourWithFlags{ captionColour }.withFlag(ColourFlag::withOutline, true),
+              TextAlignment::centre });
+        if (!OpenRCT2::isActiveWindowForEmphasis(w))
+        {
+            const auto captionTopLeft = w.windowPos + ScreenCoordsXY{ widget->left, widget->top };
+            const auto captionBottomRight = w.windowPos + ScreenCoordsXY{ widget->right, widget->bottom };
+            Rectangle::filter(
+                rt, { captionTopLeft, captionBottomRight }, FilterPaletteID::paletteDarken1);
+        }
     }
 
     /**

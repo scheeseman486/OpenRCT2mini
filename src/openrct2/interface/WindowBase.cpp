@@ -25,7 +25,19 @@ namespace OpenRCT2
 
     void WindowBase::invalidate()
     {
-        GfxSetDirtyBlocks({ windowPos, windowPos + ScreenCoordsXY{ width, height } });
+        // OPENRCT2MINI active-window-emphasis plan §2.4(a): extend
+        // dirty rect by +1 right / +2 down to cover the drop-shadow
+        // strips painted in Window.cpp's DrawActiveWindowDropShadow.
+        // The shadow strips live just outside the window's pixel rect
+        // and would not be cleaned by the unextended GfxSetDirtyBlocks
+        // call on z-order or close. BringToFront already calls both
+        // demoted->invalidate() (task #281) and w.invalidate(), so
+        // this single extension auto-covers z-order changes too
+        // (plan §5.2 verification).
+        constexpr int32_t kShadowOffX = 1;
+        constexpr int32_t kShadowOffY = 2;
+        GfxSetDirtyBlocks(
+            { windowPos, windowPos + ScreenCoordsXY{ width + kShadowOffX, height + kShadowOffY } });
     }
 
     void WindowBase::removeViewport()

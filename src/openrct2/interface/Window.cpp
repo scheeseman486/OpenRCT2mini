@@ -19,6 +19,7 @@
 #include "../audio/Audio.h"
 #include "../config/Config.h"
 #include "../drawing/Drawing.h"
+#include "../drawing/Rectangle.h"
 #include "../interface/Cursors.h"
 #include "../ride/RideAudio.h"
 #include "../ui/UiContext.h"
@@ -886,6 +887,82 @@ static constexpr float kWindowScrollLocations[][2] = {
         windowMgr->CloseByClass(WindowClass::textinput);
     }
 
+    // OPENRCT2MINI active-window-emphasis plan §2.2: pick the topmost
+    // user-interactive window. See plans/docs/active-window-emphasis-
+    // plan.md §0.4 for the diagnostic capture and §5.10 for the
+    // verified WindowFlag::transparent semantics. KEY rule: do NOT
+    // skip transparent — every themed window has it set unconditionally
+    // by Theme.cpp:974. Skip stickToBack (verified backdrop marker:
+    // Main.cpp:82 + the 5 title overlays) and mainWindow/tooltip
+    // classes. Toolbars use stickToFront, not stickToBack, and stay
+    // eligible.
+    static WindowBase* GetActiveWindowForEmphasis()
+    {
+        for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
+        {
+            auto* w = it->get();
+            if (w == nullptr)
+                continue;
+            if (w->flags.has(WindowFlag::dead))
+                continue;
+            if (w->flags.has(WindowFlag::stickToBack))
+                continue;
+            // OPENRCT2MINI AWE diagnostic 1b: skip noTitleBar windows.
+            // In-game, GameBottomToolbar / TopToolbar both have
+            // {stickToFront, transparent, noBackground, noTitleBar}.
+            // They sit at z-order top via stickToFront, so reverse-iter
+            // would pick them first — but they're anchored to screen
+            // edges and a shadow at (+1, +2) lands off-screen. A user-
+            // perceivable "active window" is one with a draggable title
+            // bar, which is exactly what noTitleBar negates. Dropdowns
+            // also have noTitleBar — see plan §8: dropdown shadow is
+            // already explicitly out of scope.
+            if (w->flags.has(WindowFlag::noTitleBar))
+                continue;
+            const auto cls = w->classification;
+            if (cls == WindowClass::mainWindow || cls == WindowClass::tooltip
+                || cls == WindowClass::mapTooltip)
+                continue;
+            return w;
+        }
+        return nullptr;
+    }
+
+    bool isActiveWindowForEmphasis(const WindowBase& w)
+    {
+        return GetActiveWindowForEmphasis() == &w;
+    }
+
+    // OPENRCT2MINI plan §2.1: paint an L-shaped paletteDarken2 shadow
+    // just outside the active window's bottom-right edge. 1 px right
+    // strip (starts +2 below window top), 2 px bottom strip (starts
+    // +1 right of window left). Matches the software-cursor shadow's
+    // (+1, +2) offset. The Rectangle::filter clips to windowRT's
+    // dirty-region bounds — see §2.3 for why this MUST be called from
+    // WindowDrawAll, not WindowDrawSingle.
+    static void DrawActiveWindowDropShadow(Drawing::RenderTarget& rt, const WindowBase& w)
+    {
+        constexpr int32_t kShadowOffX = 1;
+        constexpr int32_t kShadowOffY = 2;
+        const int32_t wx = w.windowPos.x;
+        const int32_t wy = w.windowPos.y;
+        const int32_t ww = w.width;
+        const int32_t wh = w.height;
+        if (ww <= 0 || wh <= 0)
+            return;
+        // Right strip — 1 wide, wh tall, starting +2 below window top.
+        Drawing::Rectangle::filter(
+            rt, { { wx + ww, wy + kShadowOffY }, { wx + ww, wy + kShadowOffY + wh - 1 } },
+            Drawing::FilterPaletteID::paletteDarken2);
+        // Bottom strip — (ww - 1) wide, 2 tall, starting +1 right of window left.
+        if (ww >= 2)
+        {
+            Drawing::Rectangle::filter(
+                rt, { { wx + kShadowOffX, wy + wh }, { wx + ww - 1, wy + wh + kShadowOffY - 1 } },
+                Drawing::FilterPaletteID::paletteDarken2);
+        }
+    }
+
     /**
      *
      *  rct2: 0x006E7499
@@ -906,6 +983,51 @@ static constexpr float kWindowScrollLocations[][2] = {
                 return;
             WindowDraw(windowRT, *w, left, top, right, bottom);
         });
+        // OPENRCT2MINI plan §2.3: paint the active window's drop shadow
+        // AFTER the visitor loop so it lands on top of whatever lower
+        // window / backdrop occupies the bottom-right adjacent pixels.
+        // Hooking here (rather than inside WindowDrawSingle) dodges
+        // the WindowDrawCore clamp at lines 569-572 that would clip
+        // shadow strips outside the active window's pixel rect.
+        //
+        // Active-change invalidation (post-attempt-3 fix for the
+        // "shadow persists briefly after opening Options over
+        // ScenarioSelect" report). When a new non-stickToBack window
+        // is created via WindowManager::Create, BringToFront isn't
+        // called — so the demoted window's invalidate() never fires
+        // and its old shadow strips stay in the framebuffer until
+        // something else dirties that area. Tracking the previous
+        // active here and invalidating it when it changes (via the
+        // already-extended +1/+2 invalidate() rect) closes that gap.
+        // WindowDrawAll is called multiple times per frame (one per
+        // dirty block), but within a single frame the active candidate
+        // is stable, so the static converges by the end of the first
+        // call. The dirty rect queued by invalidate() takes effect
+        // on the NEXT frame, which is exactly the frame that needs
+        // to repaint the demoted window's bottom-right edge.
+        static WindowClass s_prevActiveClass = static_cast<WindowClass>(255);
+        static int32_t s_prevActiveNumber = 0;
+        auto* active = GetActiveWindowForEmphasis();
+        const WindowClass newClass = (active != nullptr) ? active->classification
+                                                          : static_cast<WindowClass>(255);
+        const int32_t newNumber = (active != nullptr) ? active->number : 0;
+        if (newClass != s_prevActiveClass || newNumber != s_prevActiveNumber)
+        {
+            if (s_prevActiveClass != static_cast<WindowClass>(255))
+            {
+                if (auto* windowMgr = Ui::GetWindowManager())
+                {
+                    if (auto* old = windowMgr->FindByNumber(s_prevActiveClass, s_prevActiveNumber))
+                        old->invalidate();
+                }
+            }
+            s_prevActiveClass = newClass;
+            s_prevActiveNumber = newNumber;
+        }
+        if (active != nullptr)
+        {
+            DrawActiveWindowDropShadow(windowRT, *active);
+        }
     }
 
     void WindowInitAll()
