@@ -1187,7 +1187,22 @@ namespace OpenRCT2::Ui::Windows
             auto placement = WindowFootpathGetPlacementFromScreenCoords(screenCoords);
             if (!placement.isValid())
             {
-                gMapSelectFlags.unset(MapSelectFlag::enable);
+                // OPENRCT2MINI Z-plane flicker fix (2026-05-20): don't
+                // unset MapSelectFlag::enable here. VirtualFloorTile-
+                // IsFloor gates on `enable` being set (see paint/
+                // VirtualFloor.cpp:173), so unsetting it makes the
+                // blue Z plane disappear for this frame. During a
+                // shift-drag-Z gesture, placement validity oscillates
+                // as the user drags vertically — each invalid frame
+                // would clear enable, making the floor vanish, then
+                // the next valid frame would re-enable it. Result:
+                // the user sees the Z plane flicker on every drag
+                // step. Leaving `enable` set keeps the floor visible
+                // at its existing height across these brief invalid
+                // windows. The ghost placement is still suppressed
+                // (FootpathProvisionalSet isn't reached on this
+                // branch), which is the meaningful "can't place
+                // here" cue.
                 FootpathUpdateProvisional();
                 return;
             }
@@ -1879,7 +1894,19 @@ namespace OpenRCT2::Ui::Windows
         // dispatches FootpathProvisionalSet — the same provisional
         // mechanism the mouse path uses; rendering happens for
         // free via PaintProvisional.
-        void SetProvisionalAtTilePublic(const TileCoordsXY& tile)
+        //
+        // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20
+        // — Shift+D-pad Z): zOffset is the grid cursor's accumulated
+        // Z (in world units, multiples of kPathHeightStep). Added on
+        // top of the resolved surface Z so the ghost floor (and the
+        // VirtualFloor blue Z plane it drives) tracks the user's
+        // gamepad-driven Z drag. Mirrors the mouse path's
+        // _footpathPlaceShiftZ accumulator — the mouse adds it via
+        // FootpathGetPlacePositionFromScreenPosition (line 1086);
+        // the gamepad path adds it here. Bookkeeping for the Z lives
+        // on the grid cursor model (raiseZ / lowerZ in
+        // FootpathContextImpl::onRaise / onLower).
+        void SetProvisionalAtTilePublic(const TileCoordsXY& tile, int32_t zOffset = 0)
         {
             if (_footpathErrorOccured)
                 return;
@@ -1888,9 +1915,51 @@ namespace OpenRCT2::Ui::Windows
             auto placement = FootpathGetOnTerrainPlacement(tile);
             if (!placement.isValid())
             {
-                gMapSelectFlags.unset(MapSelectFlag::enable);
-                FootpathUpdateProvisional();
-                return;
+                // OPENRCT2MINI grid-cursor-plan §14.2 polish 1
+                // (2026-05-20): when the grid cursor is raised above
+                // ground (zOffset != 0), the user is navigating a
+                // floating Z plane and the blue grid should stay
+                // visible as their reference even on tiles where
+                // there's no surface to resolve — synthesise a
+                // minimal baseZ so the floor renders at the raised
+                // Z. Slope flat (consistent with the raised-Z
+                // policy). Only the zOffset == 0 (ground-level)
+                // branch keeps the legacy "unset enable" behaviour.
+                if (zOffset == 0)
+                {
+                    gMapSelectFlags.unset(MapSelectFlag::enable);
+                    FootpathUpdateProvisional();
+                    return;
+                }
+                placement.baseZ = 16;
+                placement.slope = { FootpathSlopeType::flat, 0 };
+            }
+
+            // OPENRCT2MINI grid-cursor-plan §14.2 polish 5 (2026-05-20):
+            // snapshot the natural surface-level baseZ BEFORE the Z
+            // offset is applied so we can detect "the user lowered Z
+            // below ground" and toggle the underground viewport
+            // mode. The mouse path gets this via FootpathProvisional-
+            // Set's gFootpathGroundFlags check (line 2382-2412), but
+            // only when the place action succeeded — and the grid
+            // cursor's below-ground placements often fail. We probe
+            // the underground state directly from the placement Z
+            // delta further down.
+            const int32_t surfaceLevelZ = placement.baseZ;
+
+            // Apply the grid cursor's Z offset on top of the resolved
+            // surface Z. Clamp floor mirrors the mouse path's
+            // `std::max(mapZ, 16)` (Footpath.cpp:1108) — the engine
+            // treats Z 0 as "no override" so we need a non-zero
+            // baseline. Slope is forced to flat when zOffset > 0
+            // because a non-flat slope at a raised Z plane doesn't
+            // describe a valid placement; matches the mouse path's
+            // `{ _footpathPlaceZ, FootpathSlopeType::flat }` branch in
+            // WindowFootpathGetPlacementFromScreenCoords (line 1316).
+            if (zOffset != 0)
+            {
+                placement.baseZ = std::max<int32_t>(placement.baseZ + zOffset, 16);
+                placement.slope = { FootpathSlopeType::flat, 0 };
             }
 
             // No-op if the provisional is already at this tile/Z.
@@ -1908,6 +1977,37 @@ namespace OpenRCT2::Ui::Windows
             const auto footpathCost = FootpathProvisionalSet(
                 pathType, gFootpathSelection.railings, coords, coords, placement.baseZ, tiles,
                 constructFlags);
+
+            // OPENRCT2MINI grid-cursor-plan §14.2 polish 1 (2026-05-20):
+            // when the grid cursor is raised, force the floor visible
+            // at the requested Z regardless of whether the path
+            // placement succeeded. FootpathProvisionalSet's
+            // successfulTiles.empty() branch resets VirtualFloorSet-
+            // Height(0) unless shift is held — but the gamepad path
+            // only holds shift during the actual Z bump (onRaise /
+            // onLower), so on every navigation step where the path
+            // can't actually be placed (raised above terrain with
+            // nothing to support it, etc.) the floor would vanish.
+            // The user's UX expectation is that the floor remains as
+            // the persistent Z reference for as long as they aren't
+            // back at ground level — so re-assert it here.
+            //
+            // OPENRCT2MINI grid-cursor-plan §14.2 polish 5 (2026-05-20):
+            // mirror the mouse path's underground viewport toggle. The
+            // upstream toggle inside FootpathProvisionalSet only fires
+            // when the place action succeeded, but grid cursor below-
+            // ground placements often fail (no terrain support → empty
+            // successfulTiles). Decide directly from the placement Z
+            // relative to the natural surface Z snapshot taken above.
+            if (zOffset != 0)
+            {
+                gMapSelectFlags.set(MapSelectFlag::enable);
+                VirtualFloorSetHeight(placement.baseZ);
+                if (placement.baseZ < surfaceLevelZ)
+                    ViewportSetVisibility(ViewportVisibility::undergroundViewOn);
+                else
+                    ViewportSetVisibility(ViewportVisibility::undergroundViewOff);
+            }
 
             if (_windowFootpathCost != footpathCost)
             {
@@ -2193,14 +2293,22 @@ namespace OpenRCT2::Ui::Windows
     // grid cursor's ghost-tile rendering. Called from
     // FootpathContextImpl onActivate / onStep so the ghost
     // footpath follows the grid cursor's position.
-    void WindowFootpathSetProvisionalAtTile(const TileCoordsXY& tile)
+    //
+    // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20):
+    // zOffset is the grid cursor's accumulated Z (kPathHeightStep
+    // multiples) — passed through so onRaise / onLower can drive
+    // the same VirtualFloor / ghost-Z update path the mouse
+    // Shift+drag-Z gesture drives. Defaults to 0 so unchanged
+    // callers (onActivate / onStep at tile entry) still resolve
+    // to the surface Z.
+    void WindowFootpathSetProvisionalAtTile(const TileCoordsXY& tile, int32_t zOffset)
     {
         auto* windowMgr = GetWindowManager();
         WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
         if (w == nullptr)
             return;
         auto* fw = static_cast<FootpathWindow*>(w);
-        fw->SetProvisionalAtTilePublic(tile);
+        fw->SetProvisionalAtTilePublic(tile, zOffset);
     }
 
     // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):
@@ -2333,8 +2441,30 @@ namespace OpenRCT2::Ui::Windows
         {
             if (successfulTiles.empty())
             {
-                // If we can't build this, don't show a virtual floor.
-                VirtualFloorSetHeight(0);
+                // OPENRCT2MINI Z-plane flicker fix (2026-05-20 round 2):
+                // upstream resets the floor height to 0 ("don't show a
+                // virtual floor") whenever placement fails. During a
+                // shift-drag-Z gesture with the real mouse, the
+                // placement validity oscillates as the user drags
+                // vertically — each failing frame would reset the
+                // floor height (with our VirtualFloorSetHeight invalidate-
+                // on-change triggering a screen repaint at Z=0, which is
+                // underground and therefore invisible). Result: the
+                // floor flashes on every mouse motion event after the
+                // first Z step. Skip the reset during shift-drag so the
+                // floor stays anchored to the last successfully-placed
+                // height. The user still sees a clear "can't place
+                // here" cue via the missing ghost path. Non-shift-drag
+                // failure cases (cursor on invalid terrain with no
+                // shift held) still get the original behaviour.
+                // _footpathPlaceShiftState lives on the FootpathWindow
+                // instance; we can't reach it from this free function.
+                // Use the canonical signal — is the shift modifier
+                // pressed right now? — via InputManager directly.
+                if (!GetInputManager().isModifierKeyPressed(ModifierKey::shift))
+                {
+                    VirtualFloorSetHeight(0);
+                }
             }
             else if (
                 successfulTiles[0].slope.type == FootpathSlopeType::flat

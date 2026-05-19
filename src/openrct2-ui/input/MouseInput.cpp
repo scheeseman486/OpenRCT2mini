@@ -1481,6 +1481,24 @@ namespace OpenRCT2
                 // commitment the user hasn't made.
                 if (gMapSelectFlags.has(MapSelectFlag::gridCursorParked))
                     return;
+                // OPENRCT2MINI grid-cursor-plan §14.2 polish 4
+                // (2026-05-20): also gate on the active gridCursor
+                // flag. This catches the single-frame transition
+                // window where exitGridCursorMode has cleared
+                // _toolFocusSelected but the strategy transition
+                // (which fires ToolContext::onDeactivate and sets
+                // gridCursorParked) hasn't run yet — both prior
+                // gates fail and onToolUpdate would otherwise fire
+                // with whatever screen position the cursor sits at,
+                // overwriting gMapSelectPositionA. The user's
+                // observation: pressing Start in grid-cursor mode
+                // moves the blinking tile to wherever the cursor
+                // is rather than retaining the navigated map
+                // position. gridCursor is still set during this
+                // window (onDeactivate clears it); reading it here
+                // closes the gap.
+                if (gMapSelectFlags.has(MapSelectFlag::gridCursor))
+                    return;
                 w->onToolUpdate(gCurrentToolWidget.widgetIndex, screenCoords);
             }
         }

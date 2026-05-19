@@ -2330,10 +2330,43 @@ private:
         if (selectorActive || gridCursorParked)
         {
             std::optional<ScreenCoordsXY> syncTo;
+            // OPENRCT2MINI grid-cursor-plan §14.2 polish 2 (2026-05-20):
+            // resolve the cursor model's accumulated Z (Shift+D-pad
+            // raised the placement Z plane via onRaise / onLower) so
+            // the parked cursor sprite tracks the raised Z visually.
+            // Look up the strategy's cursor model first — it owns
+            // the Z bookkeeping — and pass that as a zOffset to the
+            // projection helper. Falls back to 0 if no strategy
+            // cursor or Z available, preserving the legacy XY-only
+            // behaviour for non-grid-cursor parked states.
+            int32_t cursorZOffset = 0;
+            {
+                auto& strategy = _inputManager.getActiveContextStrategy();
+                if (auto* model = strategy.getCursorModel(); model != nullptr)
+                {
+                    if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                        cursorZOffset = grid->getZ();
+                    else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
+                        cursorZOffset = edge->getZ();
+                }
+                // OPENRCT2MINI grid-cursor-plan §14.2 polish 3
+                // (2026-05-20): in parked state (the user pressed
+                // Start to back out from grid-cursor mode to widget-
+                // Focus while the tool is still armed) the active
+                // strategy switched to widgetFocus, whose cursor
+                // model isn't a Grid/Edge model, so the local
+                // lookup yields zOffset = 0 and the parked
+                // sprite would drop back to surface Z. Fall back
+                // to a registry-wide probe — the inactive
+                // ToolContext is still in the registry with the
+                // user's accumulated Z on its cursor model.
+                if (cursorZOffset == 0 && gridCursorParked)
+                    cursorZOffset = _inputManager.getAnyRegisteredCursorZ();
+            }
             if (gMapSelectFlags.has(MapSelectFlag::enable)
                 || gMapSelectFlags.has(MapSelectFlag::enableConstruct))
             {
-                syncTo = ViewportInteractionMapToScreen(gMapSelectPositionA);
+                syncTo = ViewportInteractionMapToScreen(gMapSelectPositionA, cursorZOffset);
             }
             if (!syncTo.has_value())
             {
@@ -2353,7 +2386,7 @@ private:
                         haveWorld = true;
                     }
                     if (haveWorld)
-                        syncTo = ViewportInteractionMapToScreen(worldXY);
+                        syncTo = ViewportInteractionMapToScreen(worldXY, cursorZOffset);
                 }
             }
             // Widget-focus fallback only when no tool is armed —

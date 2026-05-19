@@ -39,6 +39,14 @@ namespace OpenRCT2::Ui
     // tile, so a switch back to mouse input wakes the pointer
     // exactly where the user was working.
     std::optional<ScreenCoordsXY> ViewportInteractionMapToScreen(const CoordsXY& mapCoords);
+    // OPENRCT2MINI grid-cursor-plan §14.2 polish 2 (2026-05-20): Z-aware
+    // overload — adds zOffset (world units, kPathHeightStep multiples)
+    // on top of the resolved surface Z before projecting. Used by the
+    // grid cursor's parking sync (SyncHiddenCursorParking) so the
+    // software cursor sprite rides up the iso projection alongside
+    // the raised placement Z plane instead of staying tethered to the
+    // ground.
+    std::optional<ScreenCoordsXY> ViewportInteractionMapToScreen(const CoordsXY& mapCoords, int32_t zOffset);
 
     CoordsXY ViewportInteractionGetTileStartAtCursor(const ScreenCoordsXY& screenCoords);
 } // namespace OpenRCT2::Ui

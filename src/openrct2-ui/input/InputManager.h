@@ -827,6 +827,20 @@ namespace OpenRCT2::Ui
         // universal fallback.
         IInputContext& getActiveContextStrategy() const;
 
+        // OPENRCT2MINI grid-cursor-plan §14.2 polish 3 (2026-05-20):
+        // probe every registered context strategy for a Grid /
+        // EdgeCursorModel and return its accumulated Z offset. The
+        // active-strategy version (above) only sees the foreground
+        // ToolContext; once the user backs out to widgetFocus
+        // (parked state), the active strategy is widgetFocus and
+        // its cursor model has no Z. The ToolContext is still in
+        // the registry, just not active — its cursor model preserves
+        // the user's Z across the parked transition. SyncHidden-
+        // CursorParking uses this to keep the parked cursor sprite
+        // at the raised Z position instead of dropping it back to
+        // the surface.
+        int32_t getAnyRegisteredCursorZ() const;
+
         // OPENRCT2MINI input-plan Track 3 / Phase 3.A: routing entry.
         // Called from ShortcutManager::processEvent before firing a
         // matched binding's action lambda. The active strategy decides

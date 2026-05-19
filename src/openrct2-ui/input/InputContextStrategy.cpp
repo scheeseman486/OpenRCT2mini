@@ -36,6 +36,15 @@
 
 namespace OpenRCT2::Ui
 {
+    // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20):
+    // Shift-modifier query for the inline ToolContext::onShortcut
+    // dispatch in InputContextStrategy.h. Lives here so the header
+    // doesn't have to pull in UiContext.h to reach GetInputManager().
+    bool isShiftModifierHeldInTool()
+    {
+        return GetInputManager().isModifierKeyPressed(ModifierKey::shift);
+    }
+
     // ---- helpers --------------------------------------------------------
 
     // OPENRCT2MINI grid-cursor-plan §7.1: push the cursor's tile to the

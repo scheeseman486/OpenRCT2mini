@@ -167,7 +167,15 @@ namespace OpenRCT2::Ui::Windows
     // grid cursor calls these from onActivate / onStep / onDeactivate
     // so the ghost tile renders alongside the highlight (mirrors the
     // mouse path's hover behaviour).
-    void WindowFootpathSetProvisionalAtTile(const TileCoordsXY& tile);
+    //
+    // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20 —
+    // Shift+D-pad Z): zOffset is the grid cursor's accumulated Z
+    // offset (kPathHeightStep multiples). Defaults to 0 so existing
+    // callers (onActivate / onStep at surface Z) stay unchanged;
+    // onRaise / onLower pass gridCursor().getZ() so the ghost +
+    // VirtualFloor track the Shift+up/down gesture in lockstep with
+    // the mouse Shift+drag-Z path.
+    void WindowFootpathSetProvisionalAtTile(const TileCoordsXY& tile, int32_t zOffset = 0);
     void WindowFootpathClearProvisional();
     // Close the Footpath window outright — used by the grid-cursor
     // interface.confirm verb ("OK, I'm done with this tool").

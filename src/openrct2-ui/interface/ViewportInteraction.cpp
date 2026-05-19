@@ -653,12 +653,25 @@ namespace OpenRCT2::Ui
     // exist (pre-init, title scene without a main window).
     std::optional<ScreenCoordsXY> ViewportInteractionMapToScreen(const CoordsXY& mapCoords)
     {
+        return ViewportInteractionMapToScreen(mapCoords, 0);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §14.2 polish 2 (2026-05-20): Z-
+    // aware variant. zOffset (in world units, kPathHeightStep
+    // multiples) is added on top of the resolved surface Z, so the
+    // grid cursor's parked screen position rides up the iso
+    // projection in lockstep with the raised placement Z. Used by
+    // SyncHiddenCursorParking when the grid cursor is in raised-Z
+    // mode so the software cursor sprite tracks the Z plane rather
+    // than staying tethered to the surface.
+    std::optional<ScreenCoordsXY> ViewportInteractionMapToScreen(const CoordsXY& mapCoords, int32_t zOffset)
+    {
         auto* main = WindowGetMain();
         if (main == nullptr || main->viewport == nullptr)
             return std::nullopt;
         const auto& vp = *main->viewport;
         const auto centre = mapCoords + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
-        const int32_t z = TileElementHeight(centre);
+        const int32_t z = TileElementHeight(centre) + zOffset;
         const auto world = Translate3DTo2DWithZ(vp.rotation, CoordsXYZ{ centre, z });
         return ScreenCoordsXY{
             vp.zoom.ApplyInversedTo(world.x - vp.viewPos.x) + vp.pos.x,

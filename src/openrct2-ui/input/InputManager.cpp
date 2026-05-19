@@ -1189,34 +1189,30 @@ namespace
             return Disposition::Consumed;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20 —
+        // Shift+D-pad Z): mirror the mouse Shift+drag-Z gesture in
+        // the digital D-pad world. Bump the grid cursor's stored Z
+        // by one path step, then re-run the provisional placement
+        // with the new Z offset — same path the mouse Shift+drag
+        // uses (FootpathProvisionalSet → VirtualFloorSetHeight via
+        // the placement-tile setter). The earlier
+        // WindowFootpathAdjustPlacementZ call was a slope shortcut
+        // (KeyboardShortcutSlopeUp/Down) — adjusts the placed path
+        // slope, not the cursor's Z plane. Dropped because the
+        // gesture's expected behaviour is Z change, not slope; the
+        // slope is set automatically by FootpathGetOnTerrainPlacement
+        // at SetProvisionalAtTile time.
         Disposition onRaise() override
         {
-            Windows::WindowFootpathAdjustPlacementZ(+1);
             gridCursor().raiseZ(OpenRCT2::kPathHeightStep);
-            // OPENRCT2MINI Z-plane flicker fix (2026-05-19): mirror
-            // onStep — re-run provisional placement after Z change
-            // so VirtualFloorSetHeight gets called with the new Z.
-            // Without this, the only path that updates the floor's
-            // height is the placement-tile setter inside
-            // FootpathProvisionalSet (Footpath.cpp:2307/2314/2319),
-            // which onRaise/onLower never reach via the slope
-            // mousedown path. Result: floor draws for one frame
-            // (when the engine's own animation pump dirties the
-            // centre tile), then vanishes until next provisional
-            // placement event. Re-running SetProvisionalAtTile here
-            // pushes the new Z into the floor and invalidates the
-            // 5×5 floor footprint via FootpathProvisionalSet's own
-            // VirtualFloorInvalidate path.
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition());
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
             return Disposition::Consumed;
         }
 
         Disposition onLower() override
         {
-            Windows::WindowFootpathAdjustPlacementZ(-1);
             gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
-            // Same fix as onRaise — see comment above.
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition());
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
             return Disposition::Consumed;
         }
 
@@ -1228,7 +1224,12 @@ namespace
         void onActivate() override
         {
             ToolContext::onActivate();
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition());
+            // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20):
+            // pass the cursor's Z so a re-engage after parking
+            // restores the floor at the user's last-known Z plane
+            // (the grid cursor model preserves _z across the parked
+            // ⇌ active transition).
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
         }
 
         void onDeactivate() override
@@ -1240,7 +1241,13 @@ namespace
         Disposition onStep(::Direction dpad) override
         {
             const auto result = ToolContext::onStep(dpad);
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition());
+            // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20):
+            // persist the Z plane when navigating to a new tile —
+            // matches the mouse path's behaviour where _footpath-
+            // PlaceShiftZ is preserved across mouse motion under the
+            // same Shift hold. User raises Z, then steps sideways:
+            // the new tile's ghost / Z plane stays at the raised Z.
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
             return result;
         }
 
@@ -1748,11 +1755,31 @@ void InputManager::onTransitionEvent(SelectorTransitionSource src)
             // clearing _toolFocusSelected the user is no longer in any
             // grid-cursor strategy yet the parked tile keeps rendering
             // — exactly the "kick out of grid cursor mode" gesture the
-            // user expects to fully end. Clear all three flags so the
-            // tile selection disappears entirely.
-            gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
-            gMapSelectFlags.unset(MapSelectFlag::gridCursor);
-            gMapSelectFlags.unset(MapSelectFlag::enable);
+            // user expects to fully end.
+            //
+            // OPENRCT2MINI Z-plane flicker fix (2026-05-20): only
+            // clear MapSelectFlag::enable when we were actually IN
+            // grid-cursor mode. Previously this handler unset
+            // `enable` on every SDL_MOUSEMOTION — but `enable` is the
+            // load-bearing gate for VirtualFloorTileIsFloor (paint/
+            // VirtualFloor.cpp:203). During a Footpath shift+drag-Z
+            // gesture the user is driving the real mouse, so this
+            // handler fires on every motion event and clobbers
+            // `enable`. WindowFootpathSetProvisionalPathAtPoint's
+            // early-return (windows/Footpath.cpp:1173) then doesn't
+            // re-set it, so the Z plane disappears until the next Z
+            // step crossing skips the early-return. Gridcursor-flag
+            // clears are idempotent and safe — only `enable` needs
+            // gating because every world tool (Footpath, Ride-
+            // Construction, Scenery, …) relies on it.
+            {
+                const bool wasInGridCursorMode = gMapSelectFlags.has(MapSelectFlag::gridCursor)
+                    || gMapSelectFlags.has(MapSelectFlag::gridCursorParked);
+                gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
+                gMapSelectFlags.unset(MapSelectFlag::gridCursor);
+                if (wasInGridCursorMode)
+                    gMapSelectFlags.unset(MapSelectFlag::enable);
+            }
             break;
         case SelectorTransitionSource::realMouseClick:
             // A real-mouse click. Mark the input source so the
@@ -3221,6 +3248,39 @@ IInputContext& InputManager::getActiveContextStrategy() const
     return *_worldContext;
 }
 
+// OPENRCT2MINI grid-cursor-plan §14.2 polish 3 (2026-05-20): walk
+// every registered context strategy looking for a non-zero Grid /
+// EdgeCursorModel Z. Used by SyncHiddenCursorParking to preserve
+// the user's raised-Z screen position across the grid-cursor → parked
+// transition: at that moment the active strategy is widgetFocus
+// (whose cursor model is the focus-ring helper, not GridCursorModel),
+// but the inactive ToolContext is still in the registry and its
+// GridCursorModel preserves the user's accumulated Z across activate
+// / deactivate cycles. Returns the first non-zero Z encountered; 0
+// when nothing has a raised Z (every tool's model is at ground).
+int32_t InputManager::getAnyRegisteredCursorZ() const
+{
+    for (const auto& slot : _contextRegistry)
+    {
+        if (slot == nullptr)
+            continue;
+        if (auto* model = slot->getCursorModel(); model != nullptr)
+        {
+            if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+            {
+                if (grid->getZ() != 0)
+                    return grid->getZ();
+            }
+            else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
+            {
+                if (edge->getZ() != 0)
+                    return edge->getZ();
+            }
+        }
+    }
+    return 0;
+}
+
 // OPENRCT2MINI input-plan Track 3 / Phase 3.A: routing entry point.
 // Returns true if the active strategy consumed the shortcut and the
 // caller (ShortcutManager::processEvent) should suppress the action
@@ -3358,7 +3418,23 @@ void InputManager::handleModifiers()
 
     if (Config::Get().general.virtualFloorStyle != VirtualFloorStyles::Off)
     {
-        if (isModifierKeyPressed(ModifierKey::ctrl) || isModifierKeyPressed(ModifierKey::shift))
+        // OPENRCT2MINI grid-cursor-plan §14.2 polish 1 (2026-05-20):
+        // keep the VirtualFloor enabled while the grid cursor is
+        // engaged and the user has shifted the placement Z above
+        // ground. The mouse path holds shift for the entire drag
+        // gesture, so the floor stays alive across the drag — but
+        // the gamepad path only holds shift during the discrete
+        // onRaise / onLower press, so without this clause the very
+        // next frame would call VirtualFloorDisable() and the blue
+        // grid would vanish until the next Z bump. The narrow
+        // gridCursor gate (only when in grid cursor mode AND height
+        // is above the minimum land floor) means non-grid-cursor
+        // contexts continue to disable on modifier release.
+        const bool gridCursorRaised
+            = gMapSelectFlags.has(MapSelectFlag::gridCursor)
+            && VirtualFloorGetHeight() > kMinimumLandHeight;
+        if (isModifierKeyPressed(ModifierKey::ctrl) || isModifierKeyPressed(ModifierKey::shift)
+            || gridCursorRaised)
             VirtualFloorEnable();
         else
             VirtualFloorDisable();

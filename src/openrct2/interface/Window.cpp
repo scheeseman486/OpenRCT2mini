@@ -262,30 +262,21 @@ static constexpr float kWindowScrollLocations[][2] = {
                 s_prevActiveNum = newNum;
             }
 
-            // Playfield-edge per-tick invalidation. While the
-            // playfield is the active surface (grid cursor engaged),
-            // mark the 4 edge strips dirty so the white outline
-            // re-paints every frame even if nothing else dirties the
-            // edges. On transition out, one extra invalidate clears
-            // any stale outline pixels — the fillInset draw in
-            // WindowDrawAll skips itself when playfield is no longer
-            // focused, so the next paint of the dirtied edge blocks
-            // restores them to underlying viewport / window content.
+            // Playfield invalidation. On transition (in OR out) and
+            // every tick while active, use GfxInvalidateScreen — the
+            // standard full-screen-dirty primitive used throughout the
+            // codebase (Weather.cpp, Drawing.cpp, etc.) wherever a
+            // full repaint is needed. Per-edge GfxSetDirtyBlocks was
+            // unreliable in practice; the outline pixels persisted
+            // across deactivation until an unrelated full repaint
+            // (camera move) cleared them. GfxInvalidateScreen is the
+            // proven primitive — cheap (one dirty grid write) and
+            // guaranteed to repaint everything.
             static bool s_prevPlayfield = false;
             const bool playfieldNow = IsPlayfieldFocused();
             if (playfieldNow || playfieldNow != s_prevPlayfield)
             {
-                auto& uiContext = GetContext()->GetUiContext();
-                const int32_t sw = uiContext.GetWidth();
-                const int32_t sh = uiContext.GetHeight();
-                if (sw > 0 && sh > 0)
-                {
-                    constexpr int32_t kEdgeWidth = 2;
-                    GfxSetDirtyBlocks({ { 0, 0 }, { sw, kEdgeWidth } });
-                    GfxSetDirtyBlocks({ { 0, sh - kEdgeWidth }, { sw, sh } });
-                    GfxSetDirtyBlocks({ { 0, 0 }, { kEdgeWidth, sh } });
-                    GfxSetDirtyBlocks({ { sw - kEdgeWidth, 0 }, { sw, sh } });
-                }
+                GfxInvalidateScreen();
             }
             s_prevPlayfield = playfieldNow;
         }
@@ -967,18 +958,18 @@ static constexpr float kWindowScrollLocations[][2] = {
     // classes. Toolbars use stickToFront, not stickToBack, and stay
     // eligible.
     // OPENRCT2MINI active-window-emphasis 2026-05-19 follow-up:
-    // returns true when the "playfield" is the active surface — i.e.,
-    // the user has engaged the grid cursor mode and is targeting tiles
-    // in the world view rather than a window. Both gridCursor (driven)
-    // and gridCursorParked (engaged but stepped out to widget focus)
-    // count. The playfield is the windowing-shell-equivalent of the
-    // desktop, but RCT2-themed. When true, NO window gets the active-
-    // window drop shadow / titlebar emphasis — the playfield's own
-    // screen-edge highlight is the active cue.
+    // returns true when the "playfield" is the active surface — the
+    // user is actively driving the grid cursor on the world view.
+    // gridCursorParked (tool armed but user stepped back to widget
+    // focus) does NOT count — when the user switches away from the
+    // playfield via shift+tab cycle the parked flag is set, and
+    // they expect the outline to clear. Keying solely on the
+    // gridCursor (driven) flag matches that intent — outline draws
+    // while the user is on the playfield surface, clears when they
+    // step back to widgets, even if the tool is still armed.
     static bool IsPlayfieldFocused()
     {
-        return gMapSelectFlags.has(MapSelectFlag::gridCursor)
-            || gMapSelectFlags.has(MapSelectFlag::gridCursorParked);
+        return gMapSelectFlags.has(MapSelectFlag::gridCursor);
     }
 
     static WindowBase* GetActiveWindowForEmphasis()

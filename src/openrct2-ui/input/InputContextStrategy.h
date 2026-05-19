@@ -32,6 +32,14 @@
 
 namespace OpenRCT2::Ui
 {
+    // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20):
+    // tiny helper to query the Shift modifier from ToolContext::on-
+    // Shortcut without pulling UiContext.h into every consumer of
+    // this header (the inline definition lives down at line ~620
+    // and needs the modifier state). Defined out-of-line in
+    // InputContextStrategy.cpp where GetInputManager() is in scope.
+    bool isShiftModifierHeldInTool();
+
     // OPENRCT2MINI grid-cursor-plan §3: D-pad-to-tile-step mapping mode.
     // Stored on Config::Interface::gridCursorMode; consulted by the
     // stepForDirection helper each step. Default `compass` (world-
@@ -670,6 +678,27 @@ namespace OpenRCT2::Ui
             // alias. Map focus.up→0, focus.right→1, focus.down→2,
             // focus.left→3 as the base; stepForDirection handles
             // mode + rotation translation.
+            //
+            // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20
+            // — Shift+D-pad Z step): mirror the mouse Shift+drag-Z
+            // gesture in the digital D-pad world. While the bound
+            // Shift modifier is held, focus.up/focus.down are
+            // discrete per-press Z increments routed through the
+            // same verb hooks the construction-Z shortcuts use
+            // (onRaise / onLower). Left/Right keep their map-
+            // navigation meaning — the mouse drag only cares about
+            // Y delta, the same asymmetry applies here. Subclasses
+            // that already implement onRaise/onLower
+            // (FootpathContextImpl) pick this up for free; subclasses
+            // that haven't (Scenery, LandRights, …) Consume harmlessly
+            // until their Z verbs are wired.
+            if ((id == ShortcutId::kFocusUp || id == ShortcutId::kFocusDown)
+                && isShiftModifierHeldInTool())
+            {
+                if (id == ShortcutId::kFocusUp)
+                    return onRaise();
+                return onLower();
+            }
             if (id == ShortcutId::kFocusUp)
                 return onStep(static_cast<::Direction>(0));
             if (id == ShortcutId::kFocusRight)

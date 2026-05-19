@@ -12,6 +12,7 @@
 #include "../Cheats.h"
 #include "../Diagnostic.h"
 #include "../GameState.h"
+#include "../drawing/Drawing.h"
 #include "../Input.h"
 #include "../SpriteIds.h"
 #include "../config/Config.h"
@@ -48,21 +49,23 @@ void VirtualFloorSetHeight(const int16_t height)
 {
     if (!VirtualFloorIsEnabled())
         return;
-    // OPENRCT2MINI Z-plane flicker fix (2026-05-19): when the height
-    // changes, force-invalidate the floor footprint. Without this,
-    // VirtualFloorInvalidate(false) called next paint frame can miss
-    // edge tiles around the floor centre — only the centre tile is
-    // typically in the dirty grid (set by ToolContext::processFrame
-    // or the placement update), but the floor's edge sprites span a
-    // 5×5 neighbourhood. Unrepainted neighbour tiles show stale
-    // floor pixels or, when other game updates dirty them, repaint
-    // WITHOUT the floor sprite. Result: each Z change shows the
-    // floor for one frame and then the edges fade. alwaysInvalidate
-    // here forces the FULL footprint to be queued dirty.
+    // OPENRCT2MINI Z-plane flicker fix (2026-05-19, round 2): when
+    // the height changes, force a full-screen invalidate via
+    // GfxInvalidateScreen — the standard primitive used throughout
+    // the codebase (Weather.cpp, Drawing.cpp etc.) for "I changed
+    // something at draw-time and need everything repainted." The
+    // previous attempt called VirtualFloorInvalidate(true) which
+    // only marks the floor's 5x5 footprint dirty via MapInvalidate-
+    // Region — but the floor's edge sprites still didn't reliably
+    // repaint because partOfVirtualFloor is only true for tiles
+    // within the active footprint, and the per-tile dirty pump
+    // didn't always include all of them between Z-change frames.
+    // Full-screen invalidate is heavier but guaranteed to refresh
+    // every edge tile.
     if (_virtualFloorHeight != height)
     {
         _virtualFloorHeight = height;
-        VirtualFloorInvalidate(true);
+        GfxInvalidateScreen();
     }
 }
 
