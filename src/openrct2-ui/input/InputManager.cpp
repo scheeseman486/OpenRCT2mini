@@ -423,20 +423,6 @@ namespace
                 return Disposition::Passthrough;
 
             auto& mgr = OpenRCT2::Ui::GetInputManager();
-            // OPENRCT2MINI cursor-selector-modal-plan v2: when the
-            // state machine has the selector OFF (hidden), this
-            // strategy is dormant. focus.* shouldn't navigate
-            // (state machine wakes via the modal switch's
-            // enterFocusModeRequested path on unshared press, or
-            // via the per-frame bootstrap's new-window auto-wake);
-            // cursor.click shouldn't synthesise a virtual press
-            // through pressWidgetByIndex either — the
-            // ProcessWorldCursor synthetic-mouse path already
-            // dispatches the click to whichever widget the cursor
-            // is over. Pass through everything until the selector
-            // is reactivated.
-            if (mgr.getSelectorMode() != OpenRCT2::Ui::InputManager::SelectorMode::active)
-                return Disposition::Passthrough;
 
             // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17):
             // confirm-into-grid shortcut. When a construction tool
@@ -451,6 +437,18 @@ namespace
             // (gCurrentToolWidget.windowClassification) so confirm
             // in other windows behaves normally even if a tool is
             // background-armed.
+            //
+            // OPENRCT2MINI grid-cursor-plan §14.5 (2026-05-20):
+            // runs *before* the selector-mode dormancy gate below
+            // so the gesture also fires from cursor mode (real or
+            // virtual mouse driving the selector). The user's
+            // mental model is "Start with a tool armed means I'm
+            // ready to draw" regardless of which input mode is
+            // currently active. ToolContext::onActivate flips the
+            // selector to active on the strategy transition that
+            // follows, so the visual machinery (cursor hide /
+            // selector ring) lines up without an explicit flip
+            // here.
             if (id == ShortcutId::kInterfaceConfirm
                 && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive)
                 && mgr.getFocusedWindowClass() == OpenRCT2::gCurrentToolWidget.windowClassification)
@@ -481,6 +479,22 @@ namespace
                     true, OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
                 return Disposition::Consumed;
             }
+
+            // OPENRCT2MINI cursor-selector-modal-plan v2: when the
+            // state machine has the selector OFF (hidden), this
+            // strategy is dormant for everything *except* the
+            // grid-cursor engage gesture handled just above.
+            // focus.* shouldn't navigate (state machine wakes via
+            // the modal switch's enterFocusModeRequested path on
+            // unshared press, or via the per-frame bootstrap's
+            // new-window auto-wake); cursor.click shouldn't
+            // synthesise a virtual press through pressWidgetByIndex
+            // either — the ProcessWorldCursor synthetic-mouse path
+            // already dispatches the click to whichever widget the
+            // cursor is over. Pass through everything until the
+            // selector is reactivated.
+            if (mgr.getSelectorMode() != OpenRCT2::Ui::InputManager::SelectorMode::active)
+                return Disposition::Passthrough;
 
             // OPENRCT2MINI focus-mode-plan §F.10: dropdown
             // specialisation. The dropdown window has exactly one
