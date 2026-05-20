@@ -108,6 +108,43 @@ set(CMAKE_CXX_FLAGS_INIT "${CMAKE_C_FLAGS_INIT}")
 # target's COMPILE_DEFINITIONS and INCLUDE_DIRECTORIES.
 set(CMAKE_RC_FLAGS_INIT "")
 
+# Statically link libstdc++ + libgcc + libwinpthread.
+#
+# OPENRCT2MINI 2026-05-21: dynamic libstdc++-6.dll + MinGW-w64 SEH C++ excep-
+# tions interact badly with Wine and with cross-DLL boundaries in general.
+# Symptom: try/catch blocks silently fail to match. std::runtime_error thrown
+# in Audio::CreateAudioSource ("Unsupported audio codec") is supposed to be
+# caught by `catch (const std::exception& e)` in CreateStreamFromWAV one
+# frame up; instead the unwinder walks straight through every handler and
+# calls std::terminate → abort.
+#
+# Verified via winedbg --gdb: backtrace shows __cxa_throw →
+# _Unwind_RaiseException → kernelbase abort, with the catch frame in
+# CreateStreamFromWAV visible on the stack but never entered.
+#
+# Root cause: with dynamic libstdc++, type_info objects for std::exception
+# and std::runtime_error exist BOTH in the EXE's data section AND in
+# libstdc++-6.dll. The SEH personality function compares typeinfos by pointer
+# first, name string second; under Wine the pointer compare fails and the
+# name compare path isn't reached or doesn't resolve. Catch handlers go
+# unmatched.
+#
+# Static linking collapses the type_info to a single instance per binary,
+# giving the personality function a deterministic match. Also drops
+# libstdc++-6.dll, libgcc_s_seh-1.dll, libwinpthread-1.dll, libssp-0.dll
+# from the dist (smaller package, no MSVC/UCRT runtime mismatch surprises
+# on Win7).
+#
+# We do NOT pass plain -static, which would also statically link SDL2 and
+# every other dep. SDL2.dll stays shared on purpose so the dist can be
+# repacked with a driver-specific SDL2 if needed.
+#
+# The --whole-archive + --no-whole-archive bracket around -lwinpthread
+# ensures libwinpthread.a is fully embedded; without --whole-archive, ld
+# might pick the import library (libwinpthread.dll.a) over the static
+# archive and pull in the DLL anyway.
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-static-libstdc++ -static-libgcc -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive -lssp -lssp_nonshared -Wl,-Bdynamic")
+
 # Disable IPO/LTO. The Mini's cmake/ipo.cmake enables -flto on Release
 # builds, but mingw-w64's LTO ODR checker is stricter than ELF's and fires
 # on TrackColour and similar cross-TU layout-equivalent-but-differently-

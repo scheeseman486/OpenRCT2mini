@@ -184,7 +184,26 @@ if (MINGW)
     endif ()
     # Link in libssp (stack protector runtime) — needed unconditionally
     # since other CMake branches set -fstack-protector-strong globally.
-    target_link_libraries(libopenrct2 -fstack-protector-strong)
+    #
+    # OPENRCT2MINI 2026-05-21: split out from upstream's -fstack-protector-
+    # strong (which the gcc driver expands at link time to -lssp + -lssp_
+    # nonshared in -Bdynamic mode, pulling libssp-0.dll into the import
+    # table). We need libssp linked STATICALLY so the binary doesn't depend
+    # on libssp-0.dll at runtime — there's a Wine + MinGW SEH bug where any
+    # dynamic libstdc++ / libgcc-adjacent DLL breaks C++ exception unwinding
+    # (typeinfo duplicated across EXE + DLL → catch handlers silently fail
+    # to match). See toolchain-mingw-w64-x86_64.cmake for the full diagnostic.
+    #
+    # Why both -lssp and -lssp_nonshared:
+    #   - libssp.a       provides __stack_chk_guard (the canary value)
+    #   - libssp_nonshared.a provides __stack_chk_fail (the trap fn)
+    # The toolchain file already pulls libssp.a via CMAKE_EXE_LINKER_FLAGS,
+    # but that happens BEFORE the .obj files on the link line so it'd be
+    # skipped if no symbols were undefined yet. Pulling here lands inside
+    # the --start-group block (after .objs) where it'll resolve refs from
+    # all openrct2 .o files. -Wl,-Bstatic on each makes ld prefer .a over
+    # .dll.a; -Bdynamic resets for anything after.
+    target_link_libraries(libopenrct2 -Wl,-Bstatic -lssp -lssp_nonshared -Wl,-Bdynamic)
     # bcrypt: libzip's zip_crypto_win.c uses Windows BCrypt API for AES.
     # Listed as a transitive dep so it lands adjacent to libzip in the
     # link line; without this, ld processes -lbcrypt before libzip.a and

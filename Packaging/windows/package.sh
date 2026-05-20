@@ -9,13 +9,19 @@
 #     openrct2.com        (objcopy --subsystem console copy)
 #     openrct2-cli.exe
 #     SDL2.dll
-#     libgcc_s_seh-1.dll
-#     libstdc++-6.dll
-#     libwinpthread-1.dll
 #     g2.dat / fonts.dat / palettes.dat / tracks.dat
 #     data/
 #       language/ object/ scenario_patches/ sequence/ shaders/ assetpack/
 #     readme.txt / changelog.txt / licence.txt / contributors.md
+#
+# OPENRCT2MINI 2026-05-21: libgcc_s_seh-1.dll, libstdc++-6.dll,
+# libwinpthread-1.dll, libssp-0.dll no longer shipped — the toolchain file
+# (toolchain-mingw-w64-x86_64.cmake) now statically links them via
+# -static-libstdc++ -static-libgcc + -Wl,-Bstatic --whole-archive -lwinpthread.
+# Required fix for a Wine + MinGW SEH bug where dynamic libstdc++ caused
+# C++ try/catch handlers to silently miss (duplicate type_info objects in
+# the EXE and the DLL prevented the personality function from matching the
+# catch type).
 
 set -euo pipefail
 
@@ -52,7 +58,17 @@ cp "$BUILD_DIR/openrct2.exe"     "$STAGE_DIR/openrct2.exe"
 # lean.
 
 ##############################################################################
-# 2) Runtime DLLs — SDL2 + mingw libgcc/libstdc++/libwinpthread.
+# 2) Runtime DLLs — SDL2 only.
+#
+# OPENRCT2MINI 2026-05-21: libgcc_s_seh-1.dll / libstdc++-6.dll /
+# libwinpthread-1.dll / libssp-0.dll are statically linked into openrct2.exe
+# by the toolchain file (see toolchain-mingw-w64-x86_64.cmake CMAKE_EXE_LINKER
+# _FLAGS_INIT). Required to fix a Wine + MinGW SEH unwind bug — see the
+# toolchain comment for the full diagnostic chain.
+#
+# SDL2.dll stays shared on purpose so the dist can be repacked with a
+# driver-specific SDL2 (e.g. the Miyoo Mini vendor SDL2 variant) without
+# rebuilding the engine.
 ##############################################################################
 echo "==[ runtime DLLs ]=============================================="
 # SDL2.dll from our cross-sysroot. The build's actual DLL is in the
@@ -64,23 +80,19 @@ docker run --rm --user "$(id -u):$(id -g)" \
     bash -c "
         set -euo pipefail
         cp /opt/mingw-sysroot/bin/SDL2.dll /out/
-        # mingw runtime DLLs from the apt-installed cross-toolchain.
-        # Paths checked: /usr/lib/gcc/x86_64-w64-mingw32/<ver>/ and
-        # /usr/x86_64-w64-mingw32/lib/.
-        # libssp-0.dll provides __stack_chk_fail / __stack_chk_guard. The
-        # engine is built with -fstack-protector-strong via the if (MINGW)
-        # branch in src/openrct2/CMakeLists.txt:181, so the runtime DLL
-        # is loaded at process start. Without bundling libssp-0.dll the
-        # exe fails to load (Wine reports the missing library by name).
-        for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libssp-0.dll; do
-            src=\$(find /usr/lib/gcc/x86_64-w64-mingw32 /usr/x86_64-w64-mingw32 -name \"\$dll\" 2>/dev/null | head -1)
-            if [ -z \"\$src\" ]; then
-                echo \"ERROR: \$dll not found in cross-toolchain\" >&2
-                exit 1
-            fi
-            cp \"\$src\" /out/\$dll
-            echo \"  copied \$src -> /out/\$dll\"
-        done
+        echo \"  copied SDL2.dll\"
+        # Sanity-check: openrct2.exe should NOT depend on libstdc++-6,
+        # libgcc_s_seh-1, libwinpthread-1, or libssp-0 anymore. If any of
+        # them shows up in the import table, the toolchain static-link
+        # flags didn't take effect and the dist is shipping a broken
+        # cross-DLL exception-handling configuration.
+        if x86_64-w64-mingw32-objdump -p /out/openrct2.exe 2>/dev/null \
+           | grep -iE 'DLL Name: (libstdc\+\+|libgcc_s_seh|libwinpthread|libssp)' ; then
+            echo 'ERROR: openrct2.exe still depends on a mingw runtime DLL' >&2
+            echo '       Static-link flags in toolchain-mingw-w64-x86_64.cmake did not take effect.' >&2
+            echo '       See the CMAKE_EXE_LINKER_FLAGS_INIT comment in that file.' >&2
+            exit 1
+        fi
     "
 
 ##############################################################################
