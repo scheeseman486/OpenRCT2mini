@@ -1142,23 +1142,44 @@ namespace
         Disposition onPlace() override
         {
             const auto pos = gridCursor().getPosition();
-            // OPENRCT2MINI grid-cursor-plan §10 placement-Z fix.
+            // OPENRCT2MINI grid-cursor-plan §10 placement-Z fix
+            // (2026-05-20 update: partial slopes).
             // gridCursor().getZ() is the user-driven Z offset (0 on
             // first entry, bumped by onRaise / onLower). On its own
             // that's below the terrain surface and FootpathPlaceAction
-            // rejects the placement as "too low". The mouse path
-            // resolves the surface Z by sampling the terrain element
-            // under the cursor (FootpathGetOnTerrainPlacement in
-            // Footpath.cpp); the gamepad path's equivalent is to ask
-            // TileElementHeight for the surface height of the cursor's
-            // tile centre. Add the model's user-Z on top so Z-raise /
-            // Z-lower can lift the path above ground for bridges. The
-            // 16 floor mirrors `_footpathPlaceZ = std::max(mapZ, 16)`
-            // in Footpath.cpp:1068 — the engine treats Z 0 as "no
-            // override" so we need a non-zero baseline.
+            // rejects the placement as "too low".
+            //
+            // The mouse path resolves the surface placement Z via
+            // FootpathGetOnTerrainPlacement (Footpath.cpp:1133 →
+            // FootpathGetPlacementFromInfo); we do the same here.
+            // Unlike TileElementHeight (which returns the slope-
+            // interpolated height at a specific XY point), the
+            // terrain-placement helper returns the *path-corrected*
+            // base Z — for partial-slope tiles where one corner is
+            // raised, it bumps baseZ by kPathHeightStep so the
+            // resulting flat path sits on top of the raised corner.
+            // The earlier TileElementHeight sample worked for flat
+            // tiles and sloped (ramp-shaped) tiles, but for partial
+            // slopes returned the low-corner Z, so the place action's
+            // baseZ ≠ the slope-aware Z PlaceAtTilePublic resolves —
+            // the slope fell back to flat AND was at the wrong Z.
+            //
+            // Add the cursor's Z offset on top of placement.baseZ for
+            // raised-plane (bridge) placements. The 16 floor mirrors
+            // `_footpathPlaceZ = std::max(mapZ, 16)` in
+            // Footpath.cpp:1108 — the engine treats Z 0 as "no
+            // override" so we need a non-zero baseline. Falls back
+            // to TileElementHeight when FootpathGetOnTerrainPlacement
+            // can't resolve the tile (no surface element — unusual,
+            // edge of map / never-generated terrain).
             const auto worldXY = pos.ToCoordsXY();
-            const int32_t surfaceZ = OpenRCT2::TileElementHeight(worldXY);
-            const int32_t baseZ = std::max<int32_t>(surfaceZ + gridCursor().getZ(), 16);
+            const int32_t zOffset = gridCursor().getZ();
+            auto placement = OpenRCT2::FootpathGetOnTerrainPlacement(pos);
+            int32_t baseZ;
+            if (placement.isValid())
+                baseZ = std::max<int32_t>(placement.baseZ + zOffset, 16);
+            else
+                baseZ = std::max<int32_t>(OpenRCT2::TileElementHeight(worldXY) + zOffset, 16);
             Windows::WindowFootpathPlaceAtTile(pos, baseZ);
             return Disposition::Consumed;
         }
