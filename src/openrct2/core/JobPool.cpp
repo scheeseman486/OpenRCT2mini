@@ -9,7 +9,10 @@
 
 #include "JobPool.h"
 
+#include "Console.hpp"
+
 #include <cassert>
+#include <exception>
 
 JobPool::TaskData::TaskData(std::function<void()> workFn, std::function<void()> completionFn)
     : WorkFn(std::move(workFn))
@@ -114,7 +117,27 @@ void JobPool::ProcessQueue()
 
             lock.unlock();
 
-            taskData.WorkFn();
+            // OPENRCT2MINI 2026-05-21: catch task exceptions so a single
+            // failing job doesn't terminate the worker thread (which would
+            // call std::terminate via the std::thread routine contract).
+            // Originally surfaced on Windows builds: ObjectRepository::
+            // LoadOrConstruct threw IOException on a malformed objects.idx,
+            // the exception escaped this lambda, propagated up through
+            // execute_native_thread_routine, and SIGABRT'd the whole
+            // process. Log and swallow — the per-task error path is the
+            // caller's responsibility, not the pool's.
+            try
+            {
+                taskData.WorkFn();
+            }
+            catch (const std::exception& e)
+            {
+                OpenRCT2::Console::Error::WriteLine("JobPool task threw exception: %s", e.what());
+            }
+            catch (...)
+            {
+                OpenRCT2::Console::Error::WriteLine("JobPool task threw non-std::exception");
+            }
 
             lock.lock();
 
