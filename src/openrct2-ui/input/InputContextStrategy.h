@@ -304,11 +304,18 @@ namespace OpenRCT2::Ui
         int32_t getZ() const { return _z; }
         void setZ(int32_t z) { _z = z; }
         void raiseZ(int32_t step) { _z += step; }
+        // OPENRCT2MINI grid-cursor-plan §14.2 polish 6 (2026-05-20):
+        // allow _z to go arbitrarily negative so the user can drag the
+        // path below ground. The mouse path has no equivalent clamp on
+        // _footpathPlaceShiftZ — it lets shift Z go to any negative
+        // value and clamps only the final placement baseZ to 16 (see
+        // Footpath.cpp:1108 / SetProvisionalAtTilePublic:1934). Mirror
+        // that here so Shift+D-pad Down actually goes below ground
+        // instead of clamping at surface level. The placement clamp
+        // downstream still pins baseZ to 16 minimum.
         void lowerZ(int32_t step)
         {
             _z -= step;
-            if (_z < 0)
-                _z = 0;
         }
 
         MapSelectType getOrientation() const { return _orientation; }

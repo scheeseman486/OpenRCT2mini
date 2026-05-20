@@ -3420,19 +3420,27 @@ void InputManager::handleModifiers()
     {
         // OPENRCT2MINI grid-cursor-plan §14.2 polish 1 (2026-05-20):
         // keep the VirtualFloor enabled while the grid cursor is
-        // engaged and the user has shifted the placement Z above
-        // ground. The mouse path holds shift for the entire drag
-        // gesture, so the floor stays alive across the drag — but
-        // the gamepad path only holds shift during the discrete
+        // engaged and the user has shifted the placement Z above OR
+        // below ground. The mouse path holds shift for the entire
+        // drag gesture, so the floor stays alive across the drag —
+        // but the gamepad path only holds shift during the discrete
         // onRaise / onLower press, so without this clause the very
         // next frame would call VirtualFloorDisable() and the blue
-        // grid would vanish until the next Z bump. The narrow
-        // gridCursor gate (only when in grid cursor mode AND height
-        // is above the minimum land floor) means non-grid-cursor
-        // contexts continue to disable on modifier release.
+        // grid would vanish until the next Z bump.
+        //
+        // OPENRCT2MINI grid-cursor-plan §14.2 polish 7 (2026-05-20):
+        // gate on the cursor model's accumulated Z directly, not on
+        // VirtualFloorGetHeight(). The painted floor height was set
+        // to the raised value during the drag and isn't reset back
+        // to 0 when the user returns to ground level — so the
+        // height-based check kept the floor enabled forever once
+        // raised, even after Z returned to 0. The cursor model's
+        // _z resets to 0 cleanly when the user steps back to
+        // ground, so it's the correct gate for "is the user
+        // actively driving an off-ground Z plane right now."
         const bool gridCursorRaised
             = gMapSelectFlags.has(MapSelectFlag::gridCursor)
-            && VirtualFloorGetHeight() > kMinimumLandHeight;
+            && getAnyRegisteredCursorZ() != 0;
         if (isModifierKeyPressed(ModifierKey::ctrl) || isModifierKeyPressed(ModifierKey::shift)
             || gridCursorRaised)
             VirtualFloorEnable();

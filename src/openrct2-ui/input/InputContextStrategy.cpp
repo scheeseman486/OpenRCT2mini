@@ -433,19 +433,47 @@ namespace OpenRCT2::Ui
     // those items are non-removable so the dispatch is a no-op,
     // matching the mouse path's behaviour. Subclasses with bespoke
     // cancel semantics override.
+    //
+    // OPENRCT2MINI grid-cursor-deletion-plan §3.6 (Phase C,
+    // 2026-05-20): route through the new
+    // ViewportInteractionRightClickAtGridCursor dispatcher instead
+    // of the screen-pixel-reprojecting RightClickAtMapPos. The new
+    // dispatcher walks the tile's element list directly, classifies
+    // each into nine priority bands, and acts on the highest-
+    // priority candidate — so sub-tile sceneries (one per quadrant)
+    // are addressable deterministically, not "whichever one happens
+    // to lie under the projected tile-centre pixel". For grid
+    // cursors that have been lifted off the surface, the cursor's
+    // raised Z offset is added on top of the tile's surface Z to
+    // arm the Z-window filter inside the dispatcher (§3.4); when
+    // the cursor sits at ground level (`getZ() == 0`) the Z-window
+    // is disabled and every actionable element on the tile is a
+    // candidate, matching the mouse-path semantic. Edge cursors
+    // (Terrain / Water) pass cursorZ = surfaceZ so the dispatcher's
+    // Z-window is off; Surface elements are never actionable so the
+    // edge path remains a no-op.
     Disposition ToolContext::onCancel()
     {
         TileCoordsXY pos{};
+        int32_t rawCursorZ = 0;
         if (auto* model = getCursorModel(); model != nullptr)
         {
             if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+            {
                 pos = grid->getPosition();
+                rawCursorZ = grid->getZ();
+            }
             else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
+            {
                 pos = edge->getPosition();
+                rawCursorZ = edge->getZ();
+            }
             else
                 return Disposition::Consumed;
         }
-        ViewportInteractionRightClickAtMapPos(pos.ToCoordsXY());
+        const auto centre = pos.ToCoordsXY() + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
+        const int32_t cursorZ = TileElementHeight(centre) + rawCursorZ;
+        ViewportInteractionRightClickAtGridCursor(pos, cursorZ);
         return Disposition::Consumed;
     }
 

@@ -53,6 +53,7 @@
 #include <openrct2/world/Map.h>
 #include <openrct2/world/Park.h>
 #include <openrct2/world/Scenery.h>
+#include <openrct2/world/TileElementsView.h>
 #include <openrct2/world/tile_element/BannerElement.h>
 #include <openrct2/world/tile_element/EntranceElement.h>
 #include <openrct2/world/tile_element/LargeSceneryElement.h>
@@ -61,6 +62,9 @@
 #include <openrct2/world/tile_element/SurfaceElement.h>
 #include <openrct2/world/tile_element/TrackElement.h>
 #include <openrct2/world/tile_element/WallElement.h>
+
+#include <array>
+#include <optional>
 
 using namespace OpenRCT2;
 using namespace OpenRCT2::Ui::Windows;
@@ -635,12 +639,221 @@ namespace OpenRCT2::Ui
     // GetMapCoordinatesFromPos / allowRightMouseRemoval / priority
     // logic is reused verbatim (§7.1 — projection inverse of
     // Viewport::ScreenToViewportCoord at Viewport.cpp:1114).
+    //
+    // OPENRCT2MINI grid-cursor-deletion-plan §3.6 (2026-05-20):
+    // superseded by ViewportInteractionRightClickAtGridCursor for
+    // the tool-context onCancel path — the screen-pixel reprojection
+    // here couldn't address sub-tile sceneries deterministically.
+    // No current consumers; kept as a parking spot for future
+    // map-pos right-click flows.
     bool ViewportInteractionRightClickAtMapPos(const CoordsXY& mapCoords)
     {
         const auto screen = ViewportInteractionMapToScreen(mapCoords);
         if (!screen.has_value())
             return false;
         return ViewportInteractionRightClick(*screen);
+    }
+
+    // OPENRCT2MINI grid-cursor-deletion-plan §3.1 (2026-05-20):
+    // priority-band classifier for the grid-cursor right-click
+    // dispatcher. Lower band number = higher priority (acted on
+    // first). The ordering is:
+    //
+    //   0  sub-tile decoration  (SmallScenery, !occupiesFullTile)
+    //   1  full-tile decoration (SmallScenery,  occupiesFullTile)
+    //   2  large scenery         (LargeScenery)
+    //   3  wall                  (Wall)
+    //   4  banner                (Banner)            — opens detail
+    //   5  path addition         (Path w/ addition)  — clears addition
+    //   6  path                  (Path)              — removes path
+    //   7  park entrance         (Entrance, park)    — opens park info
+    //   8  ride / track / ride entrance & exit       — opens ride ctor
+    //
+    // Surface returns -1 (never actionable through this path). The
+    // band order encodes the user's expectation: strip decoration
+    // off first, work down to infrastructure last.
+    static int classifyGridCursorPriority(const TileElement& el)
+    {
+        switch (el.GetType())
+        {
+            case TileElementType::SmallScenery:
+            {
+                const auto* entry = el.AsSmallScenery()->GetEntry();
+                if (entry == nullptr)
+                    return 0;  // unknown entry — treat as sub-tile
+                return entry->flags.has(SmallSceneryFlag::occupiesFullTile) ? 1 : 0;
+            }
+            case TileElementType::LargeScenery:
+                return 2;
+            case TileElementType::Wall:
+                return 3;
+            case TileElementType::Banner:
+                return 4;
+            case TileElementType::Path:
+                return el.AsPath()->HasAddition() ? 5 : 6;
+            case TileElementType::Entrance:
+                // Park entrance and ride entrance/exit share the
+                // same TileElementType — disambiguate by sub-type.
+                // Park entrance opens the park information window
+                // (§6.2); ride entrance / exit opens ride
+                // construction.
+                return el.AsEntrance()->GetEntranceType() == ENTRANCE_TYPE_PARK_ENTRANCE ? 7 : 8;
+            case TileElementType::Track:
+                return 8;
+            case TileElementType::Surface:
+            default:
+                return -1;
+        }
+    }
+
+    // OPENRCT2MINI grid-cursor-deletion-plan §3.5 (Phase B,
+    // 2026-05-20): per-element dispatch for the grid-cursor right-
+    // click. Switches on the element's classified priority band
+    // and calls the matching delete helper / window opener:
+    //
+    //   0,1 SmallScenery    → ViewportInteractionRemoveScenery
+    //   2   LargeScenery    → ViewportInteractionRemoveLargeScenery
+    //                         (the helper opens the sign-detail
+    //                         window for scrolling-banner large
+    //                         scenery instead — matches mouse path)
+    //   3   Wall            → ViewportInteractionRemoveParkWall
+    //                         (opens sign window for scrolling-
+    //                         banner walls, delete otherwise —
+    //                         matches mouse path)
+    //   4   Banner          → ContextOpenDetailWindow(banner)
+    //   5   Path addition   → ViewportInteractionRemovePathAddition
+    //                         (clears addition only; path stays)
+    //   6   Path            → ViewportInteractionRemoveFootpath
+    //   7   Park entrance   → ContextOpenWindow(parkInformation)
+    //                         — fork divergence from mouse path's
+    //                         RemoveParkEntrance (§6.2)
+    //   8   Ride / Track / ride entrance & exit → RideModify
+    //                         (opens ride construction window)
+    //
+    // The classifier returns the band; we re-derive a few sub-
+    // class distinctions (path-addition vs path bare; park entry
+    // vs ride entry) directly here so we don't depend on the
+    // classifier's exact int encoding.
+    static bool dispatchGridCursorActionForElement(TileElement& el, const CoordsXY& tile)
+    {
+        switch (el.GetType())
+        {
+            case TileElementType::SmallScenery:
+                ViewportInteractionRemoveScenery(*el.AsSmallScenery(), tile);
+                return true;
+
+            case TileElementType::LargeScenery:
+                ViewportInteractionRemoveLargeScenery(*el.AsLargeScenery(), tile);
+                return true;
+
+            case TileElementType::Wall:
+                ViewportInteractionRemoveParkWall(*el.AsWall(), tile);
+                return true;
+
+            case TileElementType::Banner:
+                ContextOpenDetailWindow(WindowDetail::banner, el.AsBanner()->GetIndex().ToUnderlying());
+                return true;
+
+            case TileElementType::Path:
+                if (el.AsPath()->HasAddition())
+                    ViewportInteractionRemovePathAddition(*el.AsPath(), tile);
+                else
+                    ViewportInteractionRemoveFootpath(*el.AsPath(), tile);
+                return true;
+
+            case TileElementType::Entrance:
+                if (el.AsEntrance()->GetEntranceType() == ENTRANCE_TYPE_PARK_ENTRANCE)
+                {
+                    // §6.2 — grid cursor never deletes the park
+                    // entrance; instead surface the park info
+                    // window, mirroring the top-toolbar park-info
+                    // button. Mouse RMB on a park entrance retains
+                    // its upstream delete behaviour (unchanged).
+                    ContextOpenWindow(WindowClass::parkInformation);
+                }
+                else
+                {
+                    // Ride entrance / exit — open ride construction.
+                    CoordsXYE rideTileElement{ tile, &el };
+                    RideModify(rideTileElement);
+                }
+                return true;
+
+            case TileElementType::Track:
+            {
+                CoordsXYE rideTileElement{ tile, &el };
+                RideModify(rideTileElement);
+                return true;
+            }
+
+            case TileElementType::Surface:
+            default:
+                return false;
+        }
+    }
+
+    // OPENRCT2MINI grid-cursor-deletion-plan §3.2 (2026-05-20):
+    // grid-cursor right-click dispatcher. See header for full
+    // contract. Walks the tile's element list (ascending Z, then
+    // placement order at the same Z — guaranteed by TileElementInsert),
+    // classifies each into one of nine priority bands, and acts on
+    // the highest-priority candidate. Within a band the earliest-
+    // in-list candidate wins (so lower-Z, then earlier-placed at
+    // the same Z). Z-window filter is engaged only when the user
+    // has raised the cursor's Z plane (cursorZ != surface Z); in
+    // that mode elements outside ±kPathHeightStep of the cursor's
+    // effective Z are rejected, so a lamp on a raised path is
+    // addressable independently of a tree at surface Z.
+    //
+    bool ViewportInteractionRightClickAtGridCursor(const TileCoordsXY& tile, int32_t cursorZ)
+    {
+        constexpr int kPriorityBands = 9;
+        struct Candidate
+        {
+            TileElement* el = nullptr;
+            size_t order = 0;
+        };
+        std::array<std::optional<Candidate>, kPriorityBands> best{};
+
+        // §3.4: the Z-window filter is engaged only when the user
+        // has raised the cursor off the surface. At surface Z
+        // (cursorZ == 0 when the caller has not added a Z offset)
+        // every element on the tile is a candidate, matching the
+        // mouse "click on the tile, act on whatever's there"
+        // semantic.
+        //
+        // Caller passes the cursor's effective world Z (surface Z
+        // + raised-plane offset). To decide whether the Z window is
+        // active we compare to the tile's surface Z — if the cursor
+        // sits exactly at surface Z the window is disabled.
+        const auto centre = tile.ToCoordsXY() + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
+        const int32_t surfaceZ = TileElementHeight(centre);
+        const bool useZWindow = (cursorZ != surfaceZ);
+
+        size_t order = 0;
+        for (auto* el : TileElementsView<>(tile))
+        {
+            ++order;
+            const int p = classifyGridCursorPriority(*el);
+            if (p < 0)
+                continue;
+            if (useZWindow)
+            {
+                const int32_t elZ = el->GetBaseZ();
+                if (elZ < cursorZ - kPathHeightStep || elZ > cursorZ + kPathHeightStep)
+                    continue;
+            }
+            if (!best[p].has_value())
+                best[p] = Candidate{ el, order };
+            // else: earlier-in-list within band already chosen
+        }
+
+        for (auto& slot : best)
+        {
+            if (slot.has_value())
+                return dispatchGridCursorActionForElement(*slot->el, tile.ToCoordsXY());
+        }
+        return false;
     }
 
     // OPENRCT2MINI cursor-sync (2026-05-17): standalone projection

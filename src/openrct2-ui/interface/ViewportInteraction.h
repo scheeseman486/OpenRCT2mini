@@ -27,7 +27,34 @@ namespace OpenRCT2::Ui
     // gamepad / keyboard path performs the same delete-/-context-
     // open semantic the mouse RMB short-press release does, but
     // sourced from the cursor's tile instead of the OS pointer.
+    //
+    // OPENRCT2MINI grid-cursor-deletion-plan §3.6 (2026-05-20):
+    // superseded by ViewportInteractionRightClickAtGridCursor for
+    // the tool-context onCancel path. Left in place as a parking
+    // spot for future map-pos right-click flows; no current
+    // consumers.
     bool ViewportInteractionRightClickAtMapPos(const CoordsXY& mapCoords);
+
+    // OPENRCT2MINI grid-cursor-deletion-plan §3.2 (2026-05-20):
+    // grid-cursor-specific right-click dispatcher. Walks the tile's
+    // linked-list of TileElements (ascending Z, then placement
+    // order at the same Z — guaranteed by TileElementInsert),
+    // classifies each into one of nine priority bands per the
+    // fork's deletion ladder (sub-tile decoration → full-tile
+    // decoration → large scenery → wall → banner → path addition →
+    // path → park entrance → ride/track), and applies the matching
+    // action to the highest-priority candidate. Successive presses
+    // peel the tile back one element at a time. Diverges from the
+    // mouse-screen-coord picker so the gamepad / keyboard user can
+    // address every sub-tile element deterministically, not
+    // whatever happens to lie under the projected tile-centre
+    // pixel. The `cursorZ` argument is the cursor's effective world
+    // Z (surface Z + raised-plane offset). When the user has lifted
+    // the cursor off the ground (gridCursor().getZ() != 0), a Z-
+    // window filter clips candidates to ±kPathHeightStep of the
+    // cursor's Z so only elements near the targeted plane are
+    // considered.
+    bool ViewportInteractionRightClickAtGridCursor(const TileCoordsXY& tile, int32_t cursorZ);
 
     // OPENRCT2MINI cursor-sync (2026-05-17): project a world tile-
     // centre onto the main viewport's screen pixel coords. Returns
