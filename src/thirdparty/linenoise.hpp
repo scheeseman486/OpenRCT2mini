@@ -1711,7 +1711,15 @@ inline int getColumns(int ifd, int ofd) {
     CONSOLE_SCREEN_BUFFER_INFO b;
 
     if (!GetConsoleScreenBufferInfo(hOut, &b)) return 80;
-    return b.srWindow.Right - b.srWindow.Left;
+    // OPENRCT2MINI 2026-05-21: Under Wine running a Windows GUI app with no
+    // attached console, GetConsoleScreenBufferInfo can succeed but return
+    // Right == Left == 0. Without this clamp, l->cols becomes 0 and the
+    // subsequent divisions in refreshMultiLine (/ l->cols) trigger an
+    // unhandled SIGFPE that bypasses our exception handlers and crashes the
+    // process. Fall back to the same default the non-Windows path uses.
+    int cols = b.srWindow.Right - b.srWindow.Left;
+    if (cols <= 0) return 80;
+    return cols;
 #else
     struct winsize ws;
 
