@@ -40,6 +40,20 @@ namespace OpenRCT2::Ui
     // InputContextStrategy.cpp where GetInputManager() is in scope.
     bool isShiftModifierHeldInTool();
 
+    // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): close the
+    // error-popup window if one is showing. Returns true if a popup
+    // existed and was closed. The popup (WindowClass::error — see
+    // Error.cpp) is a transient toast surfaced after a rejected
+    // place action ("Can't build footpath here", etc.); mouse users
+    // dismiss it by clicking, but in grid-cursor mode no click
+    // dispatches to the popup directly. ToolContext::onShortcut
+    // calls this at the top of its handler to absorb the user's
+    // next action press as a popup-dismiss when one exists; the
+    // press after that resumes normal grid-cursor verbs. Defined
+    // out-of-line because the header doesn't otherwise need the
+    // window-manager include graph.
+    bool closeToolErrorPopupIfShowing();
+
     // OPENRCT2MINI grid-cursor-plan §3: D-pad-to-tile-step mapping mode.
     // Stored on Config::Interface::gridCursorMode; consulted by the
     // stepForDirection helper each step. Default `compass` (world-
@@ -615,6 +629,37 @@ namespace OpenRCT2::Ui
 
         Disposition onShortcut(std::string_view id, const InputEvent& e) override
         {
+            // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20):
+            // error-popup interception. When a place / cancel action
+            // fails, the engine surfaces a transient red popup
+            // ("Can't build footpath here", etc — see
+            // windows/Error.cpp). The mouse path dismisses the popup
+            // on any left-click (MouseInput.cpp:1202); the grid
+            // cursor never reaches that dispatch because tool
+            // shortcuts route through this strategy instead.
+            // Result: the popup floats until its 8 s auto-close
+            // timeout while the user's next press starts another
+            // place/cancel action — possibly hitting the same
+            // failure repeatedly.
+            //
+            // Bridge: when a popup is showing, swallow the next
+            // action press (cursor.click, cursor.cancel,
+            // interface.confirm, interface.dismiss) as a dismiss-
+            // the-popup gesture. The press after the popup is gone
+            // resumes normal verb dispatch. D-pad / focus.* / Z
+            // shortcuts pass through so the user can still
+            // re-position the cursor while reading the message.
+            // Mouse cancel keeps its short-press defer to avoid
+            // disrupting the drag-vs-tap disambiguation gate below
+            // — the popup gets dismissed on the synthesised release
+            // anyway.
+            if (id == ShortcutId::kCursorClick || id == ShortcutId::kCursorCancel
+                || id == ShortcutId::kInterfaceConfirm || id == ShortcutId::kInterfaceDismiss)
+            {
+                if (closeToolErrorPopupIfShowing())
+                    return Disposition::Consumed;
+            }
+
             // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
             // 2026-05-17 #2 — user feedback): the Start / Back
             // verbs in grid-cursor mode are now symmetric with

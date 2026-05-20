@@ -45,6 +45,34 @@ namespace OpenRCT2::Ui
         return GetInputManager().isModifierKeyPressed(ModifierKey::shift);
     }
 
+    // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): dismiss an
+    // active error popup (WindowClass::error from
+    // windows/Error.cpp). The mouse path closes the popup on any
+    // left-click via InputWidgetLeft (MouseInput.cpp:1202); the
+    // grid-cursor path has no equivalent intercept because click
+    // dispatch goes through the tool-context strategy, which acts
+    // on the cursor's tile rather than any popup. Result: a place
+    // action that errored leaves the red popup floating until its
+    // 8-second auto-close timeout while the user's next action
+    // press starts placing again.
+    //
+    // Bridge the gap by letting ToolContext::onShortcut consume the
+    // next action press as a popup-dismiss when one exists. The
+    // popup's red colour is its own visual "press something to
+    // dismiss" cue, so no extra focus-ring overlay is needed; the
+    // single-action interception is enough to make the popup
+    // feel responsive to the gamepad user.
+    bool closeToolErrorPopupIfShowing()
+    {
+        auto* wm = GetWindowManager();
+        if (wm == nullptr)
+            return false;
+        if (wm->FindByClass(WindowClass::error) == nullptr)
+            return false;
+        wm->CloseByClass(WindowClass::error);
+        return true;
+    }
+
     // ---- helpers --------------------------------------------------------
 
     // OPENRCT2MINI grid-cursor-plan §7.1: push the cursor's tile to the
