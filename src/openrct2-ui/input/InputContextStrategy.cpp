@@ -17,6 +17,7 @@
 
 #include "../UiContext.h"
 #include "../interface/ViewportInteraction.h"
+#include "../windows/Windows.h"
 #include "WidgetFocus.h"
 
 #include <openrct2/Context.h>
@@ -70,6 +71,13 @@ namespace OpenRCT2::Ui
         if (wm->FindByClass(WindowClass::error) == nullptr)
             return false;
         wm->CloseByClass(WindowClass::error);
+        // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20 follow-up):
+        // tool-side latches the mouse path would clear on the
+        // implicit mouse-up after a failed click. Without these the
+        // next grid-cursor press silently no-ops (provisional and
+        // place both early-return on a sticky error flag). The
+        // bridge no-ops when the tool window isn't open.
+        Windows::WindowFootpathClearErrorLatch();
         return true;
     }
 

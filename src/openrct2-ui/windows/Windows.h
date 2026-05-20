@@ -177,6 +177,13 @@ namespace OpenRCT2::Ui::Windows
     // the mouse Shift+drag-Z path.
     void WindowFootpathSetProvisionalAtTile(const TileCoordsXY& tile, int32_t zOffset = 0);
     void WindowFootpathClearProvisional();
+    // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): clear the
+    // Footpath window's sticky error latch (_footpathErrorOccured).
+    // The mouse path clears it on onToolUp; the grid cursor's
+    // popup-dismiss flow has to clear it explicitly via this bridge
+    // because it never routes through onToolUp. No-op when the
+    // window isn't open.
+    void WindowFootpathClearErrorLatch();
     // Close the Footpath window outright — used by the grid-cursor
     // interface.confirm verb ("OK, I'm done with this tool").
     void WindowFootpathClose();

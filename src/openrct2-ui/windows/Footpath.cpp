@@ -1880,6 +1880,16 @@ namespace OpenRCT2::Ui::Windows
         // the gamepad-driven FootpathContext bridge helpers. Each
         // delegates to the private member of the same root name.
         void RemovePublic() { WindowFootpathRemove(); }
+        // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20 follow-up):
+        // clear the sticky `_footpathErrorOccured` latch. The mouse
+        // path clears it implicitly on onToolUp (mouse-button
+        // release after a failed click); the grid cursor never
+        // routes through onToolUp, so the latch survives across
+        // popup-dismiss into the next press and silently bails the
+        // provisional + place dispatches. Called from the bridge
+        // bound to closeToolErrorPopupIfShowing so dismissing the
+        // popup also resets the gate.
+        void ClearErrorLatchPublic() { _footpathErrorOccured = false; }
         bool IsBridgeOrTunnelMode() const
         {
             return _footpathConstructionMode == PathConstructionMode::bridgeOrTunnel;
@@ -2325,6 +2335,18 @@ namespace OpenRCT2::Ui::Windows
             return;
         auto* fw = static_cast<FootpathWindow*>(w);
         fw->SetProvisionalAtTilePublic(tile, zOffset);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): clear the
+    // Footpath window's sticky error latch — see ClearErrorLatchPublic.
+    // No-op when the window isn't open.
+    void WindowFootpathClearErrorLatch()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        static_cast<FootpathWindow*>(w)->ClearErrorLatchPublic();
     }
 
     // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):
