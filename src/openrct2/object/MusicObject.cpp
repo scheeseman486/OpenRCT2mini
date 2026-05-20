@@ -15,6 +15,7 @@
 #include "../PlatformEnvironment.h"
 #include "../audio/AudioContext.h"
 #include "../audio/AudioSource.h"
+#include "../core/Console.hpp"
 #include "../core/IStream.hpp"
 #include "../core/Json.hpp"
 #include "../core/Path.hpp"
@@ -55,7 +56,30 @@ namespace OpenRCT2
             auto stream = track.Asset.GetStream();
             if (stream != nullptr)
             {
-                auto source = audioContext.CreateStreamFromWAV(std::move(stream));
+                // OPENRCT2MINI 2026-05-21: defensive catch.
+                // CreateStreamFromWAV has its own try/catch internally for
+                // codec-decoder errors but under mingw-w64 SEH-EH the catch
+                // there fails to fire (LSDA-not-found / personality-fn
+                // mismatch — exact mechanism unclear, only reproduces on
+                // the cross-compiled Windows build, not the native host
+                // build). Without this wrapper an "Unsupported audio codec"
+                // throw from a single music track crashes title-sequence
+                // load. Treat any throw here the same as a nullptr return
+                // from CreateStreamFromWAV.
+                Audio::IAudioSource* source = nullptr;
+                try
+                {
+                    source = audioContext.CreateStreamFromWAV(std::move(stream));
+                }
+                catch (const std::exception& e)
+                {
+                    Console::Error::WriteLine("MusicObject: audio source creation threw: %s", e.what());
+                }
+                catch (...)
+                {
+                    Console::Error::WriteLine("MusicObject: audio source creation threw non-std::exception");
+                }
+
                 if (source != nullptr)
                 {
                     track.BytesPerTick = source->GetBytesPerSecond() / 40;
