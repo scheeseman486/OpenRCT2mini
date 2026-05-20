@@ -628,35 +628,6 @@ namespace OpenRCT2::Ui
     // override that sources the tile from the grid cursor instead.
     Disposition WorldContext::onShortcut(std::string_view id, const InputEvent& e)
     {
-        // OPENRCT2MINI grid-cursor-plan §14.5 (2026-05-20): Start /
-        // interface.confirm in cursor mode engages grid-cursor mode
-        // when a construction tool is armed. This bookends the
-        // existing widgetFocus engage (InputManager.cpp:454-483)
-        // where Start in the focused tool window flips into grid
-        // cursor — there the user is already in focus mode, here
-        // they're in cursor mode (real or virtual mouse driving the
-        // selector). Either way, Start with a tool armed means "I'm
-        // ready to draw" and should land in grid mode without
-        // requiring the user to first wake focus mode and then
-        // press Start again. We:
-        //
-        //   1. Switch selector to active so the focus / grid-cursor
-        //      visual machinery is on (selector ring, cursor hide).
-        //   2. Set the tool-focus latch so resolveActiveContext
-        //      routes the next frame to the tool context strategy.
-        //
-        // The base ToolContext::onActivate fires on the strategy
-        // transition that follows.
-        if (id == ShortcutId::kInterfaceConfirm
-            && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive))
-        {
-            auto& mgr = GetInputManager();
-            if (mgr.getSelectorMode() != InputManager::SelectorMode::active)
-                mgr.setSelectorMode(InputManager::SelectorMode::active);
-            mgr.setToolFocusSelected(true, InputManager::SelectorTransitionSource::virtualUserInput);
-            return Disposition::Consumed;
-        }
-
         if (id == ShortcutId::kCursorCancel)
         {
             // §3.4 (Phase C follow-up 2026-05-17): mouse needs the
