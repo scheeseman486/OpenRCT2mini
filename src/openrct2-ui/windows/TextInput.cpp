@@ -34,7 +34,7 @@ namespace OpenRCT2::Ui::Windows
 {
     static constexpr ScreenSize kWindowSize = { 250, 90 };
 
-    enum WindowTextInputWidgetIdx
+    enum WindowTextInputWidgetIdx : WidgetIndex
     {
         WIDX_BACKGROUND,
         WIDX_TITLE,

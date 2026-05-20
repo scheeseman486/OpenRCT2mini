@@ -110,7 +110,7 @@ namespace OpenRCT2::Ui::Windows
 
 #pragma region Widgets
 
-    enum WindowOptionsWidgetIdx
+    enum WindowOptionsWidgetIdx : WidgetIndex
     {
         WIDX_BACKGROUND,
         WIDX_TITLE,

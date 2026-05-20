@@ -8,9 +8,11 @@
  *****************************************************************************/
 
 #include "../Diagnostic.h"
+#include "../core/Guard.hpp"
 
 #include <cassert>
 #include <cctype>
+#include <cstring>
 #include <cwctype>
 #include <iomanip>
 #include <sstream>
@@ -40,7 +42,6 @@
     #include <windows.h>
 #endif
 
-#include "Memory.hpp"
 #include "String.hpp"
 #include "StringBuilder.h"
 #include "UTF8.h"
