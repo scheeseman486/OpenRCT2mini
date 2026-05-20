@@ -1272,6 +1272,18 @@ namespace
             return result;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20 follow-up):
+        // after a failed place + popup-dismiss, the latch is now
+        // cleared (WindowFootpathClearErrorLatch) but the ghost
+        // PlaceAtTilePublic cleared at entry (via
+        // FootpathUpdateProvisional) is still gone. Re-arm it here
+        // so the user sees the ghost immediately on popup dismiss
+        // without having to D-pad to a new tile.
+        void onPopupDismissed() override
+        {
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+        }
+
         // OPENRCT2MINI grid-cursor-plan §14.1: onStep lives on the
         // ToolContext base — every grid-cursor / edge-cursor tool
         // now inherits the same step body. Footpath only needs to

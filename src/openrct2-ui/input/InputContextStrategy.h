@@ -586,6 +586,18 @@ namespace OpenRCT2::Ui
         // edges for railings mode).
         virtual SubsetType precisionSubset() const { return SubsetType::none; }
 
+        // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20 follow-up):
+        // hook fired after the popup-dismiss intercept in
+        // onShortcut closes a WindowClass::error window. Lets a
+        // subclass re-arm any per-frame state the failed action
+        // left in a half-cleared state — most importantly the
+        // ghost provisional, which PlaceAtTilePublic clears at
+        // entry via FootpathUpdateProvisional but doesn't restore
+        // when the place dispatch fails. Without this hook the
+        // user dismisses the popup and the ghost stays gone until
+        // they D-pad to a new tile. Base default no-op.
+        virtual void onPopupDismissed() {}
+
         GridCursorModel& gridCursor() { return _grid; }
         const GridCursorModel& gridCursor() const { return _grid; }
 
@@ -657,7 +669,13 @@ namespace OpenRCT2::Ui
                 || id == ShortcutId::kInterfaceConfirm || id == ShortcutId::kInterfaceDismiss)
             {
                 if (closeToolErrorPopupIfShowing())
+                {
+                    // Subclasses re-arm whatever per-frame state the
+                    // failed action left half-cleared (e.g. the
+                    // footpath ghost provisional).
+                    onPopupDismissed();
                     return Disposition::Consumed;
+                }
             }
 
             // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
