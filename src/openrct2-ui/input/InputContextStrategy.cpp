@@ -196,6 +196,30 @@ namespace OpenRCT2::Ui
         return tile;
     }
 
+    // OPENRCT2MINI grid-cursor-plan §14.6 (2026-05-20): tile under
+    // the OS / virtual cursor. ContextGetCursorPosition returns the
+    // virtual cursor position (see grid-cursor-plan Cut 48 — the
+    // platform call routes through the virtual cursor so camera pan
+    // works from the gamepad-driven sprite). When the user engages
+    // grid-cursor mode from cursor mode via Start, we seed the grid
+    // cursor at the tile they were just hovering over — preserves
+    // their visual context across the mode switch. Returns nullopt
+    // if the cursor is over no tile (off-map, outside any viewport,
+    // or out of the practical range).
+    static std::optional<TileCoordsXY> CursorTile()
+    {
+        const auto cursor = ContextGetCursorPosition();
+        const auto mapPos = ScreenGetMapXY(cursor, nullptr);
+        if (!mapPos)
+            return std::nullopt;
+        const auto tile = TileCoordsXY{ *mapPos };
+        const int32_t lo = 1;
+        const int32_t hi = kMaximumMapSizePractical - 1;
+        if (tile.x < lo || tile.x > hi || tile.y < lo || tile.y > hi)
+            return std::nullopt;
+        return tile;
+    }
+
     // ---- GridCursorModel ------------------------------------------------
 
     TileCoordsXY GridCursorModel::step(TileCoordsXY delta)
@@ -387,7 +411,25 @@ namespace OpenRCT2::Ui
             // viewport-centre seed and re-emit the existing
             // position to the gMapSelect globals so the highlight
             // appears at the user's last grid tile.
-            const auto seed = resuming ? std::nullopt : ViewportCentreTile();
+            //
+            // OPENRCT2MINI grid-cursor-plan §14.6 (2026-05-20):
+            // when the user engaged grid mode from cursor mode
+            // (_savedSelectorMode == hidden — they were driving the
+            // real or virtual mouse), seed at the tile under the
+            // cursor instead of the viewport centre. Preserves the
+            // user's visual context across the mode switch: the
+            // grid cursor appears where they were just looking, not
+            // halfway across the viewport. Falls back to the
+            // viewport-centre seed if the cursor isn't over a valid
+            // tile (off-map, outside the viewport, etc.).
+            std::optional<TileCoordsXY> seed;
+            if (!resuming)
+            {
+                if (_savedSelectorMode == InputManager::SelectorMode::hidden)
+                    seed = CursorTile();
+                if (!seed)
+                    seed = ViewportCentreTile();
+            }
             if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
             {
                 if (seed)
