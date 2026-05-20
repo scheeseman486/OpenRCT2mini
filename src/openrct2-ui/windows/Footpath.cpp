@@ -2021,8 +2021,21 @@ namespace OpenRCT2::Ui::Windows
         // path uses (WindowFootpathPlacePathAtPoint); the gamepad
         // path uses the grid cursor's tile as the source of truth.
         // Reads the same gFootpathSelection state the mouse path
-        // does and dispatches a flat FootpathPlaceAction with no
-        // slope.
+        // does.
+        //
+        // OPENRCT2MINI grid-cursor-plan §14.3 (2026-05-20): resolve
+        // the auto-slope from the underlying terrain so placing on a
+        // slope tile produces a sloped footpath, mirroring the mouse
+        // path. The mouse path gets this via FootpathGetOnTerrain-
+        // Placement → WindowFootpathGetPlacementFromScreenCoords →
+        // _provisionalFootpath.tiles[*].slope; the gamepad place
+        // wasn't reading the resolved slope and dispatched a flat
+        // FootpathPlaceAction unconditionally. When the user has
+        // raised the cursor's Z plane above the terrain surface
+        // (baseZ != placement.baseZ), force flat — same divergence
+        // the mouse path makes at WindowFootpathGetPlacementFrom-
+        // ScreenCoords line 1316, since a non-flat slope at a
+        // floating Z doesn't describe a valid placement.
         void PlaceAtTilePublic(const TileCoordsXY& tile, int32_t baseZ)
         {
             if (_footpathErrorOccured)
@@ -2033,6 +2046,9 @@ namespace OpenRCT2::Ui::Windows
             auto selectedType = gFootpathSelection.getSelectedSurface();
             PathConstructFlags constructFlags = FootpathCreateConstructFlags(selectedType);
             FootpathSlope slope{ FootpathSlopeType::flat, 0 };
+            auto placement = FootpathGetOnTerrainPlacement(tile);
+            if (placement.isValid() && baseZ == placement.baseZ)
+                slope = placement.slope;
             auto footpathPlaceAction = GameActions::FootpathPlaceAction(
                 { centre, baseZ }, slope, selectedType, gFootpathSelection.railings, kInvalidDirection, constructFlags);
             footpathPlaceAction.SetCallback([this](const GameActions::GameAction*, const GameActions::Result* result) {
