@@ -175,7 +175,9 @@ static bool TryClassifyAsTD4_TD6(IStream* stream, ClassifiedFileInfo* result)
 
         if (ValidateTrackChecksum(data.get(), dataLength))
         {
-            const auto td6data = std::make_unique_for_overwrite<uint8_t[]>(0x10000);
+            // OPENRCT2MINI: std::make_unique_for_overwrite is C++20; we build C++17 (cut #91).
+            // Equivalent: default-initialised heap array via new[].
+            const auto td6data = std::unique_ptr<uint8_t[]>(new uint8_t[0x10000]);
             size_t td6len = DecodeTD6(data.get(), td6data.get(), dataLength);
             if (td6data != nullptr && td6len >= 8)
             {
