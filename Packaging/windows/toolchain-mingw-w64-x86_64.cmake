@@ -42,16 +42,24 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 set(ENV{PKG_CONFIG_LIBDIR} "/opt/mingw-sysroot/lib/pkgconfig")
 set(ENV{PKG_CONFIG_PATH}   "/opt/mingw-sysroot/lib/pkgconfig")
 
-# Bump _WIN32_WINNT to 0x0A00 (Windows 10) so the headers expose Vista+
-# APIs the engine uses: LCMapStringEx (src/openrct2/core/String.cpp:739),
-# LOCALE_NAME_USER_DEFAULT (same), CancelIoEx
-# (src/openrct2/core/FileWatcher.cpp:176). mingw-w64 defaults to a much
-# lower value (often _WIN32_WINNT_WIN2K = 0x0500) which leaves these
-# unprototyped. Upstream's MSBuild path declares
-# <TargetPlatformVersion>10.0.17763.0</TargetPlatformVersion> in
-# openrct2.common.props:11, equivalent to setting _WIN32_WINNT=0x0A00,
-# so we match. WINVER follows _WIN32_WINNT per Microsoft convention.
-add_definitions(-D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -DNTDDI_VERSION=0x0A000000)
+# Target Windows 7 SP1 (0x0601). The engine APIs that need a non-default
+# _WIN32_WINNT are all Vista+ (so 0x0600 would be enough), but the Win7
+# bump opens the door to anything Vista→Win7 the deps may reference
+# without sacrificing compatibility. Specifically the engine uses:
+#   - LOCALE_NAME_USER_DEFAULT — Vista+ (Platform.Win32.cpp:213/228/612/...)
+#   - GetLocaleInfoEx — Vista+ (same file)
+#   - CancelIoEx — Vista+ (FileWatcher.cpp:176)
+#   - RtlGetVersion — XP+ but loaded dynamically via GetProcAddress
+#
+# Previous value was 0x0A00 (Windows 10), inherited from upstream OpenRCT2's
+# MSBuild path which sets <TargetPlatformVersion>10.0.17763.0</TargetPlatform-
+# Version> in openrct2.common.props. That cut off Win7/8 users for no benefit
+# — the engine doesn't call any Win8+ exclusive APIs (verified via grep for
+# GetSystemTimePreciseAsFileTime / SetThreadDescription / WaitOnAddress etc.).
+# WINVER follows _WIN32_WINNT per Microsoft convention; NTDDI_VERSION uses
+# the WIN7 build constant (0x06010000).
+add_definitions(-D_WIN32_WINNT=0x0601 -DWINVER=0x0601 -DNTDDI_VERSION=0x06010000)
+
 
 # FLAC__NO_DLL: tell FLAC's header (FLAC/export.h) to declare symbols
 # WITHOUT __declspec(dllimport). Default behavior on Windows is to
@@ -85,7 +93,12 @@ set(CMAKE_C_LINK_EXECUTABLE
 # requires actual data-flow knowledge the compiler can't have. The actual
 # code paths are guarded by explicit nullptr checks. We're not patching
 # every upstream site; we just demote the warnings to non-errors.
-set(CMAKE_C_FLAGS_INIT   "-Wno-error=null-dereference -Wno-error=array-bounds -Wno-error=stringop-overflow -Wno-error=maybe-uninitialized -Wno-error=suggest-final-types -Wno-error=suggest-final-methods")
+# OPENRCT2MINI 2026-05-21: -march=x86-64 baseline so the binary runs on
+# Sandy Bridge and older AMD CPUs without AVX/AVX2. GCC's mingw-w64 driver
+# defaults to a CPU model slightly newer than baseline x86-64 (often
+# -march=nocona) which is still pre-AVX, but explicit baseline future-
+# proofs against driver default drift when GCC versions change.
+set(CMAKE_C_FLAGS_INIT   "-march=x86-64 -Wno-error=null-dereference -Wno-error=array-bounds -Wno-error=stringop-overflow -Wno-error=maybe-uninitialized -Wno-error=suggest-final-types -Wno-error=suggest-final-methods")
 set(CMAKE_CXX_FLAGS_INIT "${CMAKE_C_FLAGS_INIT}")
 
 # windres only understands preprocessor defines + -I include paths. Without

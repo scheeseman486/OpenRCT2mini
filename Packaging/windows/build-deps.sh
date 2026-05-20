@@ -58,9 +58,25 @@ export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
 # The actual openrct2.exe gets stack-canary protection from the engine
 # CMake which links -fstack-protector-strong via the if(MINGW) branch
 # in src/openrct2/CMakeLists.txt:181 (post-P1 edit).
-COMMON_CFLAGS="-O2"
+#
+# OPENRCT2MINI 2026-05-21: target Windows 7 SP1 (0x0601) instead of
+# Windows 10 so the deps' Windows-targeted code paths compile against
+# the broadest supported OS. SDL2 specifically uses the version macro
+# at configure time to decide which audio / input / video backends to
+# emit; targeting Win10 here would compile out the Win7 fallbacks even
+# though we want them. The engine toolchain file
+# (toolchain-mingw-w64-x86_64.cmake) sets the same triplet of macros
+# for engine TUs — keeping them aligned ensures no struct-layout or
+# function-signature divergence between the engine's view of <windows.h>
+# and the deps' view. -march=x86-64 baseline keeps the deps free of
+# AVX/AVX2 codegen for Sandy Bridge-era CPU compatibility.
+COMMON_CFLAGS="-O2 -march=x86-64 -D_WIN32_WINNT=0x0601 -DWINVER=0x0601 -DNTDDI_VERSION=0x06010000"
 export CFLAGS="$COMMON_CFLAGS"
 export CXXFLAGS="$COMMON_CFLAGS"
+# Some autotools-based configure scripts only consult CPPFLAGS for the
+# preprocessor macros and ignore CFLAGS. Export the Windows version
+# macros separately so both paths pick them up.
+export CPPFLAGS="-D_WIN32_WINNT=0x0601 -DWINVER=0x0601 -DNTDDI_VERSION=0x06010000"
 
 NPROC=$(nproc)
 
