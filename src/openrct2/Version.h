@@ -12,9 +12,9 @@
 #include <string>
 
 #define OPENRCT2_NAME "OpenRCT2"
-#define kOpenRCT2Version "0.5.0"
+#define kOpenRCT2Version "0.5.1"
 // OPENRCT2MINI: fork version, distinct from upstream. kOpenRCT2Version above
-// is preserved at "0.5.0" so save compatibility advertising stays accurate.
+// tracks the upstream release we last merged from (currently v0.5.1).
 #define kOpenRCT2miniVersion "0.3.0"
 
 #if defined(__amd64__) || defined(_M_AMD64)

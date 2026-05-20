@@ -61,7 +61,7 @@ namespace OpenRCT2::Ui::Windows
     static constexpr int32_t kBindingColumnWidth = 132;
     static constexpr int32_t kColumnGap = 4;
 
-    enum WindowShortcutWidgetIdx
+    enum WindowShortcutWidgetIdx : WidgetIndex
     {
         WIDX_BACKGROUND,
         WIDX_TITLE,

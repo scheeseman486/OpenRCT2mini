@@ -607,14 +607,21 @@ namespace OpenRCT2
 
                 // TODO: preload the title scene in another (parallel) job.
                 preloaderScene->AddJob([this]() { InitialiseRepositories(); });
-                preloaderScene->AddJob([this]() { InitialiseScriptEngine(); });
                 kpt("preloader jobs queued");
             }
             else
             {
                 InitialiseRepositories();
-                InitialiseScriptEngine();
             }
+
+#ifdef ENABLE_SCRIPTING
+            // quickjs script engine is single-threaded and must be set up on the main thread
+            OpenProgress(STR_LOADING_PLUGIN_ENGINE);
+            _scriptEngine.Initialise();
+            _uiContext->InitialiseScriptExtensions();
+
+            OpenProgress(STR_LOADING_GENERIC);
+#endif
 
             return true;
         }
@@ -683,17 +690,6 @@ namespace OpenRCT2
             // ImageTable (and any other intransient objects). Hint the kernel that those
             // pages are cold so RSS drops back to baseline before the title scene begins.
             OpenRCT2::Drawing::SpriteScratchEvict();
-        }
-
-        void InitialiseScriptEngine()
-        {
-#ifdef ENABLE_SCRIPTING
-            OpenProgress(STR_LOADING_PLUGIN_ENGINE);
-            _scriptEngine.Initialise();
-            _uiContext->InitialiseScriptExtensions();
-
-            OpenProgress(STR_LOADING_GENERIC);
-#endif
         }
 
     public:

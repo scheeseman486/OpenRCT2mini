@@ -276,22 +276,36 @@ namespace OpenRCT2
         // OPENRCT2MINI gamepad-plan 1.5a: cursor + chord shortcut IDs
         // migrated out of the _vKb*-driven UiContext block. Allocated
         // a contiguous block at the end of the user range.
-        STR_SHORTCUT_CURSOR_UP = 7056,
-        STR_SHORTCUT_CURSOR_DOWN = 7057,
-        STR_SHORTCUT_CURSOR_LEFT = 7058,
-        STR_SHORTCUT_CURSOR_RIGHT = 7059,
-        STR_SHORTCUT_CURSOR_CLICK = 7060,
-        STR_SHORTCUT_CURSOR_CANCEL = 7061,
-        STR_SHORTCUT_CURSOR_FAST_MODIFIER = 7062,
-        STR_SHORTCUT_CONSTRUCTION_Z_LOCK = 7063,
-        STR_SHORTCUT_SHADE_WINDOW_UNDER_CURSOR = 7064,
-        STR_SHORTCUT_TOGGLE_SHADE_ALL_WINDOWS = 7065,
-        STR_SHORTCUT_CLOSE_WINDOW_UNDER_CURSOR = 7066,
+        STR_SHORTCUT_CURSOR_UP = 7057,
+
+        STR_SHORTCUT_CURSOR_DOWN = 7058,
+
+        STR_SHORTCUT_CURSOR_LEFT = 7059,
+
+        STR_SHORTCUT_CURSOR_RIGHT = 7060,
+
+        STR_SHORTCUT_CURSOR_CLICK = 7061,
+
+        STR_SHORTCUT_CURSOR_CANCEL = 7062,
+
+        STR_SHORTCUT_CURSOR_FAST_MODIFIER = 7063,
+
+        STR_SHORTCUT_CONSTRUCTION_Z_LOCK = 7064,
+
+        STR_SHORTCUT_SHADE_WINDOW_UNDER_CURSOR = 7065,
+
+        STR_SHORTCUT_TOGGLE_SHADE_ALL_WINDOWS = 7066,
+
+        STR_SHORTCUT_CLOSE_WINDOW_UNDER_CURSOR = 7067,
+
         // OPENRCT2MINI gamepad-plan 1.5g: shift modifier shortcut.
-        STR_SHORTCUT_SHIFT_MODIFIER = 7067,
+        STR_SHORTCUT_SHIFT_MODIFIER = 7068,
+
         // OPENRCT2MINI gamepad-plan 1.6c: dismiss / confirm shortcuts.
-        STR_SHORTCUT_DISMISS = 7068,
-        STR_SHORTCUT_CONFIRM = 7069,
+        STR_SHORTCUT_DISMISS = 7069,
+
+        STR_SHORTCUT_CONFIRM = 7070,
+
         // OPENRCT2MINI gamepad-plan 1.7c: live capture preview text in
         // the rebind modal. CAPTURED_CHORD wraps a "PAD L1+R1"-style
         // string; LOCKING_IN_COUNTDOWN wraps a "Locking in 4s..."
@@ -299,152 +313,237 @@ namespace OpenRCT2
         // inherits the modal's colour scheme — matching the existing
         // STR_SHORTCUT_CHANGE_PROMPT styling instead of rendering in
         // a hard-to-read default colour.
-        STR_SHORTCUT_CAPTURED_CHORD = 7070,
-        STR_SHORTCUT_LOCKING_IN_COUNTDOWN = 7071,
+        STR_SHORTCUT_CAPTURED_CHORD = 7071,
+
+        STR_SHORTCUT_LOCKING_IN_COUNTDOWN = 7072,
+
         // OPENRCT2MINI gamepad-plan 1.7e: append-mode checkbox label
         // and tooltip. Default unchecked (replace existing); checking
         // makes the next captured binding stack alongside existing
         // bindings of the same kind instead of replacing them.
-        STR_SHORTCUT_APPEND_TO_EXISTING = 7072,
-        STR_SHORTCUT_APPEND_TO_EXISTING_TIP = 7073,
+        STR_SHORTCUT_APPEND_TO_EXISTING = 7073,
+
+        STR_SHORTCUT_APPEND_TO_EXISTING_TIP = 7074,
+
         // OPENRCT2MINI gamepad-plan 1.7g: rejected-conflict message
         // shown in the rebind modal when the proposed binding would
         // collide with another shortcut. Wraps the offending shortcut
         // name with a "Already bound to: " prefix.
-        STR_SHORTCUT_CONFLICT_REJECTED = 7074,
+        STR_SHORTCUT_CONFLICT_REJECTED = 7075,
+
         // OPENRCT2MINI mouse-column refactor: column header labels
         // drawn above the scroll area in the Input Bindings window.
         // Each header sits over its respective binding column so the
         // user knows which column to click to rebind which device.
-        STR_SHORTCUT_COL_KEYBOARD = 7075,
-        STR_SHORTCUT_COL_GAMEPAD = 7076,
-        STR_SHORTCUT_COL_MOUSE = 7077,
+        STR_SHORTCUT_COL_KEYBOARD = 7076,
+
+        STR_SHORTCUT_COL_GAMEPAD = 7077,
+
+        STR_SHORTCUT_COL_MOUSE = 7078,
+
         // OPENRCT2MINI mouse-input refactor: context-sensitive wheel
         // shortcuts. "Zoom or scroll up / down" — the action zooms
         // the viewport when the cursor is over a viewport, and
         // no-ops over scroll widgets so the existing wheel feed
         // handles widget scroll without double-firing zoom.
-        STR_SHORTCUT_ZOOM_OR_SCROLL_UP = 7078,
-        STR_SHORTCUT_ZOOM_OR_SCROLL_DOWN = 7079,
+        STR_SHORTCUT_ZOOM_OR_SCROLL_UP = 7079,
+
+        STR_SHORTCUT_ZOOM_OR_SCROLL_DOWN = 7080,
+
         // OPENRCT2MINI mouse-input refactor: camera drag shortcut.
         // Held over main viewport → camera pans with cursor motion.
-        STR_SHORTCUT_CAMERA_DRAG = 7080,
+        STR_SHORTCUT_CAMERA_DRAG = 7081,
+
         // OPENRCT2MINI overlap-warn: yellow-prefixed colour wrapper used
         // to render shortcut binding strings in the Input Bindings list
         // when one or more bindings in that column collide with another
         // shortcut's bindings. Mirrors STR_BLACK_STRING (1191) but tints
         // the wrapped {STRINGID} yellow as a soft "warning" indicator.
-        STR_SHORTCUT_BINDING_OVERLAP_WARN = 7081,
+        STR_SHORTCUT_BINDING_OVERLAP_WARN = 7082,
+
         // OPENRCT2MINI gamepad-plan 1.11: Haptics window strings.
         // Window lives in the Cheats / Debug dropdown beneath the
         // Performance Profiler entry (gated on debuggingTools just
         // like the profiler).
-        STR_HAPTICS = 7082,
-        STR_HAPTICS_ENABLE = 7083,
-        STR_HAPTICS_INTENSITY = 7084,
-        STR_HAPTICS_INTENSITY_VALUE = 7085,
-        STR_HAPTICS_TEST_RUMBLE = 7086,
-        STR_HAPTICS_NO_CONTROLLER = 7087,
-        STR_HAPTICS_CONTROLLERS_DETECTED = 7088,
+        STR_HAPTICS = 7083,
+
+        STR_HAPTICS_ENABLE = 7084,
+
+        STR_HAPTICS_INTENSITY = 7085,
+
+        STR_HAPTICS_INTENSITY_VALUE = 7086,
+
+        STR_HAPTICS_TEST_RUMBLE = 7087,
+
+        STR_HAPTICS_NO_CONTROLLER = 7088,
+
+        STR_HAPTICS_CONTROLLERS_DETECTED = 7089,
+
         // OPENRCT2MINI gamepad-plan 1.11b: Rumble Editor strings.
-        STR_RUMBLE_EDITOR_TITLE = 7089,
-        STR_RUMBLE_EDITOR_MODE = 7090,
-        STR_RUMBLE_EDITOR_MODE_ONESHOT = 7091,
-        STR_RUMBLE_EDITOR_MODE_CONTINUOUS = 7092,
-        STR_RUMBLE_EDITOR_MOTOR = 7093,
-        STR_RUMBLE_EDITOR_MOTOR_LOW = 7094,
-        STR_RUMBLE_EDITOR_MOTOR_HIGH = 7095,
-        STR_RUMBLE_EDITOR_PLAY = 7096,
-        STR_RUMBLE_EDITOR_STOP = 7097,
-        STR_RUMBLE_EDITOR_MOVE_TO_START = 7098,
-        STR_RUMBLE_EDITOR_MOVE_TO_END = 7099,
-        STR_RUMBLE_EDITOR_DELETE_POINT = 7100,
-        STR_RUMBLE_EDITOR_ZOOM_IN = 7101,
-        STR_RUMBLE_EDITOR_ZOOM_OUT = 7102,
-        STR_RUMBLE_EDITOR_PAUSE = 7103,
-        STR_RUMBLE_EDITOR_TAIL = 7104,
-        STR_RUMBLE_EDITOR_TAIL_DECREASE = 7105,
-        STR_RUMBLE_EDITOR_TAIL_INCREASE = 7106,
-        STR_RUMBLE_EDITOR_DISABLED = 7107,
-        STR_RUMBLE_EDITOR_DISABLED_TIP = 7108,
-        STR_RUMBLE_EDITOR_SCALE_WITH_SPEED = 7109,
-        STR_RUMBLE_EDITOR_SCALE_WITH_SPEED_TIP = 7110,
-        STR_RUMBLE_EDITOR_REDUCTION = 7111,
-        STR_RUMBLE_EDITOR_REDUCTION_DECREASE = 7112,
-        STR_RUMBLE_EDITOR_REDUCTION_INCREASE = 7113,
+        STR_RUMBLE_EDITOR_TITLE = 7090,
+
+        STR_RUMBLE_EDITOR_MODE = 7091,
+
+        STR_RUMBLE_EDITOR_MODE_ONESHOT = 7092,
+
+        STR_RUMBLE_EDITOR_MODE_CONTINUOUS = 7093,
+
+        STR_RUMBLE_EDITOR_MOTOR = 7094,
+
+        STR_RUMBLE_EDITOR_MOTOR_LOW = 7095,
+
+        STR_RUMBLE_EDITOR_MOTOR_HIGH = 7096,
+
+        STR_RUMBLE_EDITOR_PLAY = 7097,
+
+        STR_RUMBLE_EDITOR_STOP = 7098,
+
+        STR_RUMBLE_EDITOR_MOVE_TO_START = 7099,
+
+        STR_RUMBLE_EDITOR_MOVE_TO_END = 7100,
+
+        STR_RUMBLE_EDITOR_DELETE_POINT = 7101,
+
+        STR_RUMBLE_EDITOR_ZOOM_IN = 7102,
+
+        STR_RUMBLE_EDITOR_ZOOM_OUT = 7103,
+
+        STR_RUMBLE_EDITOR_PAUSE = 7104,
+
+        STR_RUMBLE_EDITOR_TAIL = 7105,
+
+        STR_RUMBLE_EDITOR_TAIL_DECREASE = 7106,
+
+        STR_RUMBLE_EDITOR_TAIL_INCREASE = 7107,
+
+        STR_RUMBLE_EDITOR_DISABLED = 7108,
+
+        STR_RUMBLE_EDITOR_DISABLED_TIP = 7109,
+
+        STR_RUMBLE_EDITOR_SCALE_WITH_SPEED = 7110,
+
+        STR_RUMBLE_EDITOR_SCALE_WITH_SPEED_TIP = 7111,
+
+        STR_RUMBLE_EDITOR_REDUCTION = 7112,
+
+        STR_RUMBLE_EDITOR_REDUCTION_DECREASE = 7113,
+
+        STR_RUMBLE_EDITOR_REDUCTION_INCREASE = 7114,
+
         // OPENRCT2MINI input-plan Track 2 §4.2: LED Options window.
         // Reachable from the Cheats / Debug dropdown beneath the
         // Haptics entry (same gating). Mirrors the Haptics panel:
         // master enable + brightness spinner + test fire + status.
-        STR_LED = 7114,
-        STR_LED_ENABLE = 7115,
-        STR_LED_BRIGHTNESS = 7116,
-        STR_LED_BRIGHTNESS_VALUE = 7117,
-        STR_LED_TEST = 7118,
-        STR_LED_NO_CONTROLLER = 7119,
-        STR_LED_CONTROLLERS_DETECTED = 7120,
+        STR_LED = 7115,
+
+        STR_LED_ENABLE = 7116,
+
+        STR_LED_BRIGHTNESS = 7117,
+
+        STR_LED_BRIGHTNESS_VALUE = 7118,
+
+        STR_LED_TEST = 7119,
+
+        STR_LED_NO_CONTROLLER = 7120,
+
+        STR_LED_CONTROLLERS_DETECTED = 7121,
+
         // OPENRCT2MINI input-plan Track 2 §4.3: per-event toggles.
         // Three rumble-event checkboxes added to the Haptics window;
         // three severity-bucket checkboxes added to the LED window.
         // Each gates a single config flag; default state is on so
         // first-launch behaviour matches v0.2.
-        STR_HAPTICS_ON_CRASH = 7121,
-        STR_HAPTICS_ON_CRITICAL_NEWS = 7122,
-        STR_HAPTICS_ON_CONSTRUCTION_REFUSAL = 7123,
-        STR_LED_ON_CRITICAL = 7124,
-        STR_LED_ON_WARNING = 7125,
-        STR_LED_ON_MONEY = 7126,
+        STR_HAPTICS_ON_CRASH = 7122,
+
+        STR_HAPTICS_ON_CRITICAL_NEWS = 7123,
+
+        STR_HAPTICS_ON_CONSTRUCTION_REFUSAL = 7124,
+
+        STR_LED_ON_CRITICAL = 7125,
+
+        STR_LED_ON_WARNING = 7126,
+
+        STR_LED_ON_MONEY = 7127,
+
         // OPENRCT2MINI focus-mode-plan / Phase F.1: focus-mode activator
         // (renamed from caret-browse — see focus-mode-plan.md §3.1).
-        STR_SHORTCUT_ENTER_FOCUS_MODE = 7127,
+        STR_SHORTCUT_ENTER_FOCUS_MODE = 7128,
+
         // OPENRCT2MINI focus-mode-plan / Phase F.7: Options checkbox
         // for Config::General::widgetFocusAlwaysOn. Two strings — the
         // label and the tooltip — so the existing checkbox layout
         // (label + tip pair on every checkbox) just works.
-        STR_WIDGET_FOCUS_ALWAYS_ON = 7128,
-        STR_WIDGET_FOCUS_ALWAYS_ON_TIP = 7129,
+        STR_WIDGET_FOCUS_ALWAYS_ON = 7129,
+
+        STR_WIDGET_FOCUS_ALWAYS_ON_TIP = 7130,
+
         // OPENRCT2MINI focus-mode-plan §F.8: focus-window cycling.
-        STR_SHORTCUT_CYCLE_NEXT_WINDOW = 7130,
-        STR_SHORTCUT_CYCLE_PREVIOUS_WINDOW = 7131,
+        STR_SHORTCUT_CYCLE_NEXT_WINDOW = 7131,
+
+        STR_SHORTCUT_CYCLE_PREVIOUS_WINDOW = 7132,
+
         // OPENRCT2MINI focus-mode-plan §F.9: focus-ring directional
         // moves (separated from cursor.* so the two can be rebound
         // independently — see ShortcutIds.h kFocusUp comment).
-        STR_SHORTCUT_FOCUS_UP = 7132,
-        STR_SHORTCUT_FOCUS_DOWN = 7133,
-        STR_SHORTCUT_FOCUS_LEFT = 7134,
-        STR_SHORTCUT_FOCUS_RIGHT = 7135,
+        STR_SHORTCUT_FOCUS_UP = 7133,
+
+        STR_SHORTCUT_FOCUS_DOWN = 7134,
+
+        STR_SHORTCUT_FOCUS_LEFT = 7135,
+
+        STR_SHORTCUT_FOCUS_RIGHT = 7136,
+
         // OPENRCT2MINI cursor-selector-modal-plan §CS-R1: explicit
         // show-cursor shortcut (selector hides cursor on Mini;
         // this gives the user a way to bring it back).
-        STR_SHORTCUT_SHOW_CURSOR = 7136,
+        STR_SHORTCUT_SHOW_CURSOR = 7137,
+
         // OPENRCT2MINI text-editing-de-hardcode: bindable caret +
         // clipboard shortcuts. Replace previously-hardcoded SDL_KEYDOWN
         // dispatch in TextComposition.cpp.
-        STR_SHORTCUT_CARET_LEFT = 7139,
-        STR_SHORTCUT_CARET_RIGHT = 7140,
-        STR_SHORTCUT_CARET_WORD_LEFT = 7141,
-        STR_SHORTCUT_CARET_WORD_RIGHT = 7142,
-        STR_SHORTCUT_TEXT_BACKSPACE = 7143,
-        STR_SHORTCUT_TEXT_BACKSPACE_WORD = 7144,
-        STR_SHORTCUT_TEXT_DELETE = 7145,
-        STR_SHORTCUT_TEXT_DELETE_WORD = 7146,
-        STR_SHORTCUT_CLIPBOARD_COPY = 7147,
-        STR_SHORTCUT_CLIPBOARD_CUT = 7148,
-        STR_SHORTCUT_CLIPBOARD_PASTE = 7149,
+        STR_SHORTCUT_CARET_LEFT = 7140,
+
+        STR_SHORTCUT_CARET_RIGHT = 7141,
+
+        STR_SHORTCUT_CARET_WORD_LEFT = 7142,
+
+        STR_SHORTCUT_CARET_WORD_RIGHT = 7143,
+
+        STR_SHORTCUT_TEXT_BACKSPACE = 7144,
+
+        STR_SHORTCUT_TEXT_BACKSPACE_WORD = 7145,
+
+        STR_SHORTCUT_TEXT_DELETE = 7146,
+
+        STR_SHORTCUT_TEXT_DELETE_WORD = 7147,
+
+        STR_SHORTCUT_CLIPBOARD_COPY = 7148,
+
+        STR_SHORTCUT_CLIPBOARD_CUT = 7149,
+
+        STR_SHORTCUT_CLIPBOARD_PASTE = 7150,
+
         // OPENRCT2MINI per-binding Modifier mode: BindingOptions window
         // strings (window title + checkbox + tooltips).
-        STR_BINDING_OPTIONS = 7150,
-        STR_BINDING_OPTIONS_TIP = 7151,
-        STR_BINDING_MODIFIER_KEY = 7152,
-        STR_BINDING_MODIFIER_KEY_TIP = 7153,
+        STR_BINDING_OPTIONS = 7151,
+
+        STR_BINDING_OPTIONS_TIP = 7152,
+
+        STR_BINDING_MODIFIER_KEY = 7153,
+
+        STR_BINDING_MODIFIER_KEY_TIP = 7154,
+
         // OPENRCT2MINI grid-cursor-plan §5 / §14.1: precision modifier
         // + Z raise / lower verbs for tool contexts. The precision
         // modifier (held) repurposes the D-pad as sub-tile selector;
         // Z raise / lower bump the placement Z step (kPathHeightStep
         // for Footpath, equivalent step for other tools).
-        STR_SHORTCUT_CURSOR_PRECISION_MODIFIER = 7154,
-        STR_SHORTCUT_CONSTRUCTION_Z_RAISE = 7155,
-        STR_SHORTCUT_CONSTRUCTION_Z_LOWER = 7156,
+        STR_SHORTCUT_CURSOR_PRECISION_MODIFIER = 7155,
+
+        STR_SHORTCUT_CONSTRUCTION_Z_RAISE = 7156,
+
+        STR_SHORTCUT_CONSTRUCTION_Z_LOWER = 7157,
+
         STR_OR = 7000,
 
         // Widgets
@@ -1380,37 +1479,62 @@ namespace OpenRCT2
         STR_OPTIONS_TOOLBAR_BUTTONS_CENTRED = 6629,
         STR_OPTIONS_TOOLBAR_BUTTONS_CENTRED_TIP = 6630,
         // OPENRCT2MINI revision 59: Cursors group + Cursor Style dropdown.
-        STR_OPTIONS_CURSORS_GROUP = 7030,
-        STR_OPTIONS_CURSOR_STYLE_LABEL = 7031,
-        STR_OPTIONS_CURSOR_STYLE_TIP = 7032,
-        STR_OPTIONS_CURSOR_STYLE_DEFAULT = 7033,
-        STR_OPTIONS_CURSOR_STYLE_HIGH_CONTRAST = 7034,
+        STR_OPTIONS_CURSORS_GROUP = 7031,
+
+        STR_OPTIONS_CURSOR_STYLE_LABEL = 7032,
+
+        STR_OPTIONS_CURSOR_STYLE_TIP = 7033,
+
+        STR_OPTIONS_CURSOR_STYLE_DEFAULT = 7034,
+
+        STR_OPTIONS_CURSOR_STYLE_HIGH_CONTRAST = 7035,
+
         // OPENRCT2MINI revision 61: third style preserves the RCT2 look.
-        STR_OPTIONS_CURSOR_STYLE_CLASSIC = 7035,
+        STR_OPTIONS_CURSOR_STYLE_CLASSIC = 7036,
+
         // OPENRCT2MINI revision 67: explicit "no title sequence" entry.
-        STR_TITLE_SEQUENCE_NONE = 7036,
+        STR_TITLE_SEQUENCE_NONE = 7037,
+
         // OPENRCT2MINI: optional cursor drop shadow checkbox.
-        STR_OPTIONS_CURSOR_DROP_SHADOW = 7038,
-        STR_OPTIONS_CURSOR_DROP_SHADOW_TIP = 7039,
+        STR_OPTIONS_CURSOR_DROP_SHADOW = 7039,
+
+        STR_OPTIONS_CURSOR_DROP_SHADOW_TIP = 7040,
+
         // OPENRCT2MINI revision 77: Windows cursor theme.
-        STR_OPTIONS_CURSOR_STYLE_WINDOWS = 7040,
+        STR_OPTIONS_CURSOR_STYLE_WINDOWS = 7041,
+
         // OPENRCT2MINI W8: tooltip on the window-shade button.
-        STR_SHADE_WINDOW_TIP = 7041,
+        STR_SHADE_WINDOW_TIP = 7042,
+
         // OPENRCT2MINI P1: in-game performance profiler.
-        STR_PERFORMANCE_PROFILER = 7042,
-        STR_PERFORMANCE_PROFILER_TIP = 7043,
-        STR_PERFORMANCE_PROFILER_TAB_OVERVIEW = 7044,
-        STR_PERFORMANCE_PROFILER_TAB_CPU = 7045,
-        STR_PERFORMANCE_PROFILER_TAB_MEMORY = 7046,
-        STR_PERFORMANCE_PROFILER_TAB_IO = 7047,
-        STR_PERFORMANCE_PROFILER_TAB_ENTITIES = 7048,
-        STR_PERFORMANCE_PROFILER_TAB_PAINT = 7049,
-        STR_PERFORMANCE_PROFILER_TAB_AUDIO = 7050,
-        STR_PERFORMANCE_PROFILER_SAVE_SNAPSHOT = 7051,
-        STR_PERFORMANCE_PROFILER_SNAPSHOT_SAVED = 7052,
-        STR_PERFORMANCE_PROFILER_SNAPSHOT_FAILED = 7053,
-        STR_PERFORMANCE_PROFILER_START_BUTTON = 7054,
-        STR_PERFORMANCE_PROFILER_START_BUTTON_TIP = 7055,
+        STR_PERFORMANCE_PROFILER = 7043,
+
+        STR_PERFORMANCE_PROFILER_TIP = 7044,
+
+        STR_PERFORMANCE_PROFILER_TAB_OVERVIEW = 7045,
+
+        STR_PERFORMANCE_PROFILER_TAB_CPU = 7046,
+
+        STR_PERFORMANCE_PROFILER_TAB_MEMORY = 7047,
+
+        STR_PERFORMANCE_PROFILER_TAB_IO = 7048,
+
+        STR_PERFORMANCE_PROFILER_TAB_ENTITIES = 7049,
+
+        STR_PERFORMANCE_PROFILER_TAB_PAINT = 7050,
+
+        STR_PERFORMANCE_PROFILER_TAB_AUDIO = 7051,
+
+        STR_PERFORMANCE_PROFILER_SAVE_SNAPSHOT = 7052,
+
+        STR_PERFORMANCE_PROFILER_SNAPSHOT_SAVED = 7053,
+
+        STR_PERFORMANCE_PROFILER_SNAPSHOT_FAILED = 7054,
+
+        STR_PERFORMANCE_PROFILER_START_BUTTON = 7055,
+
+        STR_PERFORMANCE_PROFILER_START_BUTTON_TIP = 7056,
+
         STR_OPTIONS_TWEAKS = 6170,
         STR_OPTION_DISABLED_DURING_NETWORK_PLAY = 6103,
         STR_PATH_TO_RCT1 = 6033,
@@ -1481,8 +1605,10 @@ namespace OpenRCT2
         // OPENRCT2MINI osk-overhaul §8: bindable on-screen keyboard toggle
         // in Options > Controls. Default true; disabling routes textbox
         // input straight to the hardware keyboard via SDL_TEXTINPUT.
-        STR_ON_SCREEN_KEYBOARD = 7137,
-        STR_ON_SCREEN_KEYBOARD_TIP = 7138,
+        STR_ON_SCREEN_KEYBOARD = 7138,
+
+        STR_ON_SCREEN_KEYBOARD_TIP = 7139,
+
         STR_TRANSPARENT_SCREENSHOT = 6327,
         STR_TRANSPARENT_SCREENSHOT_TIP = 6328,
         STR_TRAP_MOUSE = 5582,
@@ -2109,6 +2235,7 @@ namespace OpenRCT2
         STR_STAFF_STAT_RIDES_INSPECTED = 2356,
         STR_STAFF_STAT_VANDALS_STOPPED = 6435,
         STR_STAFF_STAT_GUESTS_ENTERTAINED = 7030,
+
         STR_STAFF_STAT_WAGES = 2349,
         STR_STAFF_TITLE_STAFF_MEMBER_NAME = 2977,
 
