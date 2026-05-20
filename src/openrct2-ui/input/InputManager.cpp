@@ -404,14 +404,50 @@ namespace
             // delete behaviour for legacy parity — the
             // ~500 ms short-press timer disambiguates it from a
             // camera drag.
+            //
+            // OPENRCT2MINI grid-cursor-plan §14.7 (2026-05-20):
+            // gate the close-tool behaviour on the selector
+            // actually being active. When the user is in cursor
+            // mode (selector hidden — real or virtual mouse
+            // driving the UI) the active strategy is still
+            // widgetFocus because the tool window has focus, but
+            // the user's mental model is "I'm using the cursor".
+            // PAD B should act as a delete-at-cursor verb (RMB
+            // semantic on gamepad), not close the tool. Fall
+            // through to the cursor-mode handler below when the
+            // selector is hidden so non-mouse cursor.cancel
+            // dispatches ViewportInteractionRightClick at the
+            // cursor's screen position.
             if (id == ShortcutId::kCursorCancel
                 && e.state == InputEventState::down
-                && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive))
+                && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive)
+                && OpenRCT2::Ui::GetInputManager().getSelectorMode()
+                    == OpenRCT2::Ui::InputManager::SelectorMode::active)
             {
                 const auto cls = OpenRCT2::gCurrentToolWidget.windowClassification;
                 OpenRCT2::ToolCancel();
                 if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
                     windowMgr->CloseByClass(cls);
+                return Disposition::Consumed;
+            }
+
+            // OPENRCT2MINI grid-cursor-plan §14.7 (2026-05-20):
+            // cursor-mode delete-at-cursor for non-mouse devices.
+            // Fires when the selector is hidden (cursor mode) and
+            // a non-mouse cursor.cancel arrives — the user is
+            // driving the cursor and pressed PAD B / keyboard X
+            // to delete what they're hovering over. Mirrors the
+            // mouse handler above, dispatching
+            // ViewportInteractionRightClick at the cursor's
+            // screen position. Fires on press for non-mouse
+            // devices (no tap-vs-drag ambiguity to resolve).
+            if (id == ShortcutId::kCursorCancel
+                && e.state == InputEventState::down
+                && OpenRCT2::Ui::GetInputManager().getSelectorMode()
+                    == OpenRCT2::Ui::InputManager::SelectorMode::hidden)
+            {
+                const auto pos = OpenRCT2::ContextGetCursorPosition();
+                ViewportInteractionRightClick(pos);
                 return Disposition::Consumed;
             }
 
