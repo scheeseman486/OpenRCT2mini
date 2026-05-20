@@ -387,7 +387,19 @@ namespace OpenRCT2::Ui
         // onDeactivate when the tool is still armed (vs. when the
         // tool was cancelled, where re-seeding on the next engage
         // is the desired behaviour).
-        const bool resuming = _resumeFromGridExit;
+        //
+        // OPENRCT2MINI grid-cursor-plan §14.6 follow-up (2026-05-20):
+        // if the user transitioned grid → focus → cursor → grid (i.e.
+        // they exited grid mode, then wandered off into cursor mode
+        // via the real/virtual mouse before coming back), the resume
+        // semantic no longer fits — the user's most recent context
+        // is the cursor's tile, not the grid cursor's last position.
+        // Treat that path as a fresh engage so the seed picks up the
+        // cursor tile (§14.6 below) and the Z plane resets. The
+        // _savedSelectorMode field captures the mode at the top of
+        // this onActivate, before the flip to active.
+        const bool cameFromCursorMode = _savedSelectorMode == InputManager::SelectorMode::hidden;
+        const bool resuming = _resumeFromGridExit && !cameFromCursorMode;
         _resumeFromGridExit = false;
         // §10: seed the grid cursor's initial paint state so the
         // highlight appears immediately on tool entry. Without this
@@ -434,6 +446,17 @@ namespace OpenRCT2::Ui
             {
                 if (seed)
                     grid->setPosition(*seed);
+                // OPENRCT2MINI grid-cursor-plan §14.6 follow-up
+                // (2026-05-20): fresh engage from cursor mode resets
+                // Z to ground level. The Z plane reflects the user's
+                // construction Z drag; it doesn't carry across a
+                // mode round-trip where they've used the cursor in
+                // between. Pure resume (focus → grid → focus → grid
+                // with no cursor mode in between) keeps Z preserved
+                // so the user can step back into bridge mode without
+                // re-raising.
+                if (cameFromCursorMode)
+                    grid->setZ(0);
                 WriteGridCursorSelection(grid->getPosition(), grid->getOrientation());
                 if (!seed)
                     ScrollMainWindowIfCursorNearEdge(grid->getPosition());
@@ -443,6 +466,8 @@ namespace OpenRCT2::Ui
             {
                 if (seed)
                     edge->setPosition(*seed);
+                if (cameFromCursorMode)
+                    edge->setZ(0);
                 WriteGridCursorSelection(edge->getPosition(), edge->getOrientation());
                 if (!seed)
                     ScrollMainWindowIfCursorNearEdge(edge->getPosition());
