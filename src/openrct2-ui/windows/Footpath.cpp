@@ -1610,6 +1610,19 @@ namespace OpenRCT2::Ui::Windows
             }
 
             ToolCancel();
+            // OPENRCT2MINI bug 2026-05-22: clear any in-progress
+            // provisional tile element before laying down the new
+            // bridge anchor state. The clearAll() below only resets
+            // the FootpathWindow's internal bookkeeping; the
+            // physical map tile element survives unless
+            // FootpathUpdateProvisional() runs. This bites the user
+            // most visibly when they were just driving a bridge via
+            // the gamepad (which can leave a provisional behind),
+            // switch to the real mouse, and click a new anchor —
+            // the previous bridge's ghost stays on the map. Same
+            // fix applied to the gamepad's StartBridgeAtTilePublic
+            // in commit a24c47e5ca; mirror it here.
+            FootpathUpdateProvisional();
             _footpathConstructFromPosition = { mapCoords, z };
             _footpathConstructDirection = direction;
             _provisionalFootpath.flags.clearAll();
