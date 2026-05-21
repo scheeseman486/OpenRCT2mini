@@ -2494,6 +2494,26 @@ void InputManager::cycleFocusedWindow(int direction)
 
 bool InputManager::enterFocusModeOnTopmost()
 {
+    // OPENRCT2MINI bug 2026-05-22: tool-armed shortcut — if the user
+    // is in cursor mode (selectorMode::hidden) AND a tool is armed,
+    // the enter-focus-mode shortcut should engage grid cursor mode
+    // directly instead of landing widget focus on the tool window.
+    // Use case: user is mid-bridge-build via the controller, picks
+    // up the mouse to do something, then presses Start to "give me
+    // my gamepad back". They want grid cursor back on the bridge
+    // head, not widget focus on the path-type dropdown. The cycle
+    // behavior below still fires when already in focus mode, so
+    // re-pressing Start while widget-focused on the Footpath window
+    // continues to cycle through its widgets as before.
+    if (_selectorMode == SelectorMode::hidden && gInputFlags.has(InputFlag::toolActive))
+    {
+        clearFocus();
+        setToolFocusSelected(true, SelectorTransitionSource::enterFocusModeRequested);
+        requestFocusMode();
+        onTransitionEvent(SelectorTransitionSource::enterFocusModeRequested);
+        return true;
+    }
+
     // OPENRCT2MINI cursor-selector-modal-plan v2 follow-up: the TAB
     // (kInterfaceEnterFocusMode) action. First press from cursor mode
     // lands on the first focusable widget of the topmost focusable
