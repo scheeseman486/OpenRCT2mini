@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build OpenRCT2mini as a self-contained x86_64 Linux AppImage.
-# Output: dist/OpenRCT2mini-<version>-x86_64.AppImage
+# Output: dist/OpenRCT2mini-linux-x86_64-<version>.AppImage
 #
 # Two stages:
 #   (1) docker build  — builds the openrctmini-appimage image once, derived
@@ -168,7 +168,7 @@ docker run --rm --user "$(id -u):$(id -g)" \
         # we need git available in /src — the host checkout's .git/ is
         # bind-mounted, so 'git -C /src describe' works.
         VERSION=\$(git -C /src describe --tags --always --dirty 2>/dev/null || echo dev)
-        FINAL=\"OpenRCT2mini-\${VERSION}-x86_64.AppImage\"
+        FINAL=\"OpenRCT2mini-linux-x86_64-\${VERSION}.AppImage\"
         mkdir -p /src/dist
         mv OpenRCT2-x86_64.AppImage \"/src/dist/\${FINAL}\"
         echo \"==[ produced /src/dist/\${FINAL} ]==============================\"
@@ -178,7 +178,7 @@ docker run --rm --user "$(id -u):$(id -g)" \
 
 echo
 echo "==[ post-build inspection (host side) ]============================"
-ls -la "$PROJECT_ROOT/dist/"OpenRCT2mini-*-x86_64.AppImage 2>/dev/null || \
+ls -la "$PROJECT_ROOT/dist/"OpenRCT2mini-linux-x86_64-*.AppImage 2>/dev/null || \
     (echo "ERROR: no AppImage produced in dist/" >&2; exit 1)
 
 # Optional packaging step: wrap the AppImage + supplementary content packs

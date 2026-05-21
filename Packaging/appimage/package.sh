@@ -1,5 +1,5 @@
 #!/bin/bash
-# Wrap dist/OpenRCT2mini-<version>-x86_64.AppImage into a portable zip
+# Wrap dist/OpenRCT2mini-linux-x86_64-<version>.AppImage into a portable zip
 # the user can unzip-and-run.
 #
 # The AppImage itself is fully self-contained (build.sh sets
@@ -12,10 +12,10 @@
 #   - The fork's main licence file
 #   - An empty save/ that the runtime populates on first launch
 #
-# Output: dist/OpenRCT2mini-x86_64-<version>.zip
+# Output: dist/OpenRCT2mini-linux-x86_64-<version>.zip
 # Layout when extracted:
-#     OpenRCT2mini-x86_64-<version>/
-#         OpenRCT2mini-x86_64.AppImage
+#     OpenRCT2mini-linux-x86_64-<version>/
+#         OpenRCT2mini-linux-x86_64.AppImage
 #         save/                            (empty; populated on first run)
 #         readme.txt
 #         LICENSE
@@ -29,16 +29,16 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DIST_DIR="$PROJECT_ROOT/dist"
 
 # Locate the AppImage build.sh just produced.
-APPIMAGE_PATH=$(ls "$DIST_DIR"/OpenRCT2mini-*-x86_64.AppImage 2>/dev/null | head -1 || true)
+APPIMAGE_PATH=$(ls "$DIST_DIR"/OpenRCT2mini-linux-x86_64-*.AppImage 2>/dev/null | head -1 || true)
 if [ -z "$APPIMAGE_PATH" ]; then
     echo "ERROR: no AppImage in $DIST_DIR — run ./Packaging/appimage/build.sh first." >&2
     exit 1
 fi
 APPIMAGE_NAME=$(basename "$APPIMAGE_PATH")
 
-# Version is the chunk between "OpenRCT2mini-" and "-x86_64.AppImage".
-VERSION=$(echo "$APPIMAGE_NAME" | sed -E 's/^OpenRCT2mini-(.+)-x86_64\.AppImage$/\1/')
-STAGE_NAME="OpenRCT2mini-x86_64-$VERSION"
+# Version is the chunk between "OpenRCT2mini-linux-x86_64-" and ".AppImage".
+VERSION=$(echo "$APPIMAGE_NAME" | sed -E 's/^OpenRCT2mini-linux-x86_64-(.+)\.AppImage$/\1/')
+STAGE_NAME="OpenRCT2mini-linux-x86_64-$VERSION"
 STAGE_DIR="$DIST_DIR/$STAGE_NAME"
 ZIP_OUT="$DIST_DIR/${STAGE_NAME}.zip"
 
@@ -47,8 +47,8 @@ rm -rf "$STAGE_DIR" "$ZIP_OUT"
 mkdir -p "$STAGE_DIR/save"
 
 # AppImage — copy in, rename to a stable user-facing filename.
-cp "$APPIMAGE_PATH" "$STAGE_DIR/OpenRCT2mini-x86_64.AppImage"
-chmod 0755 "$STAGE_DIR/OpenRCT2mini-x86_64.AppImage"
+cp "$APPIMAGE_PATH" "$STAGE_DIR/OpenRCT2mini-linux-x86_64.AppImage"
+chmod 0755 "$STAGE_DIR/OpenRCT2mini-linux-x86_64.AppImage"
 
 # Top-level LICENSE (the GPLv3 fork licence). The bundled content packs'
 # individual licences (CC-BY-4.0 / MIT / CC-BY-SA-4.0) travel inside the
@@ -68,14 +68,14 @@ OpenRCT2mini ${VERSION} — x86_64 Linux AppImage portable build
 
 How to use:
   1. Extract this zip to a directory you can write to, e.g.
-       unzip OpenRCT2mini-x86_64-${VERSION}.zip -d ~/Games/
+       unzip OpenRCT2mini-linux-x86_64-${VERSION}.zip -d ~/Games/
   2. Drop your legitimate RollerCoaster Tycoon 2 install directory next
-     to OpenRCT2mini-x86_64.AppImage — the binary auto-detects an RCT2
+     to OpenRCT2mini-linux-x86_64.AppImage — the binary auto-detects an RCT2
      install in the same folder. RCT1 next to RCT2 is also auto-
      detected (used by the RCT1 title sequence).
   3. Run:
-       cd ~/Games/OpenRCT2mini-x86_64-${VERSION}
-       ./OpenRCT2mini-x86_64.AppImage
+       cd ~/Games/OpenRCT2mini-linux-x86_64-${VERSION}
+       ./OpenRCT2mini-linux-x86_64.AppImage
 
 The 'save/' folder will hold your config + saves + screenshots after
 first launch. The whole directory is portable — move it anywhere

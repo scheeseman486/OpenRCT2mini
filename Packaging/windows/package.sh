@@ -1,10 +1,10 @@
 #!/bin/bash
-# Assemble dist/OpenRCT2mini-<version>-x64.zip from the cross-build output
-# at build-windows/ and the install tree at build-windows/AppDir/.
+# Assemble dist/OpenRCT2mini-win-x86_64-<version>.zip from the cross-build
+# output at build-windows/ and the install tree at build-windows/AppDir/.
 # Patterned on scripts/build-portable + Packaging/appimage/package.sh.
 #
 # Bundle layout produced:
-#   OpenRCT2mini-x64/
+#   OpenRCT2mini-win-x86_64/
 #     openrct2.exe
 #     openrct2.com        (objcopy --subsystem console copy)
 #     openrct2-cli.exe
@@ -28,7 +28,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD_DIR="$PROJECT_ROOT/build-windows"
 DIST_DIR="$PROJECT_ROOT/dist"
-STAGE_DIR="$DIST_DIR/OpenRCT2mini-x64"
+STAGE_DIR="$DIST_DIR/OpenRCT2mini-win-x86_64"
 APPDIR="$BUILD_DIR/AppDir"
 
 mkdir -p "$DIST_DIR"
@@ -198,10 +198,10 @@ cp "$PROJECT_ROOT/contributors.md"             "$STAGE_DIR/contributors.md" 2>/d
 # 6) Zip the staging dir.
 ##############################################################################
 echo "==[ zip ]======================================================="
-FINAL="OpenRCT2mini-${VERSION}-x64.zip"
+FINAL="OpenRCT2mini-win-x86_64-${VERSION}.zip"
 cd "$DIST_DIR"
 rm -f "$FINAL"
-zip -r9 "$FINAL" OpenRCT2mini-x64/
+zip -r9 "$FINAL" OpenRCT2mini-win-x86_64/
 echo
 echo "==[ produced $DIST_DIR/$FINAL ]================================="
 ls -la "$DIST_DIR/$FINAL"

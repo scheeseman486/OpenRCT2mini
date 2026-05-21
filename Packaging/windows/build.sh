@@ -1,7 +1,7 @@
 #!/bin/bash
-# Build OpenRCT2mini as a portable Windows x64 .exe + DLL bundle by
+# Build OpenRCT2mini as a portable Windows x86_64 .exe + DLL bundle by
 # cross-compiling from Linux.
-# Output: dist/OpenRCT2mini-<version>-x64.zip
+# Output: dist/OpenRCT2mini-win-x86_64-<version>.zip
 #
 # Three stages:
 #   (0) host build   — produces g2.dat / fonts.dat / palettes.dat /

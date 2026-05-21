@@ -98,13 +98,13 @@ jobs:
           ls -la build-arm/openrct2
           file build-arm/openrct2
           echo "Port archive:"
-          ls -la dist/OpenRCT2mini-*.7z
+          ls -la dist/OpenRCT2mini-onionos-armhf-*.7z
 
       - name: Upload port archive as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpenRCT2mini-armhf-${{ github.sha }}
-          path: dist/OpenRCT2mini-*.7z
+          name: OpenRCT2mini-onionos-armhf-${{ github.sha }}
+          path: dist/OpenRCT2mini-onionos-armhf-*.7z
           if-no-files-found: error
           retention-days: 30
 
@@ -128,7 +128,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/OpenRCT2mini-*.7z
+          files: dist/OpenRCT2mini-onionos-armhf-*.7z
           body_path: ${{ steps.relbody.outputs.path }}
           generate_release_notes: ${{ steps.relbody.outputs.path == '' }}
           fail_on_unmatched_files: true
@@ -190,15 +190,15 @@ jobs:
       - name: Inspect the produced artifacts
         run: |
           ls -la dist/
-          file dist/OpenRCT2mini-*-x86_64.AppImage
+          file dist/OpenRCT2mini-linux-x86_64-*.AppImage
           echo "Portable zip:"
-          ls -la dist/OpenRCT2mini-x86_64-*.zip
+          ls -la dist/OpenRCT2mini-linux-x86_64-*.zip
 
       - name: Upload portable zip as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpenRCT2mini-x86_64-${{ github.sha }}
-          path: dist/OpenRCT2mini-x86_64-*.zip
+          name: OpenRCT2mini-linux-x86_64-${{ github.sha }}
+          path: dist/OpenRCT2mini-linux-x86_64-*.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -223,15 +223,15 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/OpenRCT2mini-x86_64-*.zip
+          files: dist/OpenRCT2mini-linux-x86_64-*.zip
           body_path: ${{ steps.relbody.outputs.path }}
           generate_release_notes: ${{ steps.relbody.outputs.path == '' }}
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-windows-x64:
-    name: Cross-build for Windows x64 (mingw-w64)
+  build-windows-x86_64:
+    name: Cross-build for Windows x86_64 (mingw-w64)
     runs-on: ubuntu-latest
 
     steps:
@@ -298,14 +298,14 @@ jobs:
       - name: Inspect the produced artifacts
         run: |
           ls -la dist/
-          file dist/OpenRCT2mini-x64/openrct2.exe
-          ls -la dist/OpenRCT2mini-*-x64.zip
+          file dist/OpenRCT2mini-win-x86_64/openrct2.exe
+          ls -la dist/OpenRCT2mini-win-x86_64-*.zip
 
       - name: Upload portable zip as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpenRCT2mini-x64-${{ github.sha }}
-          path: dist/OpenRCT2mini-*-x64.zip
+          name: OpenRCT2mini-win-x86_64-${{ github.sha }}
+          path: dist/OpenRCT2mini-win-x86_64-*.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -329,7 +329,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/OpenRCT2mini-*-x64.zip
+          files: dist/OpenRCT2mini-win-x86_64-*.zip
           body_path: ${{ steps.relbody.outputs.path }}
           generate_release_notes: ${{ steps.relbody.outputs.path == '' }}
           fail_on_unmatched_files: true

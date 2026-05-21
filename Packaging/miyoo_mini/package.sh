@@ -4,7 +4,7 @@
 # Run from the project root (after build.sh has produced build-arm/openrct2):
 #   ./Packaging/miyoo_mini/package.sh
 #
-# Output: dist/OpenRCT2mini-<version>-<git-short>.7z containing
+# Output: dist/OpenRCT2mini-onionos-armhf-<version>-<git-short>.7z containing
 #
 #   Roms/PORTS/
 #     Games/OpenRCT2mini/
@@ -711,7 +711,7 @@ fi
 #    SD-card root").
 ##############################################################################
 mkdir -p "$DIST_DIR"
-ARCHIVE="$DIST_DIR/OpenRCT2mini-${FORK_VERSION}-${GITREV}.7z"
+ARCHIVE="$DIST_DIR/OpenRCT2mini-onionos-armhf-${FORK_VERSION}-${GITREV}.7z"
 rm -f "$ARCHIVE"
 if ! command -v 7z >/dev/null 2>&1; then
     echo "ERROR: 7z not on host — install p7zip-full." >&2
