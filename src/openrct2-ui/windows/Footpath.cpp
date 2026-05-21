@@ -2223,7 +2223,7 @@ namespace OpenRCT2::Ui::Windows
         // via ToolSet WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL + crosshair),
         // and the bridge state we set up just below is well-defined
         // — no ToolCancel needed.
-        void StartBridgeAtTilePublic(const TileCoordsXY& tile)
+        void StartBridgeAtTilePublic(const TileCoordsXY& tile, int32_t zOffset = 0)
         {
             const auto coords = tile.ToCoordsXY();
             auto* surface = MapGetSurfaceElementAt(coords);
@@ -2258,12 +2258,66 @@ namespace OpenRCT2::Ui::Windows
             // screen-up for the directional widgets (see line 680).
             const int32_t direction = (0 - GetCurrentRotation()) & 3;
 
+            // OPENRCT2MINI grid-cursor-plan §16.4d bug 2026-05-21 #3:
+            // resolve the anchor Z. The mouse path picks Z from the
+            // tile element under the click (path / surface) via
+            // FootpathBridgeGetInfoFromPos. We don't have a click-
+            // resolved element, but we DO have the grid cursor's
+            // accumulated Z offset (Shift+D-pad). Compute the
+            // requested Z = surface + slope + zOffset, then scan tile
+            // elements at this XY for a Path whose Z matches and
+            // snap to it (this is the "start a bridge from an
+            // existing raised path" case the user wants). When no
+            // Path is found at that elevation, fall back to the
+            // synthesised requested Z so the user can still anchor
+            // a bridge in mid-air at their chosen plane.
             int32_t z = surface->GetBaseZ();
             uint8_t slope = surface->GetSlope();
             if (slope & kTileSlopeDiagonalFlag)
                 z += 2 * kPathHeightStep;
             else if (slope & kTileSlopeRaisedCornersMask)
                 z += kPathHeightStep;
+
+            if (zOffset != 0)
+            {
+                const int32_t requestedZ = z + zOffset;
+                bool snapped = false;
+                TileElement* el = MapGetFirstElementAt(coords);
+                if (el != nullptr)
+                {
+                    do
+                    {
+                        if (el->GetType() != TileElementType::Path)
+                            continue;
+                        if (el->GetBaseZ() != requestedZ)
+                            continue;
+                        // Direction-aware slope step — mirrors the
+                        // mouse path's FootpathBridgeGetInfoFromPos
+                        // post-processing: if the existing path is
+                        // sloped and we'd extend along the slope's
+                        // direction, anchor at the top of the slope.
+                        int32_t pathZ = el->GetBaseZ();
+                        if (el->AsPath()->IsSloped()
+                            && direction == el->AsPath()->GetSlopeDirection())
+                        {
+                            pathZ += kPathHeightStep;
+                        }
+                        z = pathZ;
+                        snapped = true;
+                        break;
+                    } while (!(el++)->IsLastForTile());
+                }
+                if (!snapped)
+                {
+                    // No matching path — accept the user's raised
+                    // plane as-is (mid-air bridge start). The mouse
+                    // path doesn't support this directly because it
+                    // can only project onto an existing tile element,
+                    // but the gamepad path can since Z is decoupled
+                    // from the click target.
+                    z = requestedZ;
+                }
+            }
 
             _footpathConstructFromPosition = { coords, z };
             _footpathConstructDirection = direction;
@@ -2586,14 +2640,16 @@ namespace OpenRCT2::Ui::Windows
 
     // OPENRCT2MINI grid-cursor-plan §16: bridge-pick → bridge-build
     // transition at a tile coord. Direction defaults to screen-up
-    // (world frame). No-op when the window isn't in bridge-pick mode.
-    void WindowFootpathStartBridgeAtTile(const TileCoordsXY& tile)
+    // (world frame). zOffset is the grid cursor's accumulated Z so
+    // the user can pick a raised anchor (continuing an existing
+    // bridge from elevation). No-op when the window isn't open.
+    void WindowFootpathStartBridgeAtTile(const TileCoordsXY& tile, int32_t zOffset)
     {
         auto* windowMgr = GetWindowManager();
         WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
         if (w == nullptr)
             return;
-        static_cast<FootpathWindow*>(w)->StartBridgeAtTilePublic(tile);
+        static_cast<FootpathWindow*>(w)->StartBridgeAtTilePublic(tile, zOffset);
     }
 
     // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):

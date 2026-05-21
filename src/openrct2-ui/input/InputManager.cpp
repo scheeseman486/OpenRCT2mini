@@ -1479,7 +1479,12 @@ namespace
 
         Disposition onPlaceBridgePick()
         {
-            Windows::WindowFootpathStartBridgeAtTile(gridCursor().getPosition());
+            // OPENRCT2MINI grid-cursor-plan §16.4d bug 2026-05-21 #3:
+            // pass the cursor's accumulated Z so a Shift+D-pad-raised
+            // pick anchors at the chosen elevation. Lets the user
+            // start a bridge from an existing raised path / bridge
+            // end rather than always anchoring at ground.
+            Windows::WindowFootpathStartBridgeAtTile(gridCursor().getPosition(), gridCursor().getZ());
             return Disposition::Consumed;
         }
 

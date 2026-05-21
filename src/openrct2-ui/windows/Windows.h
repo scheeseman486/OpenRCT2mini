@@ -235,7 +235,16 @@ namespace OpenRCT2::Ui::Windows
     // FootpathWindow is in PathConstructionMode::bridgeOrTunnel and
     // _footpathConstructFromPosition is set at this tile. No-op
     // when the window isn't in PathConstructionMode::bridgeOrTunnelPick.
-    void WindowFootpathStartBridgeAtTile(const TileCoordsXY& tile);
+    //
+    // zOffset is the grid cursor's accumulated Z (kPathHeightStep
+    // multiples). Lets the user raise the grid cursor above ground
+    // before picking, so a bridge can be started from an existing
+    // raised path / bridge end. The implementation scans tile
+    // elements at this XY for a Path element whose Z matches the
+    // requested elevation and snaps the anchor to it (matching the
+    // mouse path's tileElement-based behaviour); otherwise it uses
+    // surface Z + zOffset directly. Defaults to 0.
+    void WindowFootpathStartBridgeAtTile(const TileCoordsXY& tile, int32_t zOffset = 0);
 
     // GameBottomToolbar
     extern uint8_t gToolbarDirtyFlags;
