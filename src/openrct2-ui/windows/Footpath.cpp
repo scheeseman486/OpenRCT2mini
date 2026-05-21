@@ -270,6 +270,14 @@ namespace OpenRCT2::Ui::Windows
             ToolSet(*this, WIDX_CONSTRUCT_ON_LAND, Tool::pathDown);
             gInputFlags.set(InputFlag::allowRightMouseRemoval);
             _footpathErrorOccured = false;
+            // OPENRCT2MINI grid-cursor-plan §16: mark _dragStartPos as
+            // "no anchor" on window open. DragAreaHasAnchorPublic
+            // distinguishes anchor-set vs no-anchor via IsNull, and
+            // CoordsXY's default constructor leaves x/y at zero —
+            // which is a valid map coordinate, not null. Without this
+            // explicit SetNull, the gamepad's first onPlace in drag-
+            // area mode would (falsely) take the commit branch.
+            _dragStartPos.SetNull();
             WindowFootpathSetEnabledAndPressedWidgets();
 
             _footpathPlaceCtrlState = false;
@@ -2086,6 +2094,147 @@ namespace OpenRCT2::Ui::Windows
             });
             GameActions::Execute(&footpathPlaceAction, getGameState());
         }
+
+        // OPENRCT2MINI grid-cursor-plan §16: report the current
+        // construction-mode as a FootpathInputMode so the gamepad
+        // tool context can branch its verb dispatch per mode.
+        FootpathInputMode GetInputModePublic() const
+        {
+            switch (_footpathConstructionMode)
+            {
+                case PathConstructionMode::onLand:
+                    return FootpathInputMode::onLand;
+                case PathConstructionMode::dragArea:
+                    return FootpathInputMode::dragArea;
+                case PathConstructionMode::bridgeOrTunnelPick:
+                    return FootpathInputMode::bridgePick;
+                case PathConstructionMode::bridgeOrTunnel:
+                    return FootpathInputMode::bridgeBuild;
+                default:
+                    return FootpathInputMode::none;
+            }
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §16: drag-area anchor at tile.
+        // Parallels WindowFootpathPlaceDragAreaSetStart's body but
+        // takes a tile coord directly rather than projecting from
+        // screen coords. _dragStartPos becomes the corner of the
+        // selection rectangle; subsequent Preview / Commit calls
+        // extend from there to the cursor's tile.
+        void DragAreaAnchorAtTilePublic(const TileCoordsXY& tile)
+        {
+            if (_footpathErrorOccured)
+                return;
+            _provisionalFootpath.tiles.clear();
+
+            const auto coords = tile.ToCoordsXY();
+            auto placement = FootpathGetOnTerrainPlacement(tile);
+            int32_t baseZ = placement.isValid() ? placement.baseZ : TileElementHeight(coords);
+            if (baseZ > 0 && placement.slope.type == FootpathSlopeType::flat)
+                _footpathPlaceZ = baseZ;
+
+            gMapSelectFlags.set(MapSelectFlag::enable);
+            gMapSelectType = MapSelectType::full;
+            setMapSelectRange(coords);
+            _dragStartPos = coords;
+            WindowFootpathSetProvisionalPathDragArea(getMapSelectRange(), baseZ);
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §16: drag-area live preview
+        // at tile. Equivalent of WindowFootpathPlaceDragAreaSetEnd's
+        // body (the rectangle-update half, not commit). Called from
+        // FootpathContextImpl::onStep so the rectangle tracks the
+        // cursor between anchor and commit.
+        void DragAreaPreviewAtTilePublic(const TileCoordsXY& tile)
+        {
+            if (_footpathErrorOccured)
+                return;
+            if (_dragStartPos.IsNull())
+                return;
+
+            auto correctedPos = tile.ToCoordsXY();
+
+            // For queues, only allow selecting a single line.
+            if (gFootpathSelection.isQueueSelected)
+            {
+                auto xDiff = correctedPos.x - _dragStartPos.x;
+                auto yDiff = correctedPos.y - _dragStartPos.y;
+                if (std::abs(xDiff) > std::abs(yDiff))
+                    correctedPos.y = _dragStartPos.y;
+                else
+                    correctedPos.x = _dragStartPos.x;
+            }
+
+            setMapSelectRange({ _dragStartPos, correctedPos });
+            WindowFootpathSetProvisionalPathDragArea(getMapSelectRange(), _footpathPlaceZ);
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §16: drag-area commit at
+        // tile. Calls Preview to lock the rectangle, then dispatches
+        // FootpathPlaceAction for each tile via WindowFootpathPlace-
+        // Path (the same commit the mouse onToolUp path uses), then
+        // clears the anchor.
+        void DragAreaCommitAtTilePublic(const TileCoordsXY& tile)
+        {
+            if (_dragStartPos.IsNull())
+                return;
+            DragAreaPreviewAtTilePublic(tile);
+            WindowFootpathPlacePath();
+            DragAreaClearPublic();
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §16: cancel — clear anchor +
+        // provisional state, back to "no anchor" mode.
+        void DragAreaClearPublic()
+        {
+            FootpathUpdateProvisional();
+            _provisionalFootpath.tiles.clear();
+            _dragStartPos.SetNull();
+            gMapSelectFlags.unset(MapSelectFlag::enable);
+            _footpathPlaceZ = 0;
+        }
+
+        bool DragAreaHasAnchorPublic() const
+        {
+            return !_dragStartPos.IsNull();
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §16: bridge-pick → bridge-
+        // build transition at tile. Parallels WindowFootpathStart-
+        // BridgeAtPoint's body but takes a tile coord and picks the
+        // construction direction from the screen-up world direction
+        // (so D-pad up = forward until the user rotates). The user
+        // can then rotate via D-pad left/right (TurnLeft/TurnRight),
+        // adjust slope via D-pad up/down, and extend via PadA
+        // (WindowFootpathKeyboardShortcutBuildCurrent).
+        void StartBridgeAtTilePublic(const TileCoordsXY& tile)
+        {
+            const auto coords = tile.ToCoordsXY();
+            auto* surface = MapGetSurfaceElementAt(coords);
+            if (surface == nullptr)
+                return;
+
+            // Default construction direction: screen-up in world
+            // frame. Adding GetCurrentRotation later flips it back to
+            // screen-up for the directional widgets (see line 680).
+            const int32_t direction = (0 - GetCurrentRotation()) & 3;
+
+            int32_t z = surface->GetBaseZ();
+            uint8_t slope = surface->GetSlope();
+            if (slope & kTileSlopeDiagonalFlag)
+                z += 2 * kPathHeightStep;
+            else if (slope & kTileSlopeRaisedCornersMask)
+                z += kPathHeightStep;
+
+            ToolCancel();
+            _footpathConstructFromPosition = { coords, z };
+            _footpathConstructDirection = direction;
+            _provisionalFootpath.flags.clearAll();
+            _footpathConstructSlope = SlopePitch::flat;
+            _footpathConstructionMode = PathConstructionMode::bridgeOrTunnel;
+            _footpathConstructValidDirections = kInvalidDirection;
+            WindowFootpathSetEnabledAndPressedWidgets();
+        }
         void KeyboardShortcutTurnLeft()
         {
             if (isWidgetDisabled(WIDX_DIRECTION_NW) || isWidgetDisabled(WIDX_DIRECTION_NE)
@@ -2324,6 +2473,77 @@ namespace OpenRCT2::Ui::Windows
             return;
         auto* fw = static_cast<FootpathWindow*>(w);
         fw->PlaceAtTilePublic(tile, baseZ);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §16: input-mode getter for the
+    // gamepad tool context to branch per-mode verb dispatch on.
+    FootpathInputMode WindowFootpathGetInputMode()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return FootpathInputMode::none;
+        return static_cast<const FootpathWindow*>(w)->GetInputModePublic();
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §16: drag-area mode at-tile
+    // bridges. Each delegates to the corresponding *Public member
+    // on the FootpathWindow; no-op when the window is closed.
+    void WindowFootpathDragAreaAnchorAtTile(const TileCoordsXY& tile)
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        static_cast<FootpathWindow*>(w)->DragAreaAnchorAtTilePublic(tile);
+    }
+
+    void WindowFootpathDragAreaPreviewAtTile(const TileCoordsXY& tile)
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        static_cast<FootpathWindow*>(w)->DragAreaPreviewAtTilePublic(tile);
+    }
+
+    void WindowFootpathDragAreaCommitAtTile(const TileCoordsXY& tile)
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        static_cast<FootpathWindow*>(w)->DragAreaCommitAtTilePublic(tile);
+    }
+
+    void WindowFootpathDragAreaClear()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        static_cast<FootpathWindow*>(w)->DragAreaClearPublic();
+    }
+
+    bool WindowFootpathDragAreaHasAnchor()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return false;
+        return static_cast<const FootpathWindow*>(w)->DragAreaHasAnchorPublic();
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §16: bridge-pick → bridge-build
+    // transition at a tile coord. Direction defaults to screen-up
+    // (world frame). No-op when the window isn't in bridge-pick mode.
+    void WindowFootpathStartBridgeAtTile(const TileCoordsXY& tile)
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        static_cast<FootpathWindow*>(w)->StartBridgeAtTilePublic(tile);
     }
 
     // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):

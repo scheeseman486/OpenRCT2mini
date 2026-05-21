@@ -188,6 +188,55 @@ namespace OpenRCT2::Ui::Windows
     // interface.confirm verb ("OK, I'm done with this tool").
     void WindowFootpathClose();
 
+    // OPENRCT2MINI grid-cursor-plan §16: input-mode of the Footpath
+    // window. FootpathContextImpl branches verb dispatch per mode —
+    // direct (onLand), rectangle drag (dragArea), bridge-pick anchor
+    // (bridgePick), or step-extend bridge construction (bridgeBuild).
+    // Returns `none` when the Footpath window isn't open / no tool is
+    // active.
+    enum class FootpathInputMode : uint8_t
+    {
+        none,
+        onLand,
+        dragArea,
+        bridgePick,
+        bridgeBuild,
+    };
+    FootpathInputMode WindowFootpathGetInputMode();
+
+    // OPENRCT2MINI grid-cursor-plan §16: drag-area mode at-tile
+    // helpers. The mouse path uses screen-coord versions that project
+    // and call into the same window state these touch — this is the
+    // gamepad equivalent for FootpathContextImpl::onPlace /
+    // onCancel / onStep when in drag-area mode.
+    //   Anchor: store _dragStartPos at this tile, light the map
+    //           selection, set the provisional ghost.
+    //   Preview: update the rectangle from anchor to this tile (live
+    //            during cursor stepping after anchor).
+    //   Commit: like Preview followed by WindowFootpathPlacePath() —
+    //           dispatches FootpathPlaceAction for each tile in the
+    //           rectangle, then clears the anchor.
+    //   Clear: cancel — clear anchor + provisional, back to "no
+    //          anchor" state.
+    //   HasAnchor: true iff an anchor has been set since the last
+    //              Clear / Commit. FootpathContextImpl::onPlace
+    //              branches on this to choose Anchor vs Commit.
+    void WindowFootpathDragAreaAnchorAtTile(const TileCoordsXY& tile);
+    void WindowFootpathDragAreaPreviewAtTile(const TileCoordsXY& tile);
+    void WindowFootpathDragAreaCommitAtTile(const TileCoordsXY& tile);
+    void WindowFootpathDragAreaClear();
+    bool WindowFootpathDragAreaHasAnchor();
+
+    // OPENRCT2MINI grid-cursor-plan §16: bridge-pick → bridge-build
+    // transition at a tile coord. Equivalent of the mouse path's
+    // WindowFootpathStartBridgeAtPoint but with the direction picked
+    // from the screen "up" → world direction (so D-pad up = forward
+    // in user vision until they rotate). After this call, the
+    // FootpathWindow is in PathConstructionMode::bridgeOrTunnel and
+    // _footpathConstructFromPosition is set at this tile. No-op
+    // when the window isn't in PathConstructionMode::bridgeOrTunnelPick.
+    void WindowFootpathStartBridgeAtTile(const TileCoordsXY& tile);
+
     // GameBottomToolbar
     extern uint8_t gToolbarDirtyFlags;
     WindowBase* GameBottomToolbarOpen();
