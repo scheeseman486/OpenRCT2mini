@@ -425,6 +425,16 @@ namespace OpenRCT2::Ui::Windows
                     // cursor-based tile placement model.
                     if (GetInputManager().getSelectorMode() == InputManager::SelectorMode::active)
                     {
+                        // OPENRCT2MINI bug 2026-05-22: re-arm BEFORE
+                        // setting the latch. resolveActiveContext
+                        // gates tool-context routing on
+                        // `_toolFocusSelected && toolActive` (both);
+                        // if the mouse path previously ToolCancel'd
+                        // (e.g. drag-area abort, bridge anchor pick)
+                        // toolActive is false and just setting the
+                        // latch can't route. ToolSet is idempotent
+                        // when already armed at the same widget.
+                        ToolSet(*this, WIDX_CONSTRUCT_ON_LAND, Tool::pathDown);
                         GetInputManager().setToolFocusSelected(
                             true, InputManager::SelectorTransitionSource::virtualUserInput);
                     }
@@ -443,6 +453,9 @@ namespace OpenRCT2::Ui::Windows
                     // cursor-based tile placement model.
                     if (GetInputManager().getSelectorMode() == InputManager::SelectorMode::active)
                     {
+                        // OPENRCT2MINI bug 2026-05-22 — see ON_LAND
+                        // case. Same toolActive-gate fix.
+                        ToolSet(*this, WIDX_CONSTRUCT_DRAG_AREA, Tool::pathDown);
                         GetInputManager().setToolFocusSelected(
                             true, InputManager::SelectorTransitionSource::virtualUserInput);
                     }
@@ -480,6 +493,23 @@ namespace OpenRCT2::Ui::Windows
                     // cursor-based tile placement model.
                     if (GetInputManager().getSelectorMode() == InputManager::SelectorMode::active)
                     {
+                        // OPENRCT2MINI bug 2026-05-22: re-arm the
+                        // tool BEFORE setting the latch — see
+                        // ON_LAND case above. This is the
+                        // *primary* user-reported bug for bridge
+                        // mode: the mouse-coord WindowFootpath-
+                        // StartBridgeAtPoint runs ToolCancel after
+                        // anchoring, so by the time the user gets
+                        // back to focus mode and clicks the Bridge
+                        // widget, toolActive is false. The
+                        // mode-reset block above was widened to
+                        // skip bridgeOrTunnel build (preserve the
+                        // bridge head), which means it no longer
+                        // ToolSets here either \xe2\x80\x94 we MUST do it
+                        // explicitly in this engagement block or
+                        // resolveActiveContext refuses to route
+                        // to toolFootpath.
+                        ToolSet(*this, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL, Tool::crosshair);
                         GetInputManager().setToolFocusSelected(
                             true, InputManager::SelectorTransitionSource::virtualUserInput);
                     }
