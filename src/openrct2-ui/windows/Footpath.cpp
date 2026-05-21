@@ -2207,6 +2207,22 @@ namespace OpenRCT2::Ui::Windows
         // can then rotate via D-pad left/right (TurnLeft/TurnRight),
         // adjust slope via D-pad up/down, and extend via PadA
         // (WindowFootpathKeyboardShortcutBuildCurrent).
+        //
+        // OPENRCT2MINI grid-cursor-plan §16 — bug 2026-05-21: the
+        // mouse-coord WindowFootpathStartBridgeAtPoint calls
+        // ToolCancel() here to release the map tool — fine for the
+        // mouse path, because the user drives bridge construction
+        // via the Construct / Remove / N-S-E-W widgets, not via the
+        // map tool. The gamepad path needs the tool to stay ARMED
+        // so InputContext::toolFootpath remains the active input
+        // strategy and FootpathContextImpl keeps receiving D-pad /
+        // PadA / PadB. Without that, D-pad falls back to widget-
+        // focus navigation inside the Footpath window and the user
+        // can't rotate / slope / build segments. The tool was
+        // already armed by the bridge-pick mode entry (line 450
+        // via ToolSet WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL + crosshair),
+        // and the bridge state we set up just below is well-defined
+        // — no ToolCancel needed.
         void StartBridgeAtTilePublic(const TileCoordsXY& tile)
         {
             const auto coords = tile.ToCoordsXY();
@@ -2226,7 +2242,6 @@ namespace OpenRCT2::Ui::Windows
             else if (slope & kTileSlopeRaisedCornersMask)
                 z += kPathHeightStep;
 
-            ToolCancel();
             _footpathConstructFromPosition = { coords, z };
             _footpathConstructDirection = direction;
             _provisionalFootpath.flags.clearAll();
