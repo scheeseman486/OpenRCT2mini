@@ -1189,60 +1189,51 @@ namespace
             return InputContext::toolFootpath;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §16: top-level verbs branch
+        // on the Footpath window's current PathConstructionMode. Each
+        // mode has its own *OnLand / *DragArea / *BridgePick /
+        // *BridgeBuild body. The OnLand bodies preserve the §14.2
+        // grid-cursor behaviour byte-identically — see the per-method
+        // comments below for the per-mode logic.
         Disposition onPlace() override
         {
-            const auto pos = gridCursor().getPosition();
-            // OPENRCT2MINI grid-cursor-plan §10 placement-Z fix
-            // (2026-05-20 update: partial slopes).
-            // gridCursor().getZ() is the user-driven Z offset (0 on
-            // first entry, bumped by onRaise / onLower). On its own
-            // that's below the terrain surface and FootpathPlaceAction
-            // rejects the placement as "too low".
-            //
-            // The mouse path resolves the surface placement Z via
-            // FootpathGetOnTerrainPlacement (Footpath.cpp:1133 →
-            // FootpathGetPlacementFromInfo); we do the same here.
-            // Unlike TileElementHeight (which returns the slope-
-            // interpolated height at a specific XY point), the
-            // terrain-placement helper returns the *path-corrected*
-            // base Z — for partial-slope tiles where one corner is
-            // raised, it bumps baseZ by kPathHeightStep so the
-            // resulting flat path sits on top of the raised corner.
-            // The earlier TileElementHeight sample worked for flat
-            // tiles and sloped (ramp-shaped) tiles, but for partial
-            // slopes returned the low-corner Z, so the place action's
-            // baseZ ≠ the slope-aware Z PlaceAtTilePublic resolves —
-            // the slope fell back to flat AND was at the wrong Z.
-            //
-            // Add the cursor's Z offset on top of placement.baseZ for
-            // raised-plane (bridge) placements. The 16 floor mirrors
-            // `_footpathPlaceZ = std::max(mapZ, 16)` in
-            // Footpath.cpp:1108 — the engine treats Z 0 as "no
-            // override" so we need a non-zero baseline. Falls back
-            // to TileElementHeight when FootpathGetOnTerrainPlacement
-            // can't resolve the tile (no surface element — unusual,
-            // edge of map / never-generated terrain).
-            const auto worldXY = pos.ToCoordsXY();
-            const int32_t zOffset = gridCursor().getZ();
-            auto placement = OpenRCT2::FootpathGetOnTerrainPlacement(pos);
-            int32_t baseZ;
-            if (placement.isValid())
-                baseZ = std::max<int32_t>(placement.baseZ + zOffset, 16);
-            else
-                baseZ = std::max<int32_t>(OpenRCT2::TileElementHeight(worldXY) + zOffset, 16);
-            Windows::WindowFootpathPlaceAtTile(pos, baseZ);
-            return Disposition::Consumed;
+            switch (Windows::WindowFootpathGetInputMode())
+            {
+                case Windows::FootpathInputMode::onLand:
+                    return onPlaceOnLand();
+                case Windows::FootpathInputMode::dragArea:
+                    return onPlaceDragArea();
+                case Windows::FootpathInputMode::bridgePick:
+                    return onPlaceBridgePick();
+                case Windows::FootpathInputMode::bridgeBuild:
+                    return onPlaceBridgeBuild();
+                case Windows::FootpathInputMode::none:
+                default:
+                    return Disposition::Passthrough;
+            }
         }
 
-        // OPENRCT2MINI cursor-cancel-tile-action-plan §3.5 (Phase B):
-        // onCancel lives on the ToolContext base now — it dispatches
-        // through ViewportInteractionRightClickAtMapPos at the grid
-        // cursor's tile, identical to what the mouse RMB short-press
-        // release does at the OS pointer's tile. The footpath remove
-        // happens via that path's footpath branch, sourced from the
-        // exact tile element the cursor is over (where the old
-        // WindowFootpathRemove used _footpathConstructFromPosition,
-        // which is only set in bridge/tunnel mode).
+        // OPENRCT2MINI grid-cursor-plan §16: drag-area + bridge-build
+        // override cancel; the other two modes fall through to the
+        // ToolContext base which dispatches Viewport-
+        // InteractionRightClickAtMapPos at the cursor tile (the
+        // OnLand "remove the path under the cursor" behaviour, kept
+        // for consistency in bridgePick / drag-area-no-anchor).
+        Disposition onCancel() override
+        {
+            switch (Windows::WindowFootpathGetInputMode())
+            {
+                case Windows::FootpathInputMode::dragArea:
+                    return onCancelDragArea();
+                case Windows::FootpathInputMode::bridgeBuild:
+                    return onCancelBridgeBuild();
+                case Windows::FootpathInputMode::onLand:
+                case Windows::FootpathInputMode::bridgePick:
+                case Windows::FootpathInputMode::none:
+                default:
+                    return ToolContext::onCancel();
+            }
+        }
 
         // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17):
         // finish in grid mode closes the Footpath window outright
@@ -1256,70 +1247,86 @@ namespace
 
         Disposition onRotate() override
         {
+            // Rotate the railings cycle (TurnRight) in every mode
+            // where it has an effect. The keyboard-shortcut helper
+            // already no-ops outside bridgeOrTunnel.
             Windows::WindowFootpathKeyboardShortcutTurnRight();
             return Disposition::Consumed;
         }
 
-        // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20 —
-        // Shift+D-pad Z): mirror the mouse Shift+drag-Z gesture in
-        // the digital D-pad world. Bump the grid cursor's stored Z
-        // by one path step, then re-run the provisional placement
-        // with the new Z offset — same path the mouse Shift+drag
-        // uses (FootpathProvisionalSet → VirtualFloorSetHeight via
-        // the placement-tile setter). The earlier
-        // WindowFootpathAdjustPlacementZ call was a slope shortcut
-        // (KeyboardShortcutSlopeUp/Down) — adjusts the placed path
-        // slope, not the cursor's Z plane. Dropped because the
-        // gesture's expected behaviour is Z change, not slope; the
-        // slope is set automatically by FootpathGetOnTerrainPlacement
-        // at SetProvisionalAtTile time.
+        // OPENRCT2MINI grid-cursor-plan §16: onRaise/onLower in
+        // bridgeBuild dispatch SlopeUp/SlopeDown (the construction-
+        // segment slope verb). All other modes use the grid cursor's
+        // Z step (the §14.2 Shift+D-pad-Z behaviour).
         Disposition onRaise() override
         {
-            gridCursor().raiseZ(OpenRCT2::kPathHeightStep);
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
-            return Disposition::Consumed;
+            if (Windows::WindowFootpathGetInputMode() == Windows::FootpathInputMode::bridgeBuild)
+            {
+                Windows::WindowFootpathKeyboardShortcutSlopeUp();
+                return Disposition::Consumed;
+            }
+            return onRaiseGridCursor();
         }
 
         Disposition onLower() override
         {
-            gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
-            return Disposition::Consumed;
+            if (Windows::WindowFootpathGetInputMode() == Windows::FootpathInputMode::bridgeBuild)
+            {
+                Windows::WindowFootpathKeyboardShortcutSlopeDown();
+                return Disposition::Consumed;
+            }
+            return onLowerGridCursor();
         }
 
         // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):
         // ghost-tile lifecycle. Chains to the base ToolContext for
-        // lifecycle / camera / step bookkeeping, then sets / clears
-        // the provisional footpath at the cursor's tile so the
-        // ghost renders alongside the highlight.
+        // lifecycle / camera / step bookkeeping, then sets the
+        // provisional footpath at the cursor's tile so the ghost
+        // renders alongside the highlight. §16: bridgeBuild has no
+        // grid cursor / no ghost (the Footpath window's own bridge-
+        // head arrow takes over), so skip the provisional set there.
+        // dragArea also skips the provisional ghost — the rectangle
+        // preview / map selection is what's drawn instead.
         void onActivate() override
         {
             ToolContext::onActivate();
-            // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20):
-            // pass the cursor's Z so a re-engage after parking
-            // restores the floor at the user's last-known Z plane
-            // (the grid cursor model preserves _z across the parked
-            // ⇌ active transition).
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            if (Windows::WindowFootpathGetInputMode() == Windows::FootpathInputMode::onLand
+                || Windows::WindowFootpathGetInputMode() == Windows::FootpathInputMode::bridgePick)
+            {
+                Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            }
         }
 
         void onDeactivate() override
         {
             Windows::WindowFootpathClearProvisional();
+            // §16: also clear any drag-area anchor — the user may
+            // have anchored, then exited grid cursor without
+            // committing. Without this, re-engaging would see a
+            // stale anchor and treat the next onPlace as a commit.
+            Windows::WindowFootpathDragAreaClear();
             ToolContext::onDeactivate();
         }
 
+        // OPENRCT2MINI grid-cursor-plan §16: onStep branches per mode.
+        // bridgeBuild re-purposes the D-pad entirely (slope up/down +
+        // turn left/right, per user 2026-05-21). dragArea steps the
+        // cursor like OnLand, then refreshes the rectangle preview.
+        // bridgePick / OnLand both step + refresh the ghost.
         Disposition onStep(::Direction dpad) override
         {
-            const auto result = ToolContext::onStep(dpad);
-            // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20):
-            // persist the Z plane when navigating to a new tile —
-            // matches the mouse path's behaviour where _footpath-
-            // PlaceShiftZ is preserved across mouse motion under the
-            // same Shift hold. User raises Z, then steps sideways:
-            // the new tile's ghost / Z plane stays at the raised Z.
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
-            return result;
+            switch (Windows::WindowFootpathGetInputMode())
+            {
+                case Windows::FootpathInputMode::bridgeBuild:
+                    return onStepBridgeBuild(dpad);
+                case Windows::FootpathInputMode::dragArea:
+                    return onStepDragArea(dpad);
+                case Windows::FootpathInputMode::onLand:
+                case Windows::FootpathInputMode::bridgePick:
+                case Windows::FootpathInputMode::none:
+                default:
+                    return onStepGridCursor(dpad);
+            }
         }
 
         // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20 follow-up):
@@ -1328,16 +1335,17 @@ namespace
         // PlaceAtTilePublic cleared at entry (via
         // FootpathUpdateProvisional) is still gone. Re-arm it here
         // so the user sees the ghost immediately on popup dismiss
-        // without having to D-pad to a new tile.
+        // without having to D-pad to a new tile. §16: only meaningful
+        // for OnLand / bridgePick — the other modes don't render a
+        // single-tile ghost.
         void onPopupDismissed() override
         {
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            if (Windows::WindowFootpathGetInputMode() == Windows::FootpathInputMode::onLand
+                || Windows::WindowFootpathGetInputMode() == Windows::FootpathInputMode::bridgePick)
+            {
+                Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            }
         }
-
-        // OPENRCT2MINI grid-cursor-plan §14.1: onStep lives on the
-        // ToolContext base — every grid-cursor / edge-cursor tool
-        // now inherits the same step body. Footpath only needs to
-        // declare its precision subset.
 
         SubsetType precisionSubset() const override
         {
@@ -1345,6 +1353,166 @@ namespace
             // precision); railings is per-edge (edges subset). Detect
             // mode from FootpathWindow state via the bridge helper.
             return Windows::WindowFootpathIsRailingsMode() ? SubsetType::edges : SubsetType::none;
+        }
+
+    private:
+        // OPENRCT2MINI grid-cursor-plan §16 — OnLand mode bodies
+        // (preserved byte-identically from §14.2).
+
+        // §10 placement-Z fix (2026-05-20 update: partial slopes).
+        // gridCursor().getZ() is the user-driven Z offset (0 on first
+        // entry, bumped by onRaise / onLower). On its own that's
+        // below the terrain surface and FootpathPlaceAction rejects
+        // the placement as "too low".
+        //
+        // The mouse path resolves the surface placement Z via
+        // FootpathGetOnTerrainPlacement (Footpath.cpp:1133); we do
+        // the same here. Unlike TileElementHeight (which returns the
+        // slope-interpolated height at a specific XY point), the
+        // terrain-placement helper returns the path-corrected base Z
+        // — for partial-slope tiles where one corner is raised, it
+        // bumps baseZ by kPathHeightStep so the resulting flat path
+        // sits on top of the raised corner. Add the cursor's Z
+        // offset on top of placement.baseZ for raised-plane (bridge)
+        // placements. The 16 floor mirrors `_footpathPlaceZ =
+        // std::max(mapZ, 16)` in Footpath.cpp:1108. Falls back to
+        // TileElementHeight when FootpathGetOnTerrainPlacement can't
+        // resolve the tile.
+        Disposition onPlaceOnLand()
+        {
+            const auto pos = gridCursor().getPosition();
+            const auto worldXY = pos.ToCoordsXY();
+            const int32_t zOffset = gridCursor().getZ();
+            auto placement = OpenRCT2::FootpathGetOnTerrainPlacement(pos);
+            int32_t baseZ;
+            if (placement.isValid())
+                baseZ = std::max<int32_t>(placement.baseZ + zOffset, 16);
+            else
+                baseZ = std::max<int32_t>(OpenRCT2::TileElementHeight(worldXY) + zOffset, 16);
+            Windows::WindowFootpathPlaceAtTile(pos, baseZ);
+            return Disposition::Consumed;
+        }
+
+        Disposition onRaiseGridCursor()
+        {
+            gridCursor().raiseZ(OpenRCT2::kPathHeightStep);
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            return Disposition::Consumed;
+        }
+
+        Disposition onLowerGridCursor()
+        {
+            gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            return Disposition::Consumed;
+        }
+
+        // OnLand / bridgePick onStep: step the grid cursor, refresh
+        // the single-tile ghost. §14.2 Z preservation behaviour.
+        Disposition onStepGridCursor(::Direction dpad)
+        {
+            const auto result = ToolContext::onStep(dpad);
+            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            return result;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §16 — DragArea mode bodies.
+        // Two-stage gesture: no anchor → onPlace = Anchor; anchored →
+        // onPlace = Commit (then back to no anchor). Step extends the
+        // selection rectangle live.
+
+        Disposition onPlaceDragArea()
+        {
+            const auto pos = gridCursor().getPosition();
+            if (Windows::WindowFootpathDragAreaHasAnchor())
+                Windows::WindowFootpathDragAreaCommitAtTile(pos);
+            else
+                Windows::WindowFootpathDragAreaAnchorAtTile(pos);
+            return Disposition::Consumed;
+        }
+
+        // §16: cancel-from-anchored clears the anchor. Cancel-from-
+        // idle falls through to the base (right-click-remove at the
+        // cursor's tile), per the §16.1 mode table — consistency
+        // with OnLand's cancel.
+        Disposition onCancelDragArea()
+        {
+            if (Windows::WindowFootpathDragAreaHasAnchor())
+            {
+                Windows::WindowFootpathDragAreaClear();
+                return Disposition::Consumed;
+            }
+            return ToolContext::onCancel();
+        }
+
+        // §16: step + refresh the rectangle preview when anchored.
+        // When idle the cursor just walks; the next anchor-onPlace
+        // will pick it up at its new position.
+        Disposition onStepDragArea(::Direction dpad)
+        {
+            const auto result = ToolContext::onStep(dpad);
+            if (Windows::WindowFootpathDragAreaHasAnchor())
+                Windows::WindowFootpathDragAreaPreviewAtTile(gridCursor().getPosition());
+            return result;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §16 — bridgePick mode body.
+        // The user steps the cursor to choose an anchor tile, then
+        // onPlace transitions the Footpath window into bridgeOrTunnel
+        // (segment construction) via StartBridgeAtTile.
+
+        Disposition onPlaceBridgePick()
+        {
+            Windows::WindowFootpathStartBridgeAtTile(gridCursor().getPosition());
+            return Disposition::Consumed;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §16 — bridgeBuild mode bodies.
+        // No cursor in bridge construction — the bridge head position
+        // is owned by the Footpath window and rendered as its own
+        // arrow / map-selection arrow. D-pad is fully re-purposed
+        // per user 2026-05-21: up/down = slope up/down, left/right =
+        // turn left/right (counter-clockwise / clockwise).
+
+        Disposition onPlaceBridgeBuild()
+        {
+            Windows::WindowFootpathKeyboardShortcutBuildCurrent();
+            return Disposition::Consumed;
+        }
+
+        Disposition onCancelBridgeBuild()
+        {
+            Windows::WindowFootpathKeyboardShortcutDemolishCurrent();
+            return Disposition::Consumed;
+        }
+
+        // D-pad mapping per user 2026-05-21:
+        //   up    = SlopeUp     (== onRaise dispatch)
+        //   down  = SlopeDown   (== onLower dispatch)
+        //   left  = TurnLeft    (counter-clockwise)
+        //   right = TurnRight   (clockwise — == onRotate dispatch)
+        // The Direction values match the kFocusUp/Right/Down/Left
+        // dispatch in InputContextStrategy.h:772-779.
+        Disposition onStepBridgeBuild(::Direction dpad)
+        {
+            switch (static_cast<int>(dpad))
+            {
+                case 0: // up
+                    Windows::WindowFootpathKeyboardShortcutSlopeUp();
+                    break;
+                case 1: // right
+                    Windows::WindowFootpathKeyboardShortcutTurnRight();
+                    break;
+                case 2: // down
+                    Windows::WindowFootpathKeyboardShortcutSlopeDown();
+                    break;
+                case 3: // left
+                    Windows::WindowFootpathKeyboardShortcutTurnLeft();
+                    break;
+                default:
+                    return Disposition::Passthrough;
+            }
+            return Disposition::Consumed;
         }
     };
 
