@@ -79,7 +79,7 @@ namespace OpenRCT2::Platform
         }
         else
         {
-            const auto wBuffer = std::make_unique_for_overwrite<wchar_t[]>(valueSize);
+            const auto wBuffer = std::unique_ptr<wchar_t[]>(new wchar_t[valueSize]);  // OPENRCT2MINI: C++17 equivalent of make_unique_for_overwrite
             GetEnvironmentVariableW(wname.c_str(), wBuffer.get(), valueSize);
             result = wBuffer.get();
         }
@@ -784,7 +784,7 @@ namespace OpenRCT2::Platform
         }
 
         std::string outPath = "";
-        const auto wSteamPath = std::make_unique_for_overwrite<wchar_t[]>(size);
+        const auto wSteamPath = std::unique_ptr<wchar_t[]>(new wchar_t[size]);  // OPENRCT2MINI: C++17 equivalent of make_unique_for_overwrite
         const auto result = RegQueryValueExW(
             hKey, L"SteamPath", nullptr, &type, reinterpret_cast<LPBYTE>(wSteamPath.get()), &size);
         if (result == ERROR_SUCCESS)
