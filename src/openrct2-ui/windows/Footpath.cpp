@@ -2230,6 +2230,29 @@ namespace OpenRCT2::Ui::Windows
             if (surface == nullptr)
                 return;
 
+            // OPENRCT2MINI grid-cursor-plan §16 — bug 2026-05-21:
+            // bridgePick mode steps the grid cursor via onStepGrid-
+            // Cursor (the shared OnLand step path), which calls
+            // SetProvisionalAtTile on every D-pad step — leaving a
+            // provisional footpath element at the last picked tile.
+            // The mouse path's bridgePick uses a map-selection arrow
+            // instead of a provisional ghost, so this doesn't show
+            // up there. When the user picks the anchor (PadA →
+            // here) and then transitions controller → mouse, the
+            // mouse's bridge-mode onToolUpdate only updates the
+            // arrow, never touches the lingering provisional — and
+            // it stays "stuck" on the map: persists across window
+            // close and scroll, demolishes for free (because it's
+            // still a provisional, not a real placement), can block
+            // legitimate placement on the tile.
+            //
+            // Drop the provisional as part of the pick → build
+            // transition so the bridgeBuild state starts clean.
+            // _provisionalFootpath.flags.clearAll() below sets the
+            // window's bookkeeping; FootpathUpdateProvisional()
+            // physically removes the tile element from the map.
+            FootpathUpdateProvisional();
+
             // Default construction direction: screen-up in world
             // frame. Adding GetCurrentRotation later flips it back to
             // screen-up for the directional widgets (see line 680).
