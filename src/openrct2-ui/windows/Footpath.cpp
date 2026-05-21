@@ -2271,6 +2271,18 @@ namespace OpenRCT2::Ui::Windows
             _footpathConstructSlope = SlopePitch::flat;
             _footpathConstructionMode = PathConstructionMode::bridgeOrTunnel;
             _footpathConstructValidDirections = kInvalidDirection;
+            // OPENRCT2MINI grid-cursor-plan §16.4f (2026-05-21): the
+            // grid cursor highlight rendered at the picked tile is
+            // wrong in bridgeBuild — the bridge has its own head/
+            // arrow that takes over, and stacking two cursors at the
+            // anchor tile looks like a bug ("a new pick-cursor
+            // appeared even though I'm already building"). Drop the
+            // grid-cursor flag here; FootpathContextImpl::onActivate
+            // also drops it on controller re-engage in bridgeBuild,
+            // so both the same-frame pick→build transition AND a
+            // subsequent Start-toggle re-engage stay clean.
+            gMapSelectFlags.unset(MapSelectFlag::gridCursor);
+            gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
             WindowFootpathSetEnabledAndPressedWidgets();
         }
         void KeyboardShortcutTurnLeft()

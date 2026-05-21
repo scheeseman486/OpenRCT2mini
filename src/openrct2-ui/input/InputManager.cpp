@@ -1290,10 +1290,26 @@ namespace
         void onActivate() override
         {
             ToolContext::onActivate();
-            if (Windows::WindowFootpathGetInputMode() == Windows::FootpathInputMode::onLand
-                || Windows::WindowFootpathGetInputMode() == Windows::FootpathInputMode::bridgePick)
+            const auto mode = Windows::WindowFootpathGetInputMode();
+            if (mode == Windows::FootpathInputMode::onLand || mode == Windows::FootpathInputMode::bridgePick)
             {
                 Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            }
+            else if (mode == Windows::FootpathInputMode::bridgeBuild)
+            {
+                // OPENRCT2MINI grid-cursor-plan §16.4f (2026-05-21):
+                // re-engage in bridgeBuild (Start toggle after using
+                // the mouse) — ToolContext::onActivate above has just
+                // written MapSelectFlag::gridCursor + a grid-cursor
+                // setMapSelectRange at the grid cursor's tile, which
+                // paints a second cursor on top of the bridge head
+                // arrow. The bridge head is the visual anchor in
+                // bridgeBuild; the grid cursor isn't navigable here
+                // (D-pad is re-purposed for slope/turn), so its
+                // highlight is just noise. Strip the gridCursor flag
+                // so only the bridge arrow renders.
+                gMapSelectFlags.unset(MapSelectFlag::gridCursor);
+                gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
             }
         }
 
