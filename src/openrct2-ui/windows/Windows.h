@@ -255,6 +255,19 @@ namespace OpenRCT2::Ui::Windows
     // extended / retracted / slope-adjusted.
     std::optional<TileCoordsXY> WindowFootpathGetBridgeHeadTile();
 
+    // OPENRCT2MINI bug 2026-05-22: re-arm the tool widget appropriate
+    // for the Footpath window's current _footpathConstructionMode.
+    // The mouse path's StartBridgeAtPoint calls ToolCancel after
+    // picking an anchor (the mouse user drives bridge via window
+    // widgets, not the map tool) — so when the user transitions
+    // controller-driven cursor → mouse-driven bridge build → press
+    // Start to switch back to grid cursor, toolActive is false and
+    // the InputManager's enter-focus-mode auto-engage branch never
+    // fires. Calling this re-arms the right tool widget for the
+    // current mode so the auto-engage works. No-op when the window
+    // isn't open or the mode is `none`.
+    void WindowFootpathReArmForCurrentMode();
+
     // GameBottomToolbar
     extern uint8_t gToolbarDirtyFlags;
     WindowBase* GameBottomToolbarOpen();

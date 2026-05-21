@@ -2236,6 +2236,36 @@ namespace OpenRCT2::Ui::Windows
             return TileCoordsXY{ _footpathConstructFromPosition };
         }
 
+        // OPENRCT2MINI bug 2026-05-22: re-arm the tool widget that
+        // corresponds to the current construction mode. Used by
+        // InputManager::enterFocusModeOnTopmost so the user can
+        // toggle back into grid cursor mode after a mouse-driven
+        // bridge anchor pick has un-armed the tool. No-op for
+        // `none` (Footpath open but no active mode shouldn't auto-
+        // arm). Note: the mouse-coord paths for onLand, dragArea,
+        // and bridgeOrTunnelPick already ToolSet inside their
+        // mode-entry blocks; this is a parallel entry-point that
+        // chooses the right widget+cursor from the live mode value.
+        void ReArmForCurrentModePublic()
+        {
+            switch (_footpathConstructionMode)
+            {
+                case PathConstructionMode::onLand:
+                    ToolSet(*this, WIDX_CONSTRUCT_ON_LAND, Tool::pathDown);
+                    break;
+                case PathConstructionMode::dragArea:
+                    ToolSet(*this, WIDX_CONSTRUCT_DRAG_AREA, Tool::pathDown);
+                    break;
+                case PathConstructionMode::bridgeOrTunnelPick:
+                case PathConstructionMode::bridgeOrTunnel:
+                    ToolSet(*this, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL, Tool::crosshair);
+                    break;
+                default:
+                    return;
+            }
+            gInputFlags.set(InputFlag::allowRightMouseRemoval);
+        }
+
         // OPENRCT2MINI grid-cursor-plan §16: bridge-pick → bridge-
         // build transition at tile. Parallels WindowFootpathStart-
         // BridgeAtPoint's body but takes a tile coord and picks the
@@ -2695,6 +2725,17 @@ namespace OpenRCT2::Ui::Windows
         if (w == nullptr)
             return std::nullopt;
         return static_cast<const FootpathWindow*>(w)->GetBridgeHeadTilePublic();
+    }
+
+    // OPENRCT2MINI bug 2026-05-22: free-function bridge to
+    // ReArmForCurrentModePublic. No-op when the window is closed.
+    void WindowFootpathReArmForCurrentMode()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return;
+        static_cast<FootpathWindow*>(w)->ReArmForCurrentModePublic();
     }
 
     // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):

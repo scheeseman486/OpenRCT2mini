@@ -2495,18 +2495,35 @@ void InputManager::cycleFocusedWindow(int direction)
 bool InputManager::enterFocusModeOnTopmost()
 {
     // OPENRCT2MINI bug 2026-05-22: tool-armed shortcut — if the user
-    // is in cursor mode (selectorMode::hidden) AND a tool is armed,
-    // the enter-focus-mode shortcut should engage grid cursor mode
-    // directly instead of landing widget focus on the tool window.
-    // Use case: user is mid-bridge-build via the controller, picks
-    // up the mouse to do something, then presses Start to "give me
-    // my gamepad back". They want grid cursor back on the bridge
-    // head, not widget focus on the path-type dropdown. The cycle
-    // behavior below still fires when already in focus mode, so
-    // re-pressing Start while widget-focused on the Footpath window
-    // continues to cycle through its widgets as before.
-    if (_selectorMode == SelectorMode::hidden && gInputFlags.has(InputFlag::toolActive))
+    // is in cursor mode (selectorMode::hidden) AND any tool-like
+    // work is mid-flight, the enter-focus-mode shortcut should
+    // engage grid cursor mode directly instead of landing widget
+    // focus on the tool window. Use case: user is mid-bridge-build,
+    // picks up the mouse to do something, then presses Start to
+    // "give me my gamepad back". They want grid cursor on the
+    // bridge head, not widget focus on the path-type dropdown.
+    // The cycle behavior below still fires when already in focus
+    // mode.
+    //
+    // "Tool-like work" detection — two paths:
+    //   1. gInputFlags::toolActive — gamepad-driven tools that
+    //      keep the map tool armed (controller bridge build, OnLand
+    //      path placement, etc.).
+    //   2. WindowFootpathGetInputMode() != none — the mouse-coord
+    //      WindowFootpathStartBridgeAtPoint runs ToolCancel after
+    //      anchoring (toolActive == false) but the Footpath window
+    //      is still in bridgeOrTunnel mode and the user wants to
+    //      continue from gamepad. Re-arm the tool widget for the
+    //      current mode here so resolveActiveContext routes to
+    //      FootpathContextImpl on the next frame and the bridge
+    //      head sync runs as expected.
+    const bool footpathInMode
+        = (Windows::WindowFootpathGetInputMode() != Windows::FootpathInputMode::none);
+    if (_selectorMode == SelectorMode::hidden
+        && (gInputFlags.has(InputFlag::toolActive) || footpathInMode))
     {
+        if (footpathInMode && !gInputFlags.has(InputFlag::toolActive))
+            Windows::WindowFootpathReArmForCurrentMode();
         clearFocus();
         setToolFocusSelected(true, SelectorTransitionSource::enterFocusModeRequested);
         requestFocusMode();
