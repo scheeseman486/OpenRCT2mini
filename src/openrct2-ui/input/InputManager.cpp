@@ -1557,6 +1557,12 @@ namespace
         // `MapSelectFlag::enableArrow` unset — bridgeOrTunnel uses
         // the arrow to render the direction indicator at the head,
         // and we need to keep it set.
+        //
+        // OPENRCT2MINI follow-up 2026-05-21 #5a: also call
+        // ScrollMainWindowIfCursorNearEdge so the camera tracks the
+        // bridge head as it advances off-screen (matches the OnLand
+        // mode behaviour in ToolContext::onStep which the
+        // bridgeBuild's overridden onStep does NOT inherit).
         void syncGridCursorToBridgeHead()
         {
             const auto head = Windows::WindowFootpathGetBridgeHeadTile();
@@ -1571,7 +1577,43 @@ namespace
             gMapSelectType = MapSelectType::full;
             setMapSelectRange(world);
             OpenRCT2::MapInvalidateTileFull(world);
+            ScrollMainWindowIfCursorNearEdge(*head);
         }
+
+        // OPENRCT2MINI follow-up 2026-05-21 #5b: per-frame poll of
+        // the bridge head. FootpathPlaceAction's callback updates
+        // `_footpathConstructFromPosition` AFTER our onPlace­Bridge­
+        // Build's post-Build sync runs (the callback fires inside
+        // GameActions::Execute but the timing isn't guaranteed
+        // synchronous with our call), so syncing right after the
+        // verb sees the stale head. Polling per frame in the active
+        // bridgeBuild context catches the new head whenever it
+        // lands, without relying on action-callback ordering.
+        // _lastBridgeHead tracks the last position we synced to;
+        // when the window's head differs, we re-sync and update.
+        void processFrame(uint32_t nowMs) override
+        {
+            ToolContext::processFrame(nowMs);
+
+            if (Windows::WindowFootpathGetInputMode() != Windows::FootpathInputMode::bridgeBuild)
+            {
+                _lastBridgeHead.reset();
+                return;
+            }
+            const auto head = Windows::WindowFootpathGetBridgeHeadTile();
+            if (!head.has_value())
+                return;
+            if (_lastBridgeHead.has_value() && *_lastBridgeHead == *head)
+                return;
+            _lastBridgeHead = *head;
+            syncGridCursorToBridgeHead();
+        }
+
+    private:
+        // Tracked across processFrame ticks so we only re-sync when
+        // the head actually moved (avoids redundant work + redundant
+        // ScrollMainWindowIfCursorNearEdge nudges every frame).
+        std::optional<TileCoordsXY> _lastBridgeHead;
     };
 
     // OPENRCT2MINI input-plan Track 3 / Phase 3.F: edge-tile tool
