@@ -448,7 +448,18 @@ namespace OpenRCT2::Ui::Windows
                     }
                     break;
                 case WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL:
-                    if (_footpathConstructionMode != PathConstructionMode::bridgeOrTunnelPick)
+                    // OPENRCT2MINI bug 2026-05-21 #4b: also treat
+                    // bridgeOrTunnel (build) as "already in bridge
+                    // mode" — clicking the Bridge button while a
+                    // bridge is in progress should be a no-op for
+                    // mode state (preserves _footpathConstructFrom-
+                    // Position so the bridge isn't dropped). The
+                    // original condition only skipped when in pick
+                    // mode, so re-clicking the button mid-build
+                    // reset to pick mode and the user lost their
+                    // bridge head. Now both pick and build skip.
+                    if (_footpathConstructionMode != PathConstructionMode::bridgeOrTunnelPick
+                        && _footpathConstructionMode != PathConstructionMode::bridgeOrTunnel)
                     {
                         _windowFootpathCost = kMoney64Undefined;
                         ToolCancel();
@@ -2199,6 +2210,19 @@ namespace OpenRCT2::Ui::Windows
             return !_dragStartPos.IsNull();
         }
 
+        // OPENRCT2MINI grid-cursor-plan §16: bridge head tile getter
+        // for the gamepad path. Returns the tile coords of
+        // _footpathConstructFromPosition when in bridgeOrTunnel
+        // build mode so FootpathContextImpl can sync its grid
+        // cursor highlight to the current bridge head. Nullopt for
+        // every other mode (no head to point at).
+        std::optional<TileCoordsXY> GetBridgeHeadTilePublic() const
+        {
+            if (_footpathConstructionMode != PathConstructionMode::bridgeOrTunnel)
+                return std::nullopt;
+            return TileCoordsXY{ _footpathConstructFromPosition };
+        }
+
         // OPENRCT2MINI grid-cursor-plan §16: bridge-pick → bridge-
         // build transition at tile. Parallels WindowFootpathStart-
         // BridgeAtPoint's body but takes a tile coord and picks the
@@ -2325,18 +2349,16 @@ namespace OpenRCT2::Ui::Windows
             _footpathConstructSlope = SlopePitch::flat;
             _footpathConstructionMode = PathConstructionMode::bridgeOrTunnel;
             _footpathConstructValidDirections = kInvalidDirection;
-            // OPENRCT2MINI grid-cursor-plan §16.4f (2026-05-21): the
-            // grid cursor highlight rendered at the picked tile is
-            // wrong in bridgeBuild — the bridge has its own head/
-            // arrow that takes over, and stacking two cursors at the
-            // anchor tile looks like a bug ("a new pick-cursor
-            // appeared even though I'm already building"). Drop the
-            // grid-cursor flag here; FootpathContextImpl::onActivate
-            // also drops it on controller re-engage in bridgeBuild,
-            // so both the same-frame pick→build transition AND a
-            // subsequent Start-toggle re-engage stay clean.
-            gMapSelectFlags.unset(MapSelectFlag::gridCursor);
-            gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
+            // OPENRCT2MINI grid-cursor-plan §16.4f rev 2026-05-21 #4a:
+            // earlier version unset MapSelectFlag::gridCursor here to
+            // suppress the highlight on the picked tile (it was
+            // stuck at the anchor while the bridge head advanced,
+            // looking like a stale pick cursor). New approach:
+            // FootpathContextImpl syncs the grid cursor to the
+            // bridge head on every verb, so the highlight follows
+            // the head and the stuck-at-anchor symptom doesn't
+            // happen. Leave the gridCursor flag set so the highlight
+            // remains visible.
             WindowFootpathSetEnabledAndPressedWidgets();
         }
         void KeyboardShortcutTurnLeft()
@@ -2650,6 +2672,16 @@ namespace OpenRCT2::Ui::Windows
         if (w == nullptr)
             return;
         static_cast<FootpathWindow*>(w)->StartBridgeAtTilePublic(tile, zOffset);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §16: bridge head tile accessor.
+    std::optional<TileCoordsXY> WindowFootpathGetBridgeHeadTile()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return std::nullopt;
+        return static_cast<const FootpathWindow*>(w)->GetBridgeHeadTilePublic();
     }
 
     // OPENRCT2MINI grid-cursor-plan §7.4 (amendment 2026-05-17):

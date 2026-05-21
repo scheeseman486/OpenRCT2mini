@@ -1297,19 +1297,18 @@ namespace
             }
             else if (mode == Windows::FootpathInputMode::bridgeBuild)
             {
-                // OPENRCT2MINI grid-cursor-plan §16.4f (2026-05-21):
-                // re-engage in bridgeBuild (Start toggle after using
-                // the mouse) — ToolContext::onActivate above has just
-                // written MapSelectFlag::gridCursor + a grid-cursor
-                // setMapSelectRange at the grid cursor's tile, which
-                // paints a second cursor on top of the bridge head
-                // arrow. The bridge head is the visual anchor in
-                // bridgeBuild; the grid cursor isn't navigable here
-                // (D-pad is re-purposed for slope/turn), so its
-                // highlight is just noise. Strip the gridCursor flag
-                // so only the bridge arrow renders.
-                gMapSelectFlags.unset(MapSelectFlag::gridCursor);
-                gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
+                // OPENRCT2MINI grid-cursor-plan §16.4f rev 2026-05-21:
+                // earlier this branch suppressed MapSelectFlag::grid-
+                // Cursor to stop the highlight stacking on the bridge
+                // head arrow (the visible-stationary-cursor bug). User
+                // feedback: the grid cursor SHOULD be visible — it
+                // just needs to follow the bridge head as segments
+                // extend / retract. Sync the cursor model + selection
+                // to the head here so a Start-toggle re-engage in mid-
+                // bridge places the highlight at the head, not at the
+                // stale grid-cursor position the base onActivate just
+                // wrote.
+                syncGridCursorToBridgeHead();
             }
         }
 
@@ -1498,12 +1497,22 @@ namespace
         Disposition onPlaceBridgeBuild()
         {
             Windows::WindowFootpathKeyboardShortcutBuildCurrent();
+            // OPENRCT2MINI grid-cursor-plan §16 follow-up 2026-05-21
+            // #4a: BuildCurrent advanced the bridge head; chase the
+            // grid cursor up to it so the highlight is at the new
+            // head rather than the old anchor.
+            syncGridCursorToBridgeHead();
             return Disposition::Consumed;
         }
 
         Disposition onCancelBridgeBuild()
         {
             Windows::WindowFootpathKeyboardShortcutDemolishCurrent();
+            // Demolish retracts the bridge head; same sync as above.
+            // Note: if Demolish drops out of bridgeOrTunnel entirely
+            // (e.g. removing the anchor), GetBridgeHeadTile returns
+            // nullopt and the helper leaves the cursor where it was.
+            syncGridCursorToBridgeHead();
             return Disposition::Consumed;
         }
 
@@ -1533,7 +1542,35 @@ namespace
                 default:
                     return Disposition::Passthrough;
             }
+            // Slope changes the head Z; turns don't move XY but keep
+            // the cursor pinned at the head for consistency.
+            syncGridCursorToBridgeHead();
             return Disposition::Consumed;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §16 follow-up 2026-05-21 #4a:
+        // pull the bridge head's tile coords from the Footpath
+        // window, snap the grid cursor model to it, and re-emit the
+        // selection so the highlight follows the bridge head as it
+        // extends / retracts. Inline-replicates Write­GridCursor­Selection
+        // (InputContextStrategy.cpp:104) MINUS the
+        // `MapSelectFlag::enableArrow` unset — bridgeOrTunnel uses
+        // the arrow to render the direction indicator at the head,
+        // and we need to keep it set.
+        void syncGridCursorToBridgeHead()
+        {
+            const auto head = Windows::WindowFootpathGetBridgeHeadTile();
+            if (!head.has_value())
+                return; // window closed or no longer in bridgeOrTunnel
+            if (auto* grid = dynamic_cast<GridCursorModel*>(getCursorModel()); grid != nullptr)
+                grid->setPosition(*head);
+            const auto world = head->ToCoordsXY();
+            gMapSelectFlags.set(MapSelectFlag::enable);
+            gMapSelectFlags.set(MapSelectFlag::gridCursor);
+            gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
+            gMapSelectType = MapSelectType::full;
+            setMapSelectRange(world);
+            OpenRCT2::MapInvalidateTileFull(world);
         }
     };
 

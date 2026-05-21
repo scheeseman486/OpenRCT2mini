@@ -246,6 +246,15 @@ namespace OpenRCT2::Ui::Windows
     // surface Z + zOffset directly. Defaults to 0.
     void WindowFootpathStartBridgeAtTile(const TileCoordsXY& tile, int32_t zOffset = 0);
 
+    // OPENRCT2MINI grid-cursor-plan §16: bridge head position
+    // accessor — returns the tile of _footpathConstructFromPosition
+    // when the window is in bridgeOrTunnel build mode, or nullopt
+    // otherwise (window closed, in OnLand / dragArea / pick). Used
+    // by FootpathContextImpl in bridgeBuild to keep the grid cursor
+    // highlight in sync with the bridge head as segments are
+    // extended / retracted / slope-adjusted.
+    std::optional<TileCoordsXY> WindowFootpathGetBridgeHeadTile();
+
     // GameBottomToolbar
     extern uint8_t gToolbarDirtyFlags;
     WindowBase* GameBottomToolbarOpen();
