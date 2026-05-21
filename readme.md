@@ -1,14 +1,12 @@
 # OpenRCT2mini
 
-A fork of [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) v0.5.0 (`e65fb01` on `develop`) targeting low-spec ARM handhelds, for now only the [Miyoo Mini](https://www.miyoominihandheld.com/) and Miyoo Mini Plus running [OnionUI](https://github.com/OnionUI/Onion). The overall goal is to fit a OpenRCT2's vanilla-compatible feature set (with some raised limits and non-memory intensive features) onto 128-256 MB devices running ancient toolchains.
-
-This is a **hard fork**. The game has been aggressively trimmed and backported to older dependencies. We may try to sync to a newer version in the future, but the core game is feature complete at v0.5.0, so eh.
+An experimental fork of [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) v0.5.1 focused on UX design changes (in particular support for controllers) and broader device compatibility. For now the [Miyoo Mini](https://www.miyoominihandheld.com/) and Miyoo Mini Plus running [OnionUI](https://github.com/OnionUI/Onion) are the primary targets. For future versions, Linux and Windows builds will be made available. For Windows we're using MinGW rather than upstream's MSVC, it isn't as well tested but it comes with a perk: Windows 7/8 will continue to be supported for now.
 
 ## Status
 
-OpenRCT2mini is currently playable. We match upstream v0.5.0 minus things that don't make sense on a handheld: multiplayer, plugins/scripting, OpenGL, FLAC, Discord-RPC, Japanese/Chinese/Arabic language options (IPC eats too much memory) are all in the bin.
+OpenRCT2mini is currently playable. We match upstream v0.5.1 minus things that don't make sense on a handheld: multiplayer, plugins/scripting, OpenGL, FLAC, Discord-RPC, Japanese/Chinese/Arabic language options (IPC eats too much memory) are all in the bin.
 
-## Installing on the device
+## Installing on the Miyoo Mini
 
 OpenRCT2mini ships as an OnionUI **port**. It appears in your Game Library under the **Simulation** category.
 
