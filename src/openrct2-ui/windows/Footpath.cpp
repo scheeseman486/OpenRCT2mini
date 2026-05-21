@@ -432,9 +432,21 @@ namespace OpenRCT2::Ui::Windows
                         // if the mouse path previously ToolCancel'd
                         // (e.g. drag-area abort, bridge anchor pick)
                         // toolActive is false and just setting the
-                        // latch can't route. ToolSet is idempotent
-                        // when already armed at the same widget.
-                        ToolSet(*this, WIDX_CONSTRUCT_ON_LAND, Tool::pathDown);
+                        // latch can't route.
+                        //
+                        // OPENRCT2MINI bug 2026-05-22 #2: ToolSet has
+                        // TOGGLE semantics — calling it with the
+                        // exact same widget that's already armed
+                        // ToolCancel's instead of re-arming
+                        // (Window.cpp:773-778). That un-arms the
+                        // tool, onUpdate then sees mode==onLand with
+                        // no active tool and close()'s the window
+                        // (line 314-315). Guard the ToolSet with an
+                        // explicit "already armed at this widget"
+                        // check so it only runs when re-arming is
+                        // actually needed.
+                        if (!isToolActive(WindowClass::footpath, WIDX_CONSTRUCT_ON_LAND))
+                            ToolSet(*this, WIDX_CONSTRUCT_ON_LAND, Tool::pathDown);
                         GetInputManager().setToolFocusSelected(
                             true, InputManager::SelectorTransitionSource::virtualUserInput);
                     }
@@ -454,8 +466,10 @@ namespace OpenRCT2::Ui::Windows
                     if (GetInputManager().getSelectorMode() == InputManager::SelectorMode::active)
                     {
                         // OPENRCT2MINI bug 2026-05-22 — see ON_LAND
-                        // case. Same toolActive-gate fix.
-                        ToolSet(*this, WIDX_CONSTRUCT_DRAG_AREA, Tool::pathDown);
+                        // case for both the rationale AND the
+                        // ToolSet-is-a-toggle guard.
+                        if (!isToolActive(WindowClass::footpath, WIDX_CONSTRUCT_DRAG_AREA))
+                            ToolSet(*this, WIDX_CONSTRUCT_DRAG_AREA, Tool::pathDown);
                         GetInputManager().setToolFocusSelected(
                             true, InputManager::SelectorTransitionSource::virtualUserInput);
                     }
@@ -509,7 +523,12 @@ namespace OpenRCT2::Ui::Windows
                         // explicitly in this engagement block or
                         // resolveActiveContext refuses to route
                         // to toolFootpath.
-                        ToolSet(*this, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL, Tool::crosshair);
+                        //
+                        // OPENRCT2MINI bug 2026-05-22 #2: ToolSet
+                        // toggles \xe2\x80\x94 guard it. See ON_LAND case
+                        // comment for the full diagnostics.
+                        if (!isToolActive(WindowClass::footpath, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL))
+                            ToolSet(*this, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL, Tool::crosshair);
                         GetInputManager().setToolFocusSelected(
                             true, InputManager::SelectorTransitionSource::virtualUserInput);
                     }
@@ -2278,17 +2297,27 @@ namespace OpenRCT2::Ui::Windows
         // chooses the right widget+cursor from the live mode value.
         void ReArmForCurrentModePublic()
         {
+            // OPENRCT2MINI bug 2026-05-22 #2: ToolSet has TOGGLE
+            // semantics — calling it on the already-armed widget
+            // ToolCancels instead. Guard each branch with an
+            // isToolActive check so this is a true no-op when the
+            // tool was already armed correctly. Otherwise (mouse
+            // path ToolCancel'd, tool armed elsewhere) ToolSet
+            // arms it at the right widget.
             switch (_footpathConstructionMode)
             {
                 case PathConstructionMode::onLand:
-                    ToolSet(*this, WIDX_CONSTRUCT_ON_LAND, Tool::pathDown);
+                    if (!isToolActive(WindowClass::footpath, WIDX_CONSTRUCT_ON_LAND))
+                        ToolSet(*this, WIDX_CONSTRUCT_ON_LAND, Tool::pathDown);
                     break;
                 case PathConstructionMode::dragArea:
-                    ToolSet(*this, WIDX_CONSTRUCT_DRAG_AREA, Tool::pathDown);
+                    if (!isToolActive(WindowClass::footpath, WIDX_CONSTRUCT_DRAG_AREA))
+                        ToolSet(*this, WIDX_CONSTRUCT_DRAG_AREA, Tool::pathDown);
                     break;
                 case PathConstructionMode::bridgeOrTunnelPick:
                 case PathConstructionMode::bridgeOrTunnel:
-                    ToolSet(*this, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL, Tool::crosshair);
+                    if (!isToolActive(WindowClass::footpath, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL))
+                        ToolSet(*this, WIDX_CONSTRUCT_BRIDGE_OR_TUNNEL, Tool::crosshair);
                     break;
                 default:
                     return;
