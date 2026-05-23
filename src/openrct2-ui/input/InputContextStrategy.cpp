@@ -203,6 +203,36 @@ namespace OpenRCT2::Ui
         return tile;
     }
 
+    // OPENRCT2MINI grid-cursor-plan §18 (2026-05-23): is a tile
+    // currently visible inside the main viewport? Used by onActivate's
+    // resume path to decide whether to honour the preserved cursor
+    // position (visible → resume) or re-seed at the viewport centre
+    // (off-screen → user has scrolled away, treat as fresh engage).
+    //
+    // Projection logic mirrors ScrollMainWindowIfCursorNearEdge above
+    // — tile centre + terrain Z → Translate3DTo2DWithZ → check
+    // viewport bounds. The difference: ScrollMainWindowIfCursorNearEdge
+    // uses a margin (treat "near edge" as off-screen so the camera
+    // chases the cursor); we want pure visibility (no margin) because
+    // we only want to re-seed when the tile is GENUINELY off-screen,
+    // not just near the edge. Returns false on no viewport.
+    static bool IsTileVisibleInViewport(TileCoordsXY pos)
+    {
+        auto* main = WindowGetMain();
+        if (main == nullptr || main->viewport == nullptr)
+            return false;
+        const auto& vp = *main->viewport;
+        const auto worldXY = pos.ToCoordsXY();
+        const int32_t z = TileElementHeight(worldXY);
+        const auto centreCoords = worldXY + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
+        const auto screen = Translate3DTo2DWithZ(vp.rotation, CoordsXYZ{ centreCoords, z });
+        const int32_t left = vp.viewPos.x;
+        const int32_t right = vp.viewPos.x + vp.ViewWidth();
+        const int32_t top = vp.viewPos.y;
+        const int32_t bottom = vp.viewPos.y + vp.ViewHeight();
+        return screen.x >= left && screen.x < right && screen.y >= top && screen.y < bottom;
+    }
+
     // OPENRCT2MINI grid-cursor-plan §14.6 (2026-05-20): tile under
     // the OS / virtual cursor. ContextGetCursorPosition returns the
     // virtual cursor position (see grid-cursor-plan Cut 48 — the
@@ -448,6 +478,27 @@ namespace OpenRCT2::Ui
                     seed = CursorTile();
                 if (!seed)
                     seed = ViewportCentreTile();
+            }
+            // OPENRCT2MINI grid-cursor-plan §18 (2026-05-23): even on
+            // the resume path, if the preserved cursor position has
+            // scrolled off-screen (user dragged the camera far away
+            // between engage cycles), fall back to a viewport-centre
+            // re-seed so the cursor reappears where the player is
+            // actually looking. Without this, the highlight lands
+            // out of view and the user has to D-pad it back into
+            // frame.
+            if (resuming && seed.has_value() == false)
+            {
+                if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                {
+                    if (!IsTileVisibleInViewport(grid->getPosition()))
+                        seed = ViewportCentreTile();
+                }
+                else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
+                {
+                    if (!IsTileVisibleInViewport(edge->getPosition()))
+                        seed = ViewportCentreTile();
+                }
             }
             if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
             {
