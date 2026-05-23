@@ -17,6 +17,7 @@
 #include "WindowClasses.h"
 #include "ZoomLevel.h"
 
+#include <cstddef>
 #include <functional>
 #include <list>
 #include <memory>
@@ -331,6 +332,24 @@ namespace OpenRCT2
     // interactive window per the §2.2 filter (skips dead,
     // stickToBack, mainWindow/tooltip/mapTooltip classes).
     bool isActiveWindowForEmphasis(const WindowBase& w);
+
+    // OPENRCT2MINI multi-tool grid-cursor priority (2026-05-24): walk
+    // gWindowList in reverse z-order (top to bottom) and return the
+    // first open window whose class appears in `candidates[0..count)`.
+    // Returns WindowClass::null if none of the listed classes have a
+    // live (non-dead) window. Skips dead and stickToBack windows like
+    // GetActiveWindowForEmphasis does, but does NOT skip noTitleBar
+    // — every tool window we care about has a title bar anyway and
+    // dropping the filter keeps the helper general-purpose.
+    //
+    // Used by InputManager::resolveActiveContext to pick between
+    // multiple armed tool windows (e.g. Footpath + Land both open)
+    // based on which one the user has brought to the top, matching
+    // the same z-order priority that drives the drop-shadow / titlebar
+    // dim. (Raw pointer + size rather than std::span because the
+    // codebase targets C++17, where span isn't in the standard
+    // library yet.)
+    WindowClass GetTopmostWindowClassInSet(const WindowClass* candidates, size_t count);
 
     // OPENRCT2MINI grid-cursor / AWE follow-up (2026-05-24): viewport
     // pixel-shift cleanup. Called by Viewport.cpp from ViewportShiftPixels

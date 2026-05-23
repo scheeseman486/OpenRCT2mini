@@ -1014,6 +1014,43 @@ static constexpr float kWindowScrollLocations[][2] = {
         return GetActiveWindowForEmphasis() == &w;
     }
 
+    // OPENRCT2MINI multi-tool grid-cursor priority (2026-05-24):
+    // walk gWindowList in reverse z-order (top to bottom) and return
+    // the first open window whose class is in `candidates`. Used by
+    // InputManager::resolveActiveContext to disambiguate between
+    // multiple armed tool windows — the user picks which tool's
+    // grid-cursor inputs are live by bringing its window to the top
+    // (the same z-order signal that drives drop-shadow / titlebar
+    // dim via GetActiveWindowForEmphasis).
+    //
+    // Skips dead and stickToBack windows (a stickToBack window is
+    // conceptually "behind everything" so even if it appears late
+    // in gWindowList it shouldn't trump a normal window). Does NOT
+    // skip noTitleBar — caller decides which classes belong in
+    // `candidates` and tool windows all have title bars anyway.
+    WindowClass GetTopmostWindowClassInSet(const WindowClass* candidates, size_t count)
+    {
+        if (candidates == nullptr || count == 0)
+            return WindowClass::null;
+        for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
+        {
+            auto* w = it->get();
+            if (w == nullptr)
+                continue;
+            if (w->flags.has(WindowFlag::dead))
+                continue;
+            if (w->flags.has(WindowFlag::stickToBack))
+                continue;
+            const auto cls = w->classification;
+            for (size_t i = 0; i < count; ++i)
+            {
+                if (cls == candidates[i])
+                    return cls;
+            }
+        }
+        return WindowClass::null;
+    }
+
     // OPENRCT2MINI grid-cursor / AWE follow-up (2026-05-24): viewport
     // pixel-shift cleanup. Called by Viewport.cpp's ViewportShiftPixels
     // after the framebuffer has been scrolled via DrawingEngineCopyRect.

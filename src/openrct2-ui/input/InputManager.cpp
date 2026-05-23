@@ -3566,20 +3566,53 @@ InputContext InputManager::resolveActiveContext() const
     // (and TileInspector is debug-only).
     if (_toolFocusSelected && windowMgr != nullptr && gInputFlags.has(InputFlag::toolActive))
     {
-        if (windowMgr->FindByClass(WindowClass::footpath) != nullptr)
-            return InputContext::toolFootpath;
-        if (windowMgr->FindByClass(WindowClass::land) != nullptr)
-            return InputContext::toolTerrain;
-        if (windowMgr->FindByClass(WindowClass::water) != nullptr)
-            return InputContext::toolWater;
-        if (windowMgr->FindByClass(WindowClass::scenery) != nullptr)
-            return InputContext::toolScenery;
-        if (windowMgr->FindByClass(WindowClass::rideConstruction) != nullptr)
-            return InputContext::toolRideConstruction;
-        if (windowMgr->FindByClass(WindowClass::landRights) != nullptr)
-            return InputContext::toolLandRights;
-        if (windowMgr->FindByClass(WindowClass::tileInspector) != nullptr)
-            return InputContext::toolTileInspector;
+        // OPENRCT2MINI multi-tool grid-cursor priority (2026-05-24):
+        // when multiple armed tool windows are open at once (e.g.
+        // Footpath + Land), pick the one whose window is currently
+        // topmost via the same z-order predicate that drives
+        // drop-shadow / titlebar dim. The user switches between
+        // tools by bringing the desired window to the top —
+        // matches the existing "active window" UX cue. The legacy
+        // first-match-by-enum-order behaviour kicks in only when
+        // none of the tool windows is on top (e.g. a non-tool
+        // window sits above both), preserving existing behaviour
+        // for the common single-tool case.
+        //
+        // Note: only fires for the gamepad/grid-cursor path —
+        // virtual mouse and real mouse input route through
+        // ViewportInteraction / ProcessWorldCursor which target
+        // whatever the screen-space cursor is over, so this
+        // routing change has no effect on those paths.
+        static constexpr WindowClass kToolClasses[] = {
+            WindowClass::footpath,
+            WindowClass::land,
+            WindowClass::water,
+            WindowClass::scenery,
+            WindowClass::rideConstruction,
+            WindowClass::landRights,
+            WindowClass::tileInspector,
+        };
+        const auto topmost = OpenRCT2::GetTopmostWindowClassInSet(
+            kToolClasses, std::size(kToolClasses));
+        switch (topmost)
+        {
+            case WindowClass::footpath:
+                return InputContext::toolFootpath;
+            case WindowClass::land:
+                return InputContext::toolTerrain;
+            case WindowClass::water:
+                return InputContext::toolWater;
+            case WindowClass::scenery:
+                return InputContext::toolScenery;
+            case WindowClass::rideConstruction:
+                return InputContext::toolRideConstruction;
+            case WindowClass::landRights:
+                return InputContext::toolLandRights;
+            case WindowClass::tileInspector:
+                return InputContext::toolTileInspector;
+            default:
+                break;
+        }
     }
 
     // OPENRCT2MINI focus-mode-plan / Phase F.3: widget-focus is
