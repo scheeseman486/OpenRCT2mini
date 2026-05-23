@@ -515,10 +515,6 @@ namespace OpenRCT2::Ui::Windows
     // TextInputWindow so the OSK can initialise its editor with what
     // the user is editing. Returns empty string if `w` isn't one.
     std::string TextInputReadBuffer(WindowBase* w);
-    // Forward an SDL scancode to the OSK while it's active. Returns true
-    // if the OSK consumed the event (caller should NOT propagate).
-    // Used by UiContext::InterceptVirtualCursorKey.
-    bool OskHandleKey(int32_t sdlScancode, bool down);
     // OPENRCT2MINI osk-overhaul §1+§2: dispatched from OskContextImpl
     // (input/InputManager.cpp). cursor.click presses the focus-mode-
     // selected key; cursor.cancel becomes Backspace.

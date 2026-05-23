@@ -205,28 +205,6 @@ private:
     // ignored on the transition frame.
     bool _vSelectorActivePrev = false;
 
-    // OPENRCT2MINI: per-frame edge-detection state for routing host
-    // gamepad cursor.* shortcuts to the OSK while it's active. See the
-    // OskIsActive() block in ProcessVirtualGamepadCursor for context —
-    // host SDL_CONTROLLERBUTTONDOWN events bypass the keyboard
-    // intercept that the OSK relies on, so we synthesise OskHandleKey
-    // calls on rising / falling edges of the held-state poll.
-    bool _vOskPrevUp = false;
-    bool _vOskPrevDown = false;
-    bool _vOskPrevLeft = false;
-    bool _vOskPrevRight = false;
-    bool _vOskPrevClick = false;
-    bool _vOskPrevCancel = false;
-
-    // OPENRCT2MINI OSK: when a KEYDOWN handed to OskHandleKey closes the
-    // OSK (e.g. ESCAPE → Cancel, RETURN → Commit), we still need to
-    // swallow the matching KEYUP. Otherwise the now-active topmost
-    // window (LoadSave, etc.) sees the KEYUP and reacts (LoadSave's
-    // ESCAPE handler closes the dialog). Set on KEYDOWN that just
-    // closed the OSK; cleared when its KEYUP arrives or after a
-    // single non-matching event passes.
-    SDL_Scancode _oskClosingSwallowKey = SDL_SCANCODE_UNKNOWN;
-
     // Returns true if the scancode is one of our virtual-cursor keys; in that
     // case state is updated and the caller should NOT propagate the event to
     // the rest of the keyboard pipeline.
@@ -315,19 +293,6 @@ private:
 
     bool InterceptVirtualCursorKey(SDL_Scancode sc, bool down)
     {
-        // OPENRCT2MINI osk-overhaul §1: OSK no longer intercepts raw
-        // scancodes. Navigation / activation / backspace now flow
-        // through bindable shortcuts (kFocus*, kCursorClick, kCursor-
-        // Cancel) into OskContextImpl in InputManager.cpp. Commit /
-        // dismiss still flow through the OSK's modal-hooks. Net effect
-        // for device users is identical — the default keyboard bindings
-        // for those shortcuts cover the same scancodes the OSK was
-        // listening to directly. Host users can rebind.
-        //
-        // The `_oskClosingSwallowKey` pending-KEYUP mechanism is also
-        // gone — without the intercept consuming the KEYDOWN there's
-        // no asymmetric state to clean up on KEYUP.
-        (void)sc;
         (void)down;
         switch (sc)
         {
@@ -1546,106 +1511,21 @@ private:
     // StoreMouseInput rather than synthesising SDL events — the synthetic
     // events would only be processed on the next frame, and there's no
     // benefit to going through the SDL queue when we own all the targets.
-    // OPENRCT2MINI gamepad-plan 1.6b step 2: OSK-mode cursor handler.
-    // Carved out of ProcessVirtualGamepadCursor. While OSK is up the
-    // virtual cursor is suspended; the D-pad / face buttons drive OSK
-    // selection instead. Routes the cursor.* shortcut held-state to
-    // OskHandleKey via per-shortcut edge detection, filtering out
-    // keyboard-kind bindings (those are owned by the SDL_KEYDOWN
-    // intercept at the top of InterceptVirtualCursorKey — polling
-    // keyboard sources here too would advance OSK selection by 2 per
-    // press). Mapping is by *purpose*, not physical key — cursor.up
-    // → SDL_SCANCODE_UP regardless of which device fired it.
-    void ProcessOskCursor()
-    {
-        // OPENRCT2MINI gamepad-plan 1.6 + hold-binding refactor:
-        // legacy _vKb* arrow / Z / X latches deleted; the shade-
-        // shortcut tap-vs-hold state used to live in _vShade* here
-        // and got reset on every OSK-cursor frame. Both are gone —
-        // shade-window/all are now tracked inside ShortcutManager's
-        // _holdPending, which is unaffected by OSK transitions and
-        // releases naturally on key release.
-
-        struct OskRoute
-        {
-            std::string_view shortcutId;
-            int32_t scancode;
-            bool* prev;
-        };
-        const OskRoute routes[] = {
-            { ShortcutId::kCursorUp,     SDL_SCANCODE_UP,    &_vOskPrevUp },
-            { ShortcutId::kCursorDown,   SDL_SCANCODE_DOWN,  &_vOskPrevDown },
-            { ShortcutId::kCursorLeft,   SDL_SCANCODE_LEFT,  &_vOskPrevLeft },
-            { ShortcutId::kCursorRight,  SDL_SCANCODE_RIGHT, &_vOskPrevRight },
-            { ShortcutId::kCursorClick,  SDL_SCANCODE_Z,     &_vOskPrevClick },
-            { ShortcutId::kCursorCancel, SDL_SCANCODE_X,     &_vOskPrevCancel },
-        };
-        for (const auto& r : routes)
-        {
-            const auto* sc = _shortcutManager.getShortcut(r.shortcutId);
-            bool now = false;
-            if (sc != nullptr)
-            {
-                // OPENRCT2MINI gamepad-plan 1.10.3: skip mouse-source
-                // bindings for kCursorClick. Without this, real LMB
-                // (default mouse-source kCursorClick binding from #369)
-                // routes through the SDL_SCANCODE_Z synthesis below
-                // and selects the *focused* OSK key (D-pad position)
-                // instead of the key under the cursor — the same
-                // physical click would also reach the OSK widget's
-                // normal click handler via StoreMouseInput, but the
-                // Z synthesis runs first and consumes the action.
-                // Filtering mouse sources out of the click route lets
-                // mouse-clicks fall through to StoreMouseInput so the
-                // OSK widget picks them up at the cursor position;
-                // gamepad / keyboard sources still synthesise Z to
-                // commit the focused key, which is the documented
-                // gamepad nav behaviour.
-                //
-                // Keyboard sources are skipped for ALL routes (not just
-                // click) because the SDL_KEYDOWN intercept already
-                // routes UP/DOWN/LEFT/RIGHT/Z/X to OskHandleKey
-                // directly — running them through here too would
-                // double-fire.
-                const bool skipMouseForClick = (r.shortcutId == ShortcutId::kCursorClick);
-                for (const auto& input : sc->current)
-                {
-                    if (input.kind == InputDeviceKind::keyboard)
-                        continue;
-                    if (skipMouseForClick && input.kind == InputDeviceKind::mouse)
-                        continue;
-                    if (_inputManager.getState(input))
-                    {
-                        now = true;
-                        break;
-                    }
-                }
-            }
-            if (now != *r.prev)
-            {
-                Windows::OskHandleKey(r.scancode, now);
-                *r.prev = now;
-            }
-        }
-    }
-
     // OPENRCT2MINI gamepad-plan 1.6b step 3: world-mode cursor handler.
-    // Carved out of ProcessVirtualGamepadCursor's tail. Owns the shade
-    // tap-vs-hold detector, the cursor.* held-state polls (motion /
-    // click / cancel / fast-modifier), and the per-frame velocity
-    // integrator that drives _vcursorX/Y and emits synthetic mouse
-    // press/release events. Runs whenever getActiveContext() ==
-    // world (the default).
+    // Carved out of ProcessVirtualGamepadCursor's tail. Owns the
+    // cursor.* held-state polls (motion / click / cancel / fast-
+    // modifier) and the per-frame velocity integrator that drives
+    // _vcursorX/Y and emits synthetic mouse press/release events.
+    // Runs whenever getActiveContext() == world (and also for
+    // InputContext::osk and InputContext::widgetFocus per the
+    // dispatcher fall-through in ProcessVirtualGamepadCursor).
     //
-    // Ordering note: this method reads _vOskPrev* indirectly via
-    // ProcessOskCursor's edge tracking (none of these reads happen in
-    // world mode), so the dispatcher's _vOskPrev* clear above is
-    // belt-and-braces — keeps stale prev state from a prior OSK
-    // session from synthesising a release the next time the OSK
-    // opens. The shade-shortcut state (_vShade*) is reset each frame
-    // by ProcessOskCursor while OSK is up, so on first world-mode
-    // frame after OSK closes the rising/falling edge logic here
-    // starts clean.
+    // Shade tap-vs-hold detection is owned by ShortcutManager's
+    // HoldPendingState mechanism — kInterfaceShadeWindowUnderCursor
+    // (default "C" / "PAD Y") is a tap binding and kInterfaceToggle-
+    // ShadeAllWindows has additional "HOLD C" / "HOLD PAD Y"
+    // bindings — so there's no per-frame shade state to maintain
+    // here.
     void ProcessWorldCursor()
     {
         // OPENRCT2MINI hold-binding refactor: the per-frame shade-window
@@ -2462,16 +2342,13 @@ private:
         {
             // OPENRCT2MINI osk-overhaul bug-fix §D: route the OSK
             // context through the same ProcessWorldCursor as every
-            // other modal. ProcessOskCursor (now obsolete — it only
-            // ever synthesised OskHandleKey scancodes, which became a
-            // no-op once OSK navigation moved to focus-mode dispatch)
-            // skipped the cursor.click → StoreMouseInput(leftPress)
-            // synthesis that ProcessWorldCursor owns. Without that
-            // synthesis no widget gets clicked: not OSK keys, not the
-            // OK / Cancel / close box on the parent TextInputWindow,
-            // not the textbox below — neither for the gamepad path
-            // (cursor.click ← PAD A) nor for the real-mouse path
-            // (cursor.click ← MOUSE LEFT). Falling through to the
+            // other modal. The dedicated ProcessOskCursor that used
+            // to live here skipped the cursor.click →
+            // StoreMouseInput(leftPress) synthesis that
+            // ProcessWorldCursor owns, so no widget got clicked
+            // while the OSK was up — not the OSK keys themselves,
+            // not the parent TextInputWindow's OK/Cancel/close box,
+            // not the underlying textbox. Falling through to the
             // shared handler restores normal click behaviour for
             // every window underneath / alongside the OSK.
             case InputContext::osk:
@@ -2527,13 +2404,9 @@ private:
             case InputContext::loadSave:
             case InputContext::console:
             case InputContext::widgetTextBox:
-                _vOskPrevUp = _vOskPrevDown = _vOskPrevLeft = _vOskPrevRight = false;
-                _vOskPrevClick = _vOskPrevCancel = false;
                 ProcessWorldCursor();
                 return;
             default:
-                _vOskPrevUp = _vOskPrevDown = _vOskPrevLeft = _vOskPrevRight = false;
-                _vOskPrevClick = _vOskPrevCancel = false;
                 return;
         }
     }

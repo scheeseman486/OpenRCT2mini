@@ -452,18 +452,6 @@ namespace OpenRCT2::Ui::Windows
             }
 
             // Returns true if event consumed.
-            bool handleKey(int32_t, bool)
-            {
-                // OPENRCT2MINI osk-overhaul §1: SDL_KEYDOWN forwarding
-                // from UiContext::InterceptVirtualCursorKey is dead. All
-                // navigation is bindable shortcuts. The function is
-                // retained so the existing OskHandleKey export wires up
-                // to a no-op — we'll delete the export in a follow-up
-                // along with the InterceptVirtualCursorKey arm that
-                // calls it.
-                return false;
-            }
-
             // OPENRCT2MINI: snapshot accessors so the parent
             // TextInputWindow / inline textbox widgets can render the
             // OSK's edit buffer in real time.
@@ -949,18 +937,6 @@ namespace OpenRCT2::Ui::Windows
     {
         auto* windowMgr = GetWindowManager();
         return windowMgr->FindByClass(WindowClass::osk) != nullptr;
-    }
-
-    bool OskHandleKey(int32_t sdlScancode, bool down)
-    {
-        // OPENRCT2MINI osk-overhaul §1: SDL_KEYDOWN forwarding from
-        // InterceptVirtualCursorKey is dead. Kept as a no-op for ABI
-        // compatibility with the existing UiContext call site, which
-        // will be deleted in the follow-up that strips the OSK arm
-        // from InterceptVirtualCursorKey.
-        (void)sdlScancode;
-        (void)down;
-        return false;
     }
 
     // OPENRCT2MINI osk-overhaul §1: routed from OskContextImpl
