@@ -332,6 +332,16 @@ namespace OpenRCT2
     // stickToBack, mainWindow/tooltip/mapTooltip classes).
     bool isActiveWindowForEmphasis(const WindowBase& w);
 
+    // OPENRCT2MINI grid-cursor / AWE follow-up (2026-05-24): viewport
+    // pixel-shift cleanup. Called by Viewport.cpp from ViewportShiftPixels
+    // after the framebuffer has been scrolled. The shift moves any
+    // overlay pixels rendered on top of the viewport (active-window drop
+    // shadow, playfield screen-edge highlight) along with the viewport,
+    // leaving "ghost" strips at the shifted-from position. This invalidates
+    // the regions where those overlays live so the next paint repaints
+    // them at the correct anchor location. Cheap when no overlays apply.
+    void WindowInvalidatePostViewportShift();
+
     bool isToolActive(WindowClass cls);
     // OPENRCT2MINI: cut 36. Renamed from `isToolActive(cls, WindowNumber)` to
     // disambiguate from the (cls, WidgetIndex) overload — GCC 8.3 finds the

@@ -1979,10 +1979,36 @@ void InputManager::setFocus(WindowClass cls, OpenRCT2::WidgetIndex widget)
     // be a scroll widget at all. Callers that want to keep the item
     // index (e.g. cursor → focus mode transition per C7) write to it
     // immediately after via setFocusScrollItem.
-    if (_focusedWindowClass != cls || _focusedWidget != widget)
+    const bool focusChanged = (_focusedWindowClass != cls || _focusedWidget != widget);
+    if (focusChanged)
         _focusedScrollItem = -1;
+    const auto prevCls = _focusedWindowClass;
     _focusedWindowClass = cls;
     _focusedWidget = widget;
+
+    // OPENRCT2MINI focus-ring redraw (2026-05-24): the yellow focus
+    // ring is overlaid by WindowDraw → drawFocusOutlineIfActive, and
+    // that only fires on windows whose dirty region intersects the
+    // current paint pass. On a static screen (e.g. title menu where
+    // the menu window's widgets never change), nothing dirties either
+    // the old or new focused window when focus moves — so the old
+    // ring trails and the new one doesn't draw in until some
+    // unrelated event (attract-mode viewport pan, another widget
+    // animation) happens to dirty those regions.
+    //
+    // Invalidate both windows on focus change. Cheap when focus
+    // didn't actually move (early bail above keeps the no-op path).
+    if (focusChanged)
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr != nullptr)
+        {
+            if (prevCls != WindowClass::null && prevCls != cls)
+                windowMgr->InvalidateByClass(prevCls);
+            if (cls != WindowClass::null)
+                windowMgr->InvalidateByClass(cls);
+        }
+    }
 }
 
 // OPENRCT2MINI list-focus-plan flicker fix: see InputManager.h for the
@@ -2195,9 +2221,21 @@ bool InputManager::restoreFocus()
 
 void InputManager::clearFocus()
 {
+    // OPENRCT2MINI focus-ring redraw (2026-05-24): invalidate the
+    // about-to-be-cleared window so its lingering yellow ring gets
+    // wiped on the next paint. Without this the old ring stays
+    // visible until the window happens to be dirtied for other
+    // reasons.
+    const auto prevCls = _focusedWindowClass;
     _focusedWindowClass = WindowClass::null;
     _focusedWidget = OpenRCT2::kWidgetIndexNull;
     _focusedScrollItem = -1;
+    if (prevCls != WindowClass::null)
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr != nullptr)
+            windowMgr->InvalidateByClass(prevCls);
+    }
     // OPENRCT2MINI focus-mode-plan §F.16: clearing focus mode
     // ends the navigation session — drop the history stack so a
     // future re-activation starts clean. Without this, a stale

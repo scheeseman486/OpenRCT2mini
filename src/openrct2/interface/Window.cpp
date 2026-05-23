@@ -1014,6 +1014,57 @@ static constexpr float kWindowScrollLocations[][2] = {
         return GetActiveWindowForEmphasis() == &w;
     }
 
+    // OPENRCT2MINI grid-cursor / AWE follow-up (2026-05-24): viewport
+    // pixel-shift cleanup. Called by Viewport.cpp's ViewportShiftPixels
+    // after the framebuffer has been scrolled via DrawingEngineCopyRect.
+    // The shift moves any overlay pixels rendered on top of the
+    // viewport (active-window drop shadow, playfield screen-edge
+    // highlight) along with the viewport pixels, leaving "ghost"
+    // strips at the shifted-from position because the dirty-strip
+    // repaint at the leading edge only repaints the newly-exposed
+    // viewport pixels — not the overlay regions further inside the
+    // shifted area.
+    //
+    // The existing per-tick invalidation in WindowUpdateAll runs at
+    // game-tick rate (40 fps) and only covers the playfield outline
+    // when grid cursor is active; window drop shadow always trails
+    // because nothing dirties its strips during a viewport scroll
+    // when playfield isn't focused. This per-shift hook closes both
+    // gaps by dirtying the affected regions directly.
+    void WindowInvalidatePostViewportShift()
+    {
+        // Active window's drop shadow strips: WindowBase::invalidate
+        // already extends by +1/+2 to cover them.
+        if (auto* active = GetActiveWindowForEmphasis(); active != nullptr)
+            active->invalidate();
+
+        // Playfield screen-edge outline: dirty the four 1-px-wide
+        // perimeter strips so they're repainted next frame. The
+        // outline lives at the screen edges (drawn by
+        // fillInset(BorderStyle::outset)). Using GfxSetDirtyBlocks
+        // on screen-edge strips is much cheaper than a full
+        // GfxInvalidateScreen and matches the precision needed
+        // here — only the outline pixels can possibly be wrong
+        // after a viewport shift.
+        if (IsPlayfieldFocused())
+        {
+            auto& uiContext = GetContext()->GetUiContext();
+            const int32_t sw = uiContext.GetWidth();
+            const int32_t sh = uiContext.GetHeight();
+            if (sw > 0 && sh > 0)
+            {
+                // Outset border draws 1-px-thick lines at the screen
+                // edges. Dirty a 2-px-thick band on each edge to be
+                // safe across scale factors.
+                constexpr int32_t kEdge = 2;
+                GfxSetDirtyBlocks({ { 0, 0 }, { sw, kEdge } });               // top
+                GfxSetDirtyBlocks({ { 0, sh - kEdge }, { sw, sh } });         // bottom
+                GfxSetDirtyBlocks({ { 0, 0 }, { kEdge, sh } });               // left
+                GfxSetDirtyBlocks({ { sw - kEdge, 0 }, { sw, sh } });         // right
+            }
+        }
+    }
+
     // OPENRCT2MINI plan §2.1: paint an L-shaped paletteDarken2 shadow
     // just outside the active window's bottom-right edge. 1 px right
     // strip (starts +2 below window top), 2 px bottom strip (starts

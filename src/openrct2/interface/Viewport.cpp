@@ -444,6 +444,16 @@ namespace OpenRCT2
         }
 
         ViewportRedrawAfterShift(rt, window, window, shift, drawRect);
+
+        // OPENRCT2MINI grid-cursor / AWE follow-up (2026-05-24):
+        // re-dirty overlay regions that the framebuffer shift just
+        // smeared. The active-window drop shadow and the playfield
+        // screen-edge outline are drawn on top of the viewport and
+        // get carried along with the scroll; the leading-edge
+        // dirty strips above don't cover them. See
+        // WindowInvalidatePostViewportShift comment for the
+        // precise scope and rationale.
+        WindowInvalidatePostViewportShift();
     }
 
     static void ViewportMove(const ScreenCoordsXY& coords, WindowBase* w, Viewport* viewport)
