@@ -41,20 +41,16 @@ namespace OpenRCT2::Ui
     // Shift-modifier query for the inline ToolContext::onShortcut
     // dispatch in InputContextStrategy.h. Lives here so the header
     // doesn't have to pull in UiContext.h to reach GetInputManager().
+    //
+    // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): semantically
+    // this is the "vertical placement / Z-adjust" modifier the user
+    // holds to enter Z-adjust mode. kInterfaceShiftModifier is the
+    // shortcut that drives it. NOT kInterfaceConstructionZLock —
+    // that's the cursor-Z-lock-while-moving modifier, a different
+    // feature.
     bool isShiftModifierHeldInTool()
     {
         return GetInputManager().isModifierKeyPressed(ModifierKey::shift);
-    }
-
-    // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): zLock query —
-    // kInterfaceConstructionZLock is the bound shortcut for the
-    // hold-Z gesture. handleModifiers maps it to ModifierKey::ctrl
-    // (InputManager.cpp:3796), so reading ctrl here matches both the
-    // real keyboard Ctrl key AND any gamepad button the user has
-    // bound (e.g. PAD Y).
-    bool isZLockHeldInTool()
-    {
-        return GetInputManager().isModifierKeyPressed(ModifierKey::ctrl);
     }
 
     // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): dismiss an

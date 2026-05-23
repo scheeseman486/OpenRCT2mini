@@ -38,16 +38,13 @@ namespace OpenRCT2::Ui
     // this header (the inline definition lives down at line ~620
     // and needs the modifier state). Defined out-of-line in
     // InputContextStrategy.cpp where GetInputManager() is in scope.
+    //
+    // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): this is the
+    // "vertical placement / Z-adjust" modifier — kInterfaceShift-
+    // Modifier. NOT to be confused with kInterfaceConstructionZLock
+    // (the cursor-Z-lock-while-moving modifier), which is a
+    // different feature.
     bool isShiftModifierHeldInTool();
-
-    // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): Z-lock modifier
-    // query. The hold-to-adjust-Z gesture replaces the prior
-    // Shift+D-pad chord (§14.2 amendment): while
-    // kInterfaceConstructionZLock is held, D-pad up/down adjust Z
-    // and D-pad left/right are suppressed. Release semantics
-    // (snapshot-then-reset-if-unchanged) live in FootpathContext-
-    // Impl::processFrame.
-    bool isZLockHeldInTool();
 
     // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): close the
     // error-popup window if one is showing. Returns true if a popup
@@ -759,16 +756,21 @@ namespace OpenRCT2::Ui
             // mode + rotation translation.
             //
             // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): hold-Z
-            // gesture supersedes the prior Shift+D-pad chord (§14.2).
-            // Now: while kInterfaceConstructionZLock is held, D-pad
-            // up/down adjust Z and D-pad left/right are suppressed.
-            // Press / release edges + snapshot-reset semantics live
-            // in FootpathContextImpl::processFrame.
+            // gesture extends the original §14.2 Shift+D-pad chord
+            // with snapshot-reset release semantics. While
+            // kInterfaceShiftModifier (the "vertical placement"
+            // modifier — distinct from kInterfaceConstructionZLock
+            // which is the "lock cursor at current Z" modifier) is
+            // held: D-pad up/down adjust Z, and D-pad left/right are
+            // suppressed (so the user can't accidentally walk the
+            // cursor off-anchor mid-adjust). Press / release edges +
+            // snapshot-reset semantics live in FootpathContextImpl::
+            // processFrame.
             // Subclasses that already implement onRaise/onLower
             // (FootpathContextImpl) pick this up for free; subclasses
             // that haven't (Scenery, LandRights, …) Consume harmlessly
             // until their Z verbs are wired.
-            if (isZLockHeldInTool())
+            if (isShiftModifierHeldInTool())
             {
                 if (id == ShortcutId::kFocusUp)
                     return onRaise();

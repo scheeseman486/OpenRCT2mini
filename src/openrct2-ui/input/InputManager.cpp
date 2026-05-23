@@ -1608,15 +1608,16 @@ namespace
         {
             ToolContext::processFrame(nowMs);
 
-            // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): zLock
-            // hold-Z gesture press/release edge tracking.
+            // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): hold-Z
+            // gesture press/release edge tracking.
             //
-            // Behaviour the user wants (paraphrased): hold PAD Y
-            // (kInterfaceConstructionZLock) and tap D-pad up/down to
+            // Behaviour the user wants (paraphrased): hold the
+            // vertical-placement modifier (kInterfaceShiftModifier —
+            // PAD Y or Shift on keyboard) and tap D-pad up/down to
             // raise/lower Z. The grid cursor's accumulated Z stays
             // wherever the user left it on release — UNLESS the user
-            // released without changing Z (tap PAD Y alone), in which
-            // case reset Z to 0.
+            // released without changing Z (tap the modifier alone),
+            // in which case reset Z to 0.
             //
             // Two conditions trigger the reset on release:
             //   1. The user never pressed up/down during the hold
@@ -1627,12 +1628,17 @@ namespace
             // Either condition is a clear "no, I changed my mind"
             // signal; reset.
             //
+            // Modifier choice note: this is the SHIFT modifier
+            // (vertical placement), NOT the CTRL modifier
+            // (kInterfaceConstructionZLock = lock cursor at current
+            // Z while moving). Distinct features.
+            //
             // bridgeBuild mode doesn't participate — its Z is driven
             // by the construction-segment slope verbs (Up/Down ->
             // KeyboardShortcutSlopeUp/Down), not gridCursor().getZ().
             // The hold-Z gesture is meaningful only when D-pad up/down
             // map to gridCursor Z (onLand, bridgePick, dragArea).
-            const bool zLockNow = OpenRCT2::Ui::isZLockHeldInTool();
+            const bool zLockNow = OpenRCT2::Ui::isShiftModifierHeldInTool();
             if (zLockNow != _zLockWasHeld)
             {
                 const auto mode = Windows::WindowFootpathGetInputMode();
