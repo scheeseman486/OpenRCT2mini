@@ -1411,6 +1411,10 @@ namespace
         Disposition onRaiseGridCursor()
         {
             gridCursor().raiseZ(OpenRCT2::kPathHeightStep);
+            // §17: mark that the user touched Z during this zLock-
+            // hold gesture. Release-edge logic in processFrame uses
+            // it to decide reset-vs-lock.
+            _zAdjustedDuringHold = true;
             Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
             return Disposition::Consumed;
         }
@@ -1418,6 +1422,7 @@ namespace
         Disposition onLowerGridCursor()
         {
             gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
+            _zAdjustedDuringHold = true;
             Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
             return Disposition::Consumed;
         }
@@ -1440,9 +1445,17 @@ namespace
         {
             const auto pos = gridCursor().getPosition();
             if (Windows::WindowFootpathDragAreaHasAnchor())
+            {
                 Windows::WindowFootpathDragAreaCommitAtTile(pos);
+            }
             else
-                Windows::WindowFootpathDragAreaAnchorAtTile(pos);
+            {
+                // §17 (2026-05-23): apply the grid cursor's
+                // accumulated Z to the whole rectangle. Anchor
+                // captures _footpathPlaceZ = baseZ + zOffset;
+                // subsequent Preview / Commit reuse that anchor Z.
+                Windows::WindowFootpathDragAreaAnchorAtTile(pos, gridCursor().getZ());
+            }
             return Disposition::Consumed;
         }
 
@@ -1595,6 +1608,76 @@ namespace
         {
             ToolContext::processFrame(nowMs);
 
+            // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): zLock
+            // hold-Z gesture press/release edge tracking.
+            //
+            // Behaviour the user wants (paraphrased): hold PAD Y
+            // (kInterfaceConstructionZLock) and tap D-pad up/down to
+            // raise/lower Z. The grid cursor's accumulated Z stays
+            // wherever the user left it on release — UNLESS the user
+            // released without changing Z (tap PAD Y alone), in which
+            // case reset Z to 0.
+            //
+            // Two conditions trigger the reset on release:
+            //   1. The user never pressed up/down during the hold
+            //      (_zAdjustedDuringHold remains false).
+            //   2. The user pressed up/down but the net Z change is
+            //      zero (e.g. raised then lowered back to where they
+            //      started — currentZ == _zSnapshot).
+            // Either condition is a clear "no, I changed my mind"
+            // signal; reset.
+            //
+            // bridgeBuild mode doesn't participate — its Z is driven
+            // by the construction-segment slope verbs (Up/Down ->
+            // KeyboardShortcutSlopeUp/Down), not gridCursor().getZ().
+            // The hold-Z gesture is meaningful only when D-pad up/down
+            // map to gridCursor Z (onLand, bridgePick, dragArea).
+            const bool zLockNow = OpenRCT2::Ui::isZLockHeldInTool();
+            if (zLockNow != _zLockWasHeld)
+            {
+                const auto mode = Windows::WindowFootpathGetInputMode();
+                const bool zMeaningful
+                    = (mode == Windows::FootpathInputMode::onLand
+                       || mode == Windows::FootpathInputMode::bridgePick
+                       || mode == Windows::FootpathInputMode::dragArea);
+                if (zLockNow && zMeaningful)
+                {
+                    // Press edge: snapshot the current Z so the
+                    // release-edge can compare.
+                    _zSnapshot = gridCursor().getZ();
+                    _zAdjustedDuringHold = false;
+                }
+                else if (!zLockNow && zMeaningful)
+                {
+                    // Release edge: check both reset conditions.
+                    const int32_t currentZ = gridCursor().getZ();
+                    if (!_zAdjustedDuringHold || currentZ == _zSnapshot)
+                    {
+                        if (currentZ != 0)
+                        {
+                            // Reset the cursor model's Z to ground,
+                            // then re-emit the provisional so the
+                            // ghost matches the reset Z. dragArea
+                            // mode doesn't use SetProvisionalAtTile
+                            // (it uses rectangle preview); the
+                            // anchor's _footpathPlaceZ will track on
+                            // the next anchor / preview call.
+                            auto* grid = dynamic_cast<GridCursorModel*>(getCursorModel());
+                            if (grid != nullptr)
+                                grid->setZ(0);
+                            if (mode == Windows::FootpathInputMode::onLand
+                                || mode == Windows::FootpathInputMode::bridgePick)
+                            {
+                                Windows::WindowFootpathSetProvisionalAtTile(
+                                    gridCursor().getPosition(), 0);
+                            }
+                        }
+                    }
+                    _zAdjustedDuringHold = false;
+                }
+                _zLockWasHeld = zLockNow;
+            }
+
             if (Windows::WindowFootpathGetInputMode() != Windows::FootpathInputMode::bridgeBuild)
             {
                 _lastBridgeHead.reset();
@@ -1614,6 +1697,16 @@ namespace
         // the head actually moved (avoids redundant work + redundant
         // ScrollMainWindowIfCursorNearEdge nudges every frame).
         std::optional<TileCoordsXY> _lastBridgeHead;
+
+        // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): zLock
+        // hold-Z gesture state machine. _zLockWasHeld is the prev-
+        // frame value used for edge detection; _zSnapshot is the
+        // Z value at the press edge; _zAdjustedDuringHold is set
+        // by onRaise/onLowerGridCursor when the user actually presses
+        // up/down during the hold.
+        bool _zLockWasHeld = false;
+        int32_t _zSnapshot = 0;
+        bool _zAdjustedDuringHold = false;
     };
 
     // OPENRCT2MINI input-plan Track 3 / Phase 3.F: edge-tile tool
@@ -3806,15 +3899,15 @@ void InputManager::handleModifiers()
 
     if (Config::Get().general.virtualFloorStyle != VirtualFloorStyles::Off)
     {
-        // OPENRCT2MINI grid-cursor-plan §14.2 polish 1 (2026-05-20):
-        // keep the VirtualFloor enabled while the grid cursor is
-        // engaged and the user has shifted the placement Z above OR
-        // below ground. The mouse path holds shift for the entire
-        // drag gesture, so the floor stays alive across the drag —
-        // but the gamepad path only holds shift during the discrete
-        // onRaise / onLower press, so without this clause the very
-        // next frame would call VirtualFloorDisable() and the blue
-        // grid would vanish until the next Z bump.
+        // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): floor
+        // visibility gated to "while zLock (PAD Y / Ctrl) is held"
+        // for the gamepad path. The grid cursor's accumulated Z is
+        // PERSISTENT across releases (locked-in until the next
+        // tap-resets-to-0 gesture), but the visual floor should
+        // only appear while the user is actively adjusting it. This
+        // matches the mouse path's behaviour (floor visible only
+        // during Shift+drag-Z) and avoids a permanent blue plane
+        // floating on screen between placement gestures.
         //
         // OPENRCT2MINI grid-cursor-plan §14.2 polish 7 (2026-05-20):
         // gate on the cursor model's accumulated Z directly, not on
@@ -3826,11 +3919,16 @@ void InputManager::handleModifiers()
         // _z resets to 0 cleanly when the user steps back to
         // ground, so it's the correct gate for "is the user
         // actively driving an off-ground Z plane right now."
-        const bool gridCursorRaised
-            = gMapSelectFlags.has(MapSelectFlag::gridCursor)
-            && getAnyRegisteredCursorZ() != 0;
-        if (isModifierKeyPressed(ModifierKey::ctrl) || isModifierKeyPressed(ModifierKey::shift)
-            || gridCursorRaised)
+        //
+        // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): floor
+        // only visible while zLock (ctrl) or shift is held — i.e.
+        // while the user is actively adjusting Z. The earlier
+        // gridCursorRaised branch kept the floor on across the
+        // locked-Z lifetime, which the new hold-Z gesture treats
+        // as visual clutter — the locked Z still drives
+        // placement, but the floor only paints during the active
+        // adjustment hold.
+        if (isModifierKeyPressed(ModifierKey::ctrl) || isModifierKeyPressed(ModifierKey::shift))
             VirtualFloorEnable();
         else
             VirtualFloorDisable();

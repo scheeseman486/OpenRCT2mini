@@ -40,6 +40,15 @@ namespace OpenRCT2::Ui
     // InputContextStrategy.cpp where GetInputManager() is in scope.
     bool isShiftModifierHeldInTool();
 
+    // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): Z-lock modifier
+    // query. The hold-to-adjust-Z gesture replaces the prior
+    // Shift+D-pad chord (§14.2 amendment): while
+    // kInterfaceConstructionZLock is held, D-pad up/down adjust Z
+    // and D-pad left/right are suppressed. Release semantics
+    // (snapshot-then-reset-if-unchanged) live in FootpathContext-
+    // Impl::processFrame.
+    bool isZLockHeldInTool();
+
     // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): close the
     // error-popup window if one is showing. Returns true if a popup
     // existed and was closed. The popup (WindowClass::error — see
@@ -749,25 +758,24 @@ namespace OpenRCT2::Ui
             // focus.left→3 as the base; stepForDirection handles
             // mode + rotation translation.
             //
-            // OPENRCT2MINI grid-cursor-plan §14.2 (amendment 2026-05-20
-            // — Shift+D-pad Z step): mirror the mouse Shift+drag-Z
-            // gesture in the digital D-pad world. While the bound
-            // Shift modifier is held, focus.up/focus.down are
-            // discrete per-press Z increments routed through the
-            // same verb hooks the construction-Z shortcuts use
-            // (onRaise / onLower). Left/Right keep their map-
-            // navigation meaning — the mouse drag only cares about
-            // Y delta, the same asymmetry applies here. Subclasses
-            // that already implement onRaise/onLower
+            // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): hold-Z
+            // gesture supersedes the prior Shift+D-pad chord (§14.2).
+            // Now: while kInterfaceConstructionZLock is held, D-pad
+            // up/down adjust Z and D-pad left/right are suppressed.
+            // Press / release edges + snapshot-reset semantics live
+            // in FootpathContextImpl::processFrame.
+            // Subclasses that already implement onRaise/onLower
             // (FootpathContextImpl) pick this up for free; subclasses
             // that haven't (Scenery, LandRights, …) Consume harmlessly
             // until their Z verbs are wired.
-            if ((id == ShortcutId::kFocusUp || id == ShortcutId::kFocusDown)
-                && isShiftModifierHeldInTool())
+            if (isZLockHeldInTool())
             {
                 if (id == ShortcutId::kFocusUp)
                     return onRaise();
-                return onLower();
+                if (id == ShortcutId::kFocusDown)
+                    return onLower();
+                if (id == ShortcutId::kFocusLeft || id == ShortcutId::kFocusRight)
+                    return Disposition::Consumed;
             }
             if (id == ShortcutId::kFocusUp)
                 return onStep(static_cast<::Direction>(0));

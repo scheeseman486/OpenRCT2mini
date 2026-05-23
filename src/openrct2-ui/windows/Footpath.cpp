@@ -2214,7 +2214,13 @@ namespace OpenRCT2::Ui::Windows
         // screen coords. _dragStartPos becomes the corner of the
         // selection rectangle; subsequent Preview / Commit calls
         // extend from there to the cursor's tile.
-        void DragAreaAnchorAtTilePublic(const TileCoordsXY& tile)
+        //
+        // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): zOffset is
+        // the grid cursor's accumulated Z. Apply it on top of the
+        // anchor's natural ground Z so the whole rectangle places at
+        // the grid cursor's Z plane (matches the onLand mode's
+        // Shift+D-pad Z behaviour, generalised to N tiles).
+        void DragAreaAnchorAtTilePublic(const TileCoordsXY& tile, int32_t zOffset = 0)
         {
             if (_footpathErrorOccured)
                 return;
@@ -2230,7 +2236,12 @@ namespace OpenRCT2::Ui::Windows
             const auto coords = tile.ToCoordsXY();
             auto placement = FootpathGetOnTerrainPlacement(tile);
             int32_t baseZ = placement.isValid() ? placement.baseZ : TileElementHeight(coords);
-            if (baseZ > 0 && placement.slope.type == FootpathSlopeType::flat)
+            // Apply grid cursor's Z offset on top of the natural
+            // anchor Z. Clamp floor mirrors the onLand path
+            // (Footpath.cpp:1108).
+            if (zOffset != 0)
+                baseZ = std::max<int32_t>(baseZ + zOffset, 16);
+            if (baseZ > 0 && (zOffset != 0 || placement.slope.type == FootpathSlopeType::flat))
                 _footpathPlaceZ = baseZ;
 
             gMapSelectFlags.set(MapSelectFlag::enable);
@@ -2744,13 +2755,17 @@ namespace OpenRCT2::Ui::Windows
     // OPENRCT2MINI grid-cursor-plan §16: drag-area mode at-tile
     // bridges. Each delegates to the corresponding *Public member
     // on the FootpathWindow; no-op when the window is closed.
-    void WindowFootpathDragAreaAnchorAtTile(const TileCoordsXY& tile)
+    //
+    // §17 (2026-05-23): zOffset plumbed through so the gamepad path
+    // can apply the grid cursor's accumulated Z to the whole drag
+    // rectangle (matches the onLand mode's Shift+D-pad Z behaviour).
+    void WindowFootpathDragAreaAnchorAtTile(const TileCoordsXY& tile, int32_t zOffset)
     {
         auto* windowMgr = GetWindowManager();
         WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
         if (w == nullptr)
             return;
-        static_cast<FootpathWindow*>(w)->DragAreaAnchorAtTilePublic(tile);
+        static_cast<FootpathWindow*>(w)->DragAreaAnchorAtTilePublic(tile, zOffset);
     }
 
     void WindowFootpathDragAreaPreviewAtTile(const TileCoordsXY& tile)

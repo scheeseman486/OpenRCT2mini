@@ -221,7 +221,10 @@ namespace OpenRCT2::Ui::Windows
     //   HasAnchor: true iff an anchor has been set since the last
     //              Clear / Commit. FootpathContextImpl::onPlace
     //              branches on this to choose Anchor vs Commit.
-    void WindowFootpathDragAreaAnchorAtTile(const TileCoordsXY& tile);
+    // §17 (2026-05-23): Anchor accepts a Z offset (grid cursor's
+    // accumulated Z) so the whole rectangle places at the offset Z.
+    // Preview / Commit reuse the anchor's stored Z (_footpathPlaceZ).
+    void WindowFootpathDragAreaAnchorAtTile(const TileCoordsXY& tile, int32_t zOffset = 0);
     void WindowFootpathDragAreaPreviewAtTile(const TileCoordsXY& tile);
     void WindowFootpathDragAreaCommitAtTile(const TileCoordsXY& tile);
     void WindowFootpathDragAreaClear();

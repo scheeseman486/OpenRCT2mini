@@ -46,6 +46,17 @@ namespace OpenRCT2::Ui
         return GetInputManager().isModifierKeyPressed(ModifierKey::shift);
     }
 
+    // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): zLock query —
+    // kInterfaceConstructionZLock is the bound shortcut for the
+    // hold-Z gesture. handleModifiers maps it to ModifierKey::ctrl
+    // (InputManager.cpp:3796), so reading ctrl here matches both the
+    // real keyboard Ctrl key AND any gamepad button the user has
+    // bound (e.g. PAD Y).
+    bool isZLockHeldInTool()
+    {
+        return GetInputManager().isModifierKeyPressed(ModifierKey::ctrl);
+    }
+
     // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): dismiss an
     // active error popup (WindowClass::error from
     // windows/Error.cpp). The mouse path closes the popup on any
