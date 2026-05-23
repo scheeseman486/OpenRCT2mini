@@ -2363,8 +2363,34 @@ private:
                 if (cursorZOffset == 0 && gridCursorParked)
                     cursorZOffset = _inputManager.getAnyRegisteredCursorZ();
             }
-            if (gMapSelectFlags.has(MapSelectFlag::enable)
-                || gMapSelectFlags.has(MapSelectFlag::enableConstruct))
+            // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): when the
+            // grid cursor is active, prefer the cursor MODEL's tile
+            // over gMapSelectPositionA. Single-tile select makes
+            // positionA == positionB == cursor tile, so the two
+            // agree; but drag-area select decouples them — positionA
+            // is the normalised MIN corner of the rectangle while the
+            // cursor sits at whichever corner the user steered toward
+            // (anywhere from min to max on each axis). Using positionA
+            // there parks the sprite at the diamond's TOP corner
+            // regardless of where the user actually moved the cursor.
+            // Honouring the cursor model gets the sprite to the right
+            // visual corner (diagonally opposite from the anchor when
+            // the user has dragged across both axes; perpendicular
+            // corners when they've dragged on one axis only).
+            if (selectorActive)
+            {
+                auto& strategy = _inputManager.getActiveContextStrategy();
+                if (auto* model = strategy.getCursorModel(); model != nullptr)
+                {
+                    if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                        syncTo = ViewportInteractionMapToScreen(grid->getPosition().ToCoordsXY(), cursorZOffset);
+                    else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
+                        syncTo = ViewportInteractionMapToScreen(edge->getPosition().ToCoordsXY(), cursorZOffset);
+                }
+            }
+            if (!syncTo.has_value()
+                && (gMapSelectFlags.has(MapSelectFlag::enable)
+                    || gMapSelectFlags.has(MapSelectFlag::enableConstruct)))
             {
                 syncTo = ViewportInteractionMapToScreen(gMapSelectPositionA, cursorZOffset);
             }
