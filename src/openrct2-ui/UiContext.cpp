@@ -291,125 +291,6 @@ private:
         });
     }
 
-    bool InterceptVirtualCursorKey(SDL_Scancode sc, bool down)
-    {
-        (void)down;
-        switch (sc)
-        {
-            // OPENRCT2MINI gamepad-plan 1.6: SDL_SCANCODE_UP/DOWN/LEFT/
-            // RIGHT/Z/X intercepts removed. They previously latched
-            // into _vKb* flags that fed cursor motion / click / cancel
-            // in ProcessVirtualGamepadCursor. Now those scancodes fall
-            // through to ShortcutManager which fires the bound
-            // shortcut, and the new held-state poll picks up cursor
-            // motion / click / cancel from the binding's `current`
-            // set (default keyboard arrows / Z / X via register-
-            // KeyboardDefault calls in Shortcuts.cpp). Net effect on
-            // the device is identical; on host the user can rebind.
-            // OPENRCT2MINI W0: device L1 dual-emits Q + LSHIFT and R1 dual-
-            // emits A + LALT (the SDL2 set_key patch in build-deps.sh). On
-            // host PC there's no patch, so pressing the user-facing letter
-            // alone doesn't fire the modifier side. Shadow the modifier
-            // bits here so a host dev pressing Q/A gets the same effective
-            // behavior as a device user pressing L1/R1.
-            //
-            // OPENRCT2MINI gamepad-plan 1.6: SDL_SCANCODE_Q intercept
-            // dropped. Was injecting KMOD_LSHIFT into SDL's mod state
-            // so OpenRCT2's shift-modifier behaviours (raise placement
-            // Z, vertical track stack, etc.) fired when device L1 = Q
-            // was held. Now kInterfaceShiftModifier with default
-            // keyboard "Q" (registered via registerKeyboardDefault in
-            // Shortcuts.cpp) ORs into ModifierKey::shift through
-            // handleModifiers, covering the same call sites without
-            // polluting SDL's chord-shortcut matcher.
-            // OPENRCT2MINI input-rework: SDL_SCANCODE_LALT / RALT
-            // intercept removed. Was scrubbing KMOD_LALT/RALT from
-            // SDL's mod state to suppress SDL2's built-in ALT+RETURN
-            // fullscreen toggle, but the side effect was that no
-            // ALT+anything chord-shortcut binding could ever match —
-            // including the registered ALT+C → kInterfaceCloseWindow-
-            // UnderCursor binding. That forced a hardcoded SDL_SCAN-
-            // CODE_C chord handler below to detect the chord locally
-            // via a private _vGamepadMod latch instead of going
-            // through ShortcutManager, which in turn swallowed every
-            // C event and made C uncapturable in the rebind UI.
-            //
-            // Letting ALT/Alt fall through to SDL means ALT+RETURN
-            // now toggles fullscreen via SDL's default handling. On
-            // the device that's a no-op (libmi_gfx panel has no real
-            // windowed mode). On host it's the standard SDL keystroke
-            // most users expect. Trading that handful of pixels of
-            // ergonomics for a working rebind UI and a working ALT+C
-            // close-window chord (which goes through the standard
-            // chord-shortcut path now).
-            // OPENRCT2MINI cut 59: L1 (LSHIFT) is the Shift modifier reach,
-            // but it no longer activates fast cursor — only R1 (F13) does.
-            // We don't swallow LSHIFT/RSHIFT so the modifier still
-            // propagates to OpenRCT2's input pipeline (scenery
-            // vertical-stack, track/footpath Z-raise, etc.).
-            case SDL_SCANCODE_LSHIFT:
-            case SDL_SCANCODE_RSHIFT: return false;
-            // OPENRCT2MINI cut 60 / gamepad-plan 1.6: LCTRL / RCTRL.
-            // The SDL driver emits LCTRL for the L1+R1 chord (in place
-            // of L1's usual LSHIFT). Real keyboard Ctrl also lands
-            // here. Don't swallow — the modifier propagates to SDL's
-            // mod state so chord-shortcut matching still works (CTRL+L
-            // load, etc.) and so InputManager::handleModifiers() picks
-            // it up as ModifierKey::ctrl for construction Z-lock /
-            // fast-cursor suppression. 1.6 dropped the _vKbCtrl latch
-            // — handleModifiers() reads SDL's mod state directly and
-            // also ORs the kInterfaceConstructionZLock binding's held
-            // state, covering both the keyboard CTRL and any rebind.
-            case SDL_SCANCODE_LCTRL:
-            case SDL_SCANCODE_RCTRL: return false;
-            // OPENRCT2MINI W0 (was cut 59): face X / face Y / L2 / R2 onto
-            // WASD-cluster letters emitted by the SDL2 set_key patch. F-keys
-            // (F14-F17) were testable only on full-size PC keyboards; letters
-            // are universal. Each case is gated on !hasTextInputFocus so a
-            // dev typing in a peep-rename / chat / console field still gets
-            // the literal letter; the OSK is the device-side text-entry
-            // path and routes its own keys via OskHandleKey above.
-            // OPENRCT2MINI gamepad-plan 1.5h: SDL_SCANCODE_W / _S
-            // intercepts removed. The device's vendor SDL2 emits W for
-            // L2 and S for R2; falling through to ShortcutManager lets
-            // the registered shortcut bindings (kViewGeneralRotate-
-            // Anticlockwise / kViewGeneralRotateClockwise by default
-            // per registerKeyboardDefault calls in Shortcuts.cpp) fire
-            // them. The user can rebind L2 / R2 to anything — including
-            // zoom, the gamepad-mod swap behaviour the legacy code did
-            // automatically — through the normal rebind UI.
-            //
-            // Loses the cut-31-era _vGamepadMod-conditional rotate-vs-
-            // zoom toggle. If anyone wants R1+L2 = zoom-out, they bind
-            // a chord shortcut to PAD R1+L2 against kViewGeneralZoomOut
-            // explicitly. Cleaner generalisation is worth one less
-            // baked-in chord behaviour.
-            // OPENRCT2MINI input-rework: SDL_SCANCODE_C intercept
-            // removed. Was hardcoding the device's R1+C close-window
-            // chord by reading the now-deleted _vGamepadMod latch
-            // (only because the LALT scrub above broke real chord-
-            // shortcut matching for ALT+anything). With both gone,
-            // C falls through to the regular SDL → InputManager →
-            // ShortcutManager pipeline:
-            //   * Default shade-window (poll-driven) still works.
-            //   * ALT+C → kInterfaceCloseWindowUnderCursor fires
-            //     through the registered chord binding now that
-            //     KMOD_LALT survives.
-            //   * PAD R1+Y → kInterfaceCloseWindowUnderCursor fires
-            //     through the registered pad chord, same path.
-            //   * The C scancode is visible to the rebind UI's
-            //     keypress capture, so users can bind C to anything
-            //     they want.
-            // OPENRCT2MINI gamepad-plan 1.5i: SDL_SCANCODE_V intercept
-            // removed. Falls through to ShortcutManager which fires the
-            // bound shortcut — by default kInterfaceRotateConstruction
-            // (registered with keyboard "V" via registerKeyboardDefault
-            // in Shortcuts.cpp). Loses the _vGamepadMod-conditional
-            // 3×=anti-clockwise behaviour; user binds a separate chord
-            // shortcut if they miss it.
-            default: return false;
-        }
-    }
 #endif
 
     InGameConsole _inGameConsole;
@@ -1148,13 +1029,6 @@ public:
                         break;
                     }
 #endif
-#ifdef ENABLE_SOFTWARE_CURSOR
-                    // OPENRCT2MINI: cut 38b. Swallow our virtual-cursor keys
-                    // before the keyboard pipeline sees them — otherwise
-                    // arrows pan the camera and Z/X trigger menu shortcuts.
-                    if (InterceptVirtualCursorKey(e.key.keysym.scancode, true))
-                        break;
-#endif
                     _textComposition.HandleMessage(&e);
                     // OPENRCT2MINI per-binding Modifier mode: filter OS
                     // key auto-repeat (SDL sets e.key.repeat > 0 for
@@ -1173,10 +1047,6 @@ public:
                 }
                 case SDL_KEYUP:
                 {
-#ifdef ENABLE_SOFTWARE_CURSOR
-                    if (InterceptVirtualCursorKey(e.key.keysym.scancode, false))
-                        break;
-#endif
                     auto ie = GetInputEventFromSDLEvent(e);
                     ie.state = InputEventState::release;
                     _inputManager.queueInputEvent(std::move(ie));
