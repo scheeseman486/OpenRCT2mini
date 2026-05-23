@@ -485,9 +485,37 @@ namespace
             // follows, so the visual machinery (cursor hide /
             // selector ring) lines up without an explicit flip
             // here.
-            if (id == ShortcutId::kInterfaceConfirm
-                && OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive)
-                && mgr.getFocusedWindowClass() == OpenRCT2::gCurrentToolWidget.windowClassification)
+            // OPENRCT2MINI grid-cursor-plan §19 (2026-05-23): the
+            // "engage condition" now has two paths:
+            //
+            //   1. Classic: tool is armed (gInputFlags.toolActive)
+            //      AND focused window is the tool's window.
+            //      Pressing Start engages grid cursor on that tool.
+            //
+            //   2. Footpath bridge-in-progress: tool is NOT armed
+            //      (the mouse path's StartBridgeAtPoint called
+            //      ToolCancel — see Footpath.cpp:2352), but the
+            //      Footpath window is still mid-build (input mode
+            //      != none). User entered focus mode on the
+            //      Footpath window to keep tweaking, and now wants
+            //      to hand control back to the grid cursor.
+            //      Re-arm the Footpath tool for its current mode
+            //      and engage as in case 1.
+            //
+            // Both paths require the focused window to be the
+            // Footpath window (or the tool's window for case 1) so
+            // Start in other windows behaves normally even if
+            // there's a tool background-armed or a bridge mid-
+            // build.
+            const bool toolArmed = OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::toolActive);
+            const bool focusedOnTool = toolArmed
+                && mgr.getFocusedWindowClass() == OpenRCT2::gCurrentToolWidget.windowClassification;
+            const bool footpathInMode
+                = (Windows::WindowFootpathGetInputMode() != Windows::FootpathInputMode::none);
+            const bool focusedOnFootpath
+                = (mgr.getFocusedWindowClass() == WindowClass::footpath);
+            const bool footpathInModeEngage = !toolArmed && footpathInMode && focusedOnFootpath;
+            if (id == ShortcutId::kInterfaceConfirm && (focusedOnTool || footpathInModeEngage))
             {
                 // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
                 // 2026-05-17 #6 — off-by-one frame fix engage
@@ -511,6 +539,16 @@ namespace
                 // which now sees ctx == toolFootpath and gate-1
                 // of drawFocusOutlineIfActive returns early. Ring
                 // disappears.
+                //
+                // §19: case 2 re-arms the Footpath tool widget
+                // for the current construction mode BEFORE the
+                // toolFocusSelected latch. resolveActiveContext
+                // gates on `_toolFocusSelected && toolActive`
+                // (both required) — without the re-arm, the next
+                // frame's routing wouldn't reach the FootpathContext
+                // strategy.
+                if (footpathInModeEngage)
+                    Windows::WindowFootpathReArmForCurrentMode();
                 mgr.setToolFocusSelected(
                     true, OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
                 return Disposition::Consumed;
