@@ -1394,8 +1394,28 @@ namespace OpenRCT2::Ui::Windows
             {
                 return;
             }
-            _provisionalFootpath.tiles.clear();
-
+            // OPENRCT2MINI grid-cursor-plan §16.7 (2026-05-23): orphan
+            // ghost fix. The upstream code cleared `_provisionalFootpath.
+            // tiles` here BEFORE calling WindowFootpathSetProvisional-
+            // PathDragArea below — but the downstream FootpathUpdate-
+            // Provisional → FootpathRemoveProvisional path iterates that
+            // same tiles list to physically remove the ghost tile
+            // elements from the map. Clearing the list first orphans the
+            // ghosts: tiles list is empty, RemoveProvisional iterates
+            // nothing, no FootpathRemoveAction is dispatched, and the
+            // ghost-flagged paths from the previous mouse-hover (drag-
+            // area mode's onToolUpdate → DragAreaHover → SetProvisional-
+            // PathAtPoint) survive on the map as free-to-demolish but
+            // tile-blocking artefacts.
+            //
+            // The clear is unnecessary anyway: FootpathSetProvisional-
+            // PathDragArea → FootpathUpdateProvisional clears the
+            // existing tiles list properly, then FootpathProvisionalSet
+            // re-assigns _provisionalFootpath.tiles = successfulTiles
+            // (line 2947).
+            //
+            // Same bug + fix at DragAreaAnchorAtTilePublic below — the
+            // gamepad path's parallel entry-point.
             auto mapPos = FootpathGetPlacePositionFromScreenPosition(screenCoords);
             if (!mapPos)
                 return;
@@ -2198,8 +2218,15 @@ namespace OpenRCT2::Ui::Windows
         {
             if (_footpathErrorOccured)
                 return;
-            _provisionalFootpath.tiles.clear();
-
+            // OPENRCT2MINI grid-cursor-plan §16.7 (2026-05-23): orphan
+            // ghost fix — see WindowFootpathPlaceDragAreaSetStart for
+            // the full diagnostic. tl;dr clearing the tiles list before
+            // WindowFootpathSetProvisionalPathDragArea → FootpathUpdate-
+            // Provisional → FootpathRemoveProvisional orphans any
+            // existing ghost tile elements on the map (RemoveProvisional
+            // iterates the now-empty list). FootpathProvisionalSet
+            // reassigns _provisionalFootpath.tiles on success anyway, so
+            // the explicit clear is unnecessary.
             const auto coords = tile.ToCoordsXY();
             auto placement = FootpathGetOnTerrainPlacement(tile);
             int32_t baseZ = placement.isValid() ? placement.baseZ : TileElementHeight(coords);
