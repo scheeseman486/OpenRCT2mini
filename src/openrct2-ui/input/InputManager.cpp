@@ -1453,7 +1453,7 @@ namespace
             // hold gesture. Release-edge logic in processFrame uses
             // it to decide reset-vs-lock.
             _zAdjustedDuringHold = true;
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            refreshProvisionalForCurrentMode();
             return Disposition::Consumed;
         }
 
@@ -1461,8 +1461,33 @@ namespace
         {
             gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
             _zAdjustedDuringHold = true;
-            Windows::WindowFootpathSetProvisionalAtTile(gridCursor().getPosition(), gridCursor().getZ());
+            refreshProvisionalForCurrentMode();
             return Disposition::Consumed;
+        }
+
+        // §17 (2026-05-23): after a Z adjustment, refresh the
+        // provisional preview so the rendered ghost matches the
+        // new Z. onLand and bridgePick use the single-tile ghost
+        // (SetProvisionalAtTile); dragArea uses the rectangle
+        // preview (DragAreaPreviewAtTile) — only meaningful when
+        // an anchor exists. bridgeBuild has its own per-frame
+        // preview (driven by the construction-segment slope verbs)
+        // so the Z step isn't relevant here.
+        void refreshProvisionalForCurrentMode()
+        {
+            const auto mode = Windows::WindowFootpathGetInputMode();
+            const auto pos = gridCursor().getPosition();
+            const auto z = gridCursor().getZ();
+            if (mode == Windows::FootpathInputMode::onLand
+                || mode == Windows::FootpathInputMode::bridgePick)
+            {
+                Windows::WindowFootpathSetProvisionalAtTile(pos, z);
+            }
+            else if (mode == Windows::FootpathInputMode::dragArea
+                && Windows::WindowFootpathDragAreaHasAnchor())
+            {
+                Windows::WindowFootpathDragAreaPreviewAtTile(pos, z);
+            }
         }
 
         // OnLand / bridgePick onStep: step the grid cursor, refresh
@@ -1482,17 +1507,21 @@ namespace
         Disposition onPlaceDragArea()
         {
             const auto pos = gridCursor().getPosition();
+            const int32_t z = gridCursor().getZ();
             if (Windows::WindowFootpathDragAreaHasAnchor())
             {
-                Windows::WindowFootpathDragAreaCommitAtTile(pos);
+                // §17 (2026-05-23): pass the CURRENT cursor Z so
+                // the commit honours mid-drag Z adjustments.
+                Windows::WindowFootpathDragAreaCommitAtTile(pos, z);
             }
             else
             {
-                // §17 (2026-05-23): apply the grid cursor's
-                // accumulated Z to the whole rectangle. Anchor
-                // captures _footpathPlaceZ = baseZ + zOffset;
-                // subsequent Preview / Commit reuse that anchor Z.
-                Windows::WindowFootpathDragAreaAnchorAtTile(pos, gridCursor().getZ());
+                // §17: capture the anchor's natural baseZ and apply
+                // the cursor's accumulated Z offset. Subsequent
+                // Preview / Commit calls re-apply zOffset against
+                // the cached baseZ so Z changes during the drag
+                // update the rectangle.
+                Windows::WindowFootpathDragAreaAnchorAtTile(pos, z);
             }
             return Disposition::Consumed;
         }
@@ -1518,7 +1547,13 @@ namespace
         {
             const auto result = ToolContext::onStep(dpad);
             if (Windows::WindowFootpathDragAreaHasAnchor())
-                Windows::WindowFootpathDragAreaPreviewAtTile(gridCursor().getPosition());
+            {
+                // §17 (2026-05-23): pass the cursor's current Z so
+                // the rectangle preview reflects any mid-drag Z
+                // adjustment.
+                Windows::WindowFootpathDragAreaPreviewAtTile(
+                    gridCursor().getPosition(), gridCursor().getZ());
+            }
             return result;
         }
 

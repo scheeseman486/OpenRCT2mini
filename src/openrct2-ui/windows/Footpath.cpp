@@ -252,6 +252,16 @@ namespace OpenRCT2::Ui::Windows
         int32_t _footpathPlaceZ;
 
         CoordsXY _dragStartPos;
+        // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): anchor's
+        // natural ground Z snapshot, kept across the lifetime of a
+        // drag-area gesture so subsequent gamepad Z adjustments
+        // (Shift+D-pad up/down → onRaise/onLowerGridCursor) can
+        // recompute the placement Z as `_dragStartBaseZ + zOffset`
+        // and re-emit the rectangle preview at the new Z. Without
+        // this, _footpathPlaceZ was a fixed snapshot from the
+        // anchor moment and Z changes mid-drag had no effect on
+        // the rectangle.
+        int32_t _dragStartBaseZ = 0;
 
     public:
 #pragma region Window Override Events
@@ -2235,10 +2245,15 @@ namespace OpenRCT2::Ui::Windows
             // the explicit clear is unnecessary.
             const auto coords = tile.ToCoordsXY();
             auto placement = FootpathGetOnTerrainPlacement(tile);
-            int32_t baseZ = placement.isValid() ? placement.baseZ : TileElementHeight(coords);
+            const int32_t naturalBaseZ = placement.isValid() ? placement.baseZ : TileElementHeight(coords);
+            // §17 (2026-05-23): cache the anchor's natural ground Z
+            // so later Z adjustments can recompute placement Z
+            // without re-projecting the anchor tile each time.
+            _dragStartBaseZ = naturalBaseZ;
             // Apply grid cursor's Z offset on top of the natural
             // anchor Z. Clamp floor mirrors the onLand path
             // (Footpath.cpp:1108).
+            int32_t baseZ = naturalBaseZ;
             if (zOffset != 0)
                 baseZ = std::max<int32_t>(baseZ + zOffset, 16);
             if (baseZ > 0 && (zOffset != 0 || placement.slope.type == FootpathSlopeType::flat))
@@ -2256,12 +2271,31 @@ namespace OpenRCT2::Ui::Windows
         // body (the rectangle-update half, not commit). Called from
         // FootpathContextImpl::onStep so the rectangle tracks the
         // cursor between anchor and commit.
-        void DragAreaPreviewAtTilePublic(const TileCoordsXY& tile)
+        //
+        // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): zOffset
+        // is the grid cursor's CURRENT Z (which may have changed
+        // since the anchor was placed via Shift+D-pad up/down).
+        // Recompute _footpathPlaceZ = _dragStartBaseZ + zOffset so
+        // the rectangle preview re-emits at the new Z. Without
+        // this, the user could raise/lower Z mid-drag but only the
+        // single-tile cursor ghost (drawn separately for onLand-
+        // style modes) would update; the rectangle preview stayed
+        // at the anchor's original Z and the eventual commit
+        // placed flat-on-ground paths.
+        void DragAreaPreviewAtTilePublic(const TileCoordsXY& tile, int32_t zOffset = 0)
         {
             if (_footpathErrorOccured)
                 return;
             if (_dragStartPos.IsNull())
                 return;
+
+            // §17: recompute placement Z from anchor's natural Z +
+            // current zOffset. The result drives both the
+            // rectangle ghost preview and the eventual commit.
+            int32_t baseZ = _dragStartBaseZ;
+            if (zOffset != 0)
+                baseZ = std::max<int32_t>(baseZ + zOffset, 16);
+            _footpathPlaceZ = baseZ;
 
             auto correctedPos = tile.ToCoordsXY();
 
@@ -2285,11 +2319,14 @@ namespace OpenRCT2::Ui::Windows
         // FootpathPlaceAction for each tile via WindowFootpathPlace-
         // Path (the same commit the mouse onToolUp path uses), then
         // clears the anchor.
-        void DragAreaCommitAtTilePublic(const TileCoordsXY& tile)
+        //
+        // §17 (2026-05-23): zOffset plumbed through so the commit
+        // honours the cursor's CURRENT Z (not the anchor's).
+        void DragAreaCommitAtTilePublic(const TileCoordsXY& tile, int32_t zOffset = 0)
         {
             if (_dragStartPos.IsNull())
                 return;
-            DragAreaPreviewAtTilePublic(tile);
+            DragAreaPreviewAtTilePublic(tile, zOffset);
             WindowFootpathPlacePath();
             DragAreaClearPublic();
         }
@@ -2768,22 +2805,22 @@ namespace OpenRCT2::Ui::Windows
         static_cast<FootpathWindow*>(w)->DragAreaAnchorAtTilePublic(tile, zOffset);
     }
 
-    void WindowFootpathDragAreaPreviewAtTile(const TileCoordsXY& tile)
+    void WindowFootpathDragAreaPreviewAtTile(const TileCoordsXY& tile, int32_t zOffset)
     {
         auto* windowMgr = GetWindowManager();
         WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
         if (w == nullptr)
             return;
-        static_cast<FootpathWindow*>(w)->DragAreaPreviewAtTilePublic(tile);
+        static_cast<FootpathWindow*>(w)->DragAreaPreviewAtTilePublic(tile, zOffset);
     }
 
-    void WindowFootpathDragAreaCommitAtTile(const TileCoordsXY& tile)
+    void WindowFootpathDragAreaCommitAtTile(const TileCoordsXY& tile, int32_t zOffset)
     {
         auto* windowMgr = GetWindowManager();
         WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
         if (w == nullptr)
             return;
-        static_cast<FootpathWindow*>(w)->DragAreaCommitAtTilePublic(tile);
+        static_cast<FootpathWindow*>(w)->DragAreaCommitAtTilePublic(tile, zOffset);
     }
 
     void WindowFootpathDragAreaClear()
