@@ -2540,6 +2540,26 @@ void InputManager::onTransitionEvent(SelectorTransitionSource src)
             {
                 const bool wasInGridCursorMode = gMapSelectFlags.has(MapSelectFlag::gridCursor)
                     || gMapSelectFlags.has(MapSelectFlag::gridCursorParked);
+                // OPENRCT2MINI grid-cursor-plan §18.A follow-up
+                // (2026-05-24, user report): dirty the selection-rect
+                // tiles before clearing the gridCursor flags. The blink
+                // pumps (ToolContext::processFrame for active state,
+                // InputManager::process for parked state) invalidate
+                // the rect on every frame WHILE the cursor is in those
+                // states — but the moment the flags clear, neither
+                // pump fires, and the rect tiles keep their stale
+                // highlight pixels until something else dirties them
+                // (user moves the cursor, camera pans, etc.). Same
+                // shape as the per-frame fix from commit 790f583bd3 —
+                // multi-cell rect via positionA != positionB, single-
+                // tile otherwise.
+                if (wasInGridCursorMode)
+                {
+                    if (gMapSelectPositionA != gMapSelectPositionB)
+                        MapInvalidateRegion(gMapSelectPositionA, gMapSelectPositionB);
+                    else
+                        MapInvalidateTileFull(gMapSelectPositionA);
+                }
                 gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
                 gMapSelectFlags.unset(MapSelectFlag::gridCursor);
                 if (wasInGridCursorMode)

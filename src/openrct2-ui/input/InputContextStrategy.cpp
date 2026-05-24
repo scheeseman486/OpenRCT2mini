@@ -1415,6 +1415,19 @@ namespace OpenRCT2::Ui
             }
             else
             {
+                // OPENRCT2MINI grid-cursor-plan §18.A follow-up
+                // (2026-05-24, user report): dirty the selection-rect
+                // tiles before clearing the gridCursor flags. Same
+                // shape as the realMouseMotion path in InputManager —
+                // the per-frame blink pumps (active + parked) stop
+                // firing the moment we clear gridCursor/gridCursorParked,
+                // so without this explicit invalidation the rect tiles
+                // keep their stale highlight pixels until something
+                // else dirties them.
+                if (gMapSelectPositionA != gMapSelectPositionB)
+                    MapInvalidateRegion(gMapSelectPositionA, gMapSelectPositionB);
+                else
+                    MapInvalidateTileFull(gMapSelectPositionA);
                 gMapSelectFlags.unset(MapSelectFlag::enable);
                 gMapSelectFlags.unset(MapSelectFlag::gridCursor);
                 gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
