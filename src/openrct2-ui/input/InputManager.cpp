@@ -1986,6 +1986,24 @@ namespace
             return Disposition::Consumed;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.3 retroactive polish
+        // (2026-05-24, surfaced by the §11.5.1 / §11.9.1 sanity check):
+        // refresh the cost preview after every cursor step and on
+        // re-engage, mirroring the mouse onToolUpdate cost recompute.
+        // Same shape as LandRights / ClearScenery.
+        Disposition onStep(::Direction dpad) override
+        {
+            const auto result = ToolContext::onStep(dpad);
+            Windows::WindowWaterRefreshCost();
+            return result;
+        }
+
+        void onActivate() override
+        {
+            ToolContext::onActivate();
+            Windows::WindowWaterRefreshCost();
+        }
+
         // §18.C follow-up (2026-05-24, visual parity): the mouse Water
         // tool sets gMapSelectType = MapSelectType::fullWater on every
         // tool update (Water.cpp:354-358) so the selection diamond

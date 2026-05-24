@@ -644,4 +644,9 @@ namespace OpenRCT2::Ui::Windows
     // MapRange natively.
     void WindowWaterRaiseAtCursor();
     void WindowWaterLowerAtCursor();
+    // OPENRCT2MINI grid-cursor-plan §11.3 retroactive polish
+    // (2026-05-24): live cost preview for the Water tool — Queries
+    // both raise and lower actions, writes both costs to the window,
+    // invalidates. Called from WaterContextImpl::onStep + onActivate.
+    void WindowWaterRefreshCost();
 } // namespace OpenRCT2::Ui::Windows

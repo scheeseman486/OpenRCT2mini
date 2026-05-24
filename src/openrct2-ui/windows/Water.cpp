@@ -241,6 +241,17 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.3 retroactive polish
+        // (2026-05-24): cost setter for the free-function refresh
+        // helper (defined at the bottom of this file) to write
+        // through. Mirrors LandRights' SetLandRightsCost +
+        // ClearScenery's SetClearSceneryCost.
+        void SetWaterToolCosts(money64 raiseCost, money64 lowerCost)
+        {
+            _waterToolRaiseCost = raiseCost;
+            _waterToolLowerCost = lowerCost;
+        }
+
     private:
         /**
          *  part of window_top_toolbar_tool_drag(0x0066CB4E)
@@ -475,5 +486,44 @@ namespace OpenRCT2::Ui::Windows
         auto action = GameActions::WaterLowerAction(
             { gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y });
         GameActions::Execute(&action, getGameState());
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.3 retroactive polish
+    // (2026-05-24, surfaced by the §11.5.1 / §11.9.1 sanity check):
+    // mirror the mouse onToolUpdate cost recompute path
+    // (Water.cpp:296-) so the cost lines stay current in pure
+    // grid-cursor flow. Queries BOTH raise and lower actions because
+    // the Water window draws both costs simultaneously (one above
+    // each arrow). Both queries are side-effect-free.
+    static WaterWindow* findWaterWindow()
+    {
+        auto* wm = GetWindowManager();
+        if (wm == nullptr)
+            return nullptr;
+        return static_cast<WaterWindow*>(wm->FindByClass(WindowClass::water));
+    }
+
+    void WindowWaterRefreshCost()
+    {
+        auto* w = findWaterWindow();
+        if (w == nullptr)
+            return;
+        auto& gameState = getGameState();
+        auto raiseAction = GameActions::WaterRaiseAction(
+            { gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y });
+        raiseAction.SetFlags({ GameActions::CommandFlag::allowDuringPaused });
+        auto raiseRes = GameActions::Query(&raiseAction, gameState);
+        const money64 raiseCost = raiseRes.error == GameActions::Status::ok ? raiseRes.cost : kMoney64Undefined;
+
+        auto lowerAction = GameActions::WaterLowerAction(
+            { gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y });
+        lowerAction.SetFlags({ GameActions::CommandFlag::allowDuringPaused });
+        auto lowerRes = GameActions::Query(&lowerAction, gameState);
+        const money64 lowerCost = lowerRes.error == GameActions::Status::ok ? lowerRes.cost : kMoney64Undefined;
+
+        w->SetWaterToolCosts(raiseCost, lowerCost);
+        auto* wm = GetWindowManager();
+        if (wm != nullptr)
+            wm->InvalidateByClass(WindowClass::water);
     }
 } // namespace OpenRCT2::Ui::Windows
