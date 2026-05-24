@@ -1847,18 +1847,27 @@ namespace
             return !Windows::WindowLandIsPaintMode();
         }
 
-        // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24):
-        // paint mode. When the user has the paint-landscape button
-        // pressed, cursor.click dispatches SurfaceSetStyleAction over
-        // the cursor's tile (mirrors mouse onToolDown's
-        // !_landToolBlocked + gMapSelectFlags::enable branch). Outside
-        // paint mode the default ToolContext::onPlace returns Consumed
-        // — no-op for raise/lower mode (which uses the cursor.click-
-        // held + D-pad gesture instead).
+        // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24,
+        // mode-parity correction): cursor.click ALWAYS dispatches
+        // SurfaceSetStyleAction, regardless of mode. Mirrors the
+        // mouse path's onToolDown (Land.cpp:533-554) — the initial
+        // click paints in every mode; the mode only branches the
+        // follow-up drag behaviour:
+        //   - paint mode: onToolDrag chains more SurfaceSetStyle
+        //     dispatches (gamepad: TerrainContextImpl::onStep below
+        //     re-paints on each PAD-A-held D-pad step)
+        //   - raise/lower (and mountain): onToolDrag calls
+        //     LandToolDrag → raise/lower per mouse Y movement
+        //     (gamepad: PAD A held + D-pad up/down routes through
+        //     ToolContext::onShortcut's cursor.click-held block to
+        //     onRaise / onLower).
+        // SurfaceSetStyleAction is a no-op when neither
+        // gLandToolTerrainSurface nor gLandToolTerrainEdge is set, so
+        // calling it unconditionally costs nothing when the user
+        // hasn't picked floor / wall textures.
         Disposition onPlace() override
         {
-            if (Windows::WindowLandIsPaintMode())
-                Windows::WindowLandPaintAtCursor();
+            Windows::WindowLandPaintAtCursor();
             return Disposition::Consumed;
         }
 
