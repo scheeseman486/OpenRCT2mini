@@ -19,6 +19,7 @@
 #include <openrct2/drawing/Colour.h>
 #include <openrct2/drawing/Drawing.h>
 #include <openrct2/drawing/Rectangle.h>
+#include <openrct2-ui/interface/Dropdown.h>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2/interface/Window.h>
 #include <openrct2/interface/WindowBase.h>
@@ -429,12 +430,31 @@ namespace OpenRCT2::Ui::WidgetFocus
         if (canScrollH)
         {
             const int32_t viewW = std::max(0, wd.right - wd.left - 2);
-            const int32_t maxX = std::max(0, static_cast<int32_t>(s.contentWidth) - viewW);
-            if (rect.GetLeft() < s.contentOffsetX)
-                s.contentOffsetX = rect.GetLeft();
-            else if (rect.GetRight() > s.contentOffsetX + viewW)
-                s.contentOffsetX = rect.GetRight() - viewW;
-            s.contentOffsetX = std::clamp(s.contentOffsetX, 0, maxX);
+            // OPENRCT2MINI focus-mode-widgets-plan §3.3 / Cohort C
+            // (2026-05-25): skip H-axis adjustment when the item rect
+            // is wider than the viewport. Item rects that span the
+            // full conceptual row width (GuestList, StaffList — see
+            // GuestList::scrollFocusGetItemRect returning [0, y, 446,
+            // ...] for a ~440px viewport) trigger horizontal scroll
+            // on every vertical step because rect.GetRight() exceeds
+            // contentOffsetX + viewW. The next step starts with
+            // contentOffsetX > 0; the next row's rect has GetLeft()=0
+            // < contentOffsetX, so scroll snaps back to 0 — ping-pong
+            // on every up/down press. There's no meaningful alignment
+            // target when the row is conceptually "always" too wide;
+            // leave contentOffsetX alone. Horizontal panning is still
+            // available via drag-camera + focus-direction (the
+            // dispatchDirection drag-scroll arm).
+            const int32_t rectW = rect.GetRight() - rect.GetLeft();
+            if (rectW <= viewW)
+            {
+                const int32_t maxX = std::max(0, static_cast<int32_t>(s.contentWidth) - viewW);
+                if (rect.GetLeft() < s.contentOffsetX)
+                    s.contentOffsetX = rect.GetLeft();
+                else if (rect.GetRight() > s.contentOffsetX + viewW)
+                    s.contentOffsetX = rect.GetRight() - viewW;
+                s.contentOffsetX = std::clamp(s.contentOffsetX, 0, maxX);
+            }
         }
         if (canScrollV)
         {
@@ -603,6 +623,56 @@ namespace OpenRCT2::Ui::WidgetFocus
         gPressedWidget.widgetIndex = effective;
         window.onMouseDown(effective);
         window.onMouseUp(effective);
+
+        // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.1
+        // (2026-05-25): seed gDropdown.highlightedIndex on dropdown
+        // entry. The parent's onMouseDown opened the dropdown and
+        // (optionally) set gDropdown.defaultIndex; the dropdown's own
+        // onOpen reset highlightedIndex to -1. Without a seed,
+        // ProcessMouseOver derives highlightedIndex from the virtual
+        // cursor's position each frame — and because the dropdown
+        // opens centred on the originating widget, the virtual cursor
+        // is over some middle item, NOT the first item.
+        //
+        // Prefer the parent's defaultIndex (the >>-marked currently-
+        // selected item) when present and selectable; otherwise land
+        // on the first non-separator non-disabled item. Mark
+        // navigationSource = focus so ProcessMouseOver stops
+        // clobbering until the next real SDL_MOUSEMOTION.
+        if (openingDropdown)
+        {
+            using namespace OpenRCT2::Ui::Windows;
+            auto* windowMgr = GetWindowManager();
+            if (windowMgr != nullptr && windowMgr->FindByClass(WindowClass::dropdown) != nullptr)
+            {
+                gDropdown.navigationSource = Dropdown::NavigationSource::focus;
+                int32_t seed = -1;
+                if (gDropdown.defaultIndex >= 0
+                    && gDropdown.defaultIndex < gDropdown.numItems
+                    && !gDropdown.items[gDropdown.defaultIndex].isSeparator()
+                    && !gDropdown.items[gDropdown.defaultIndex].isDisabled())
+                {
+                    seed = gDropdown.defaultIndex;
+                }
+                else
+                {
+                    for (int32_t i = 0; i < gDropdown.numItems; i++)
+                    {
+                        if (!gDropdown.items[i].isSeparator()
+                            && !gDropdown.items[i].isDisabled())
+                        {
+                            seed = i;
+                            break;
+                        }
+                    }
+                }
+                if (seed >= 0)
+                {
+                    gDropdown.highlightedIndex = seed;
+                    windowMgr->InvalidateByClass(WindowClass::dropdown);
+                }
+            }
+        }
     }
 
     void drawFocusOutline(OpenRCT2::Drawing::RenderTarget& rt, const WindowBase& window, WidgetIndex idx)
@@ -1157,15 +1227,40 @@ namespace OpenRCT2::Ui
             return;
         if (window.classification != mgr.getFocusedWindowClass())
             return;
-        // OPENRCT2MINI focus-mode-plan §F.10: dropdowns suppress the
-        // yellow ring entirely. The dropdown is a single 1×1 widget
-        // (placeholder background); drawing the outline around it
-        // would paint a thin yellow rectangle over the whole list
-        // box, which is visually noisy and useless. The dropdown's
-        // own per-item highlight (item-background darken, see
-        // Dropdown.cpp onDraw) is the navigation cue.
+        // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.2
+        // (2026-05-25): draw the focus ring around the currently
+        // highlighted dropdown item instead of around the whole
+        // dropdown box. The dropdown is a single 1×1 placeholder
+        // widget — drawing the standard widget outline against it
+        // would paint a thin yellow rectangle around the entire
+        // list box (the original §F.10 rationale for skipping the
+        // ring on dropdowns). The per-item highlight (background
+        // darken) draws first via the dropdown's own onDraw; the
+        // yellow ring layered on top of the highlighted item gives
+        // the same visual cue as every other focused widget.
+        //
+        // ProcessMouseOver may have updated highlightedIndex
+        // between frames; we always paint around the current value,
+        // which matches what the user sees in the underlying
+        // background-darken anyway.
         if (window.classification == WindowClass::dropdown)
+        {
+            const auto& dd = OpenRCT2::Ui::Windows::gDropdown;
+            if (dd.highlightedIndex >= 0 && dd.highlightedIndex < dd.numItems)
+            {
+                const auto rect = OpenRCT2::Ui::Windows::WindowDropdownGetItemRect(
+                    dd.highlightedIndex);
+                if (rect.GetLeft() < rect.GetRight() && rect.GetTop() < rect.GetBottom())
+                {
+                    OpenRCT2::Drawing::Rectangle::fillInset(
+                        rt, rect, ColourWithFlags{ OpenRCT2::Drawing::Colour::brightYellow },
+                        OpenRCT2::Drawing::Rectangle::BorderStyle::outset,
+                        OpenRCT2::Drawing::Rectangle::FillBrightness::light,
+                        OpenRCT2::Drawing::Rectangle::FillMode::none);
+                }
+            }
             return;
+        }
         // OPENRCT2MINI list-focus-plan §2.4: list-item ring. When the
         // focused widget is a list-mode scroll widget AND a specific
         // item is selected, draw the ring around that item's on-screen

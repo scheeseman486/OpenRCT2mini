@@ -27,6 +27,14 @@ namespace OpenRCT2
     class Formatter;
 } // namespace OpenRCT2
 
+// OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.3 (2026-05-25):
+// forward-declare WidgetFocus::Direction so the public dropdown helper
+// can take it as a parameter without dragging in the full WidgetFocus.h.
+namespace OpenRCT2::Ui::WidgetFocus
+{
+    enum class Direction : uint8_t;
+}
+
 namespace OpenRCT2::Dropdown
 {
     struct Item;
@@ -89,6 +97,25 @@ namespace OpenRCT2::Ui::Windows
     // (the path real mouse clicks use to close + dispatch).
     void WindowDropdownMoveHighlight(int32_t direction);
     void WindowDropdownSelectIndex(int32_t index);
+
+    // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.3
+    // (2026-05-25): 2D directional navigation. Honours
+    // gDropdown.numColumns / numRows / listVertically so D-pad in
+    // grid-layout dropdowns (Change Base Land Style, Footpath Style,
+    // colour pickers) walks rows + columns instead of collapsing to
+    // ±1 linear steps. Skips separators and disabled items in the
+    // requested direction; wraps within-column on top/bottom and
+    // within-row on left/right.
+    void WindowDropdownMoveHighlightDir(WidgetFocus::Direction direction);
+
+    // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.2
+    // (2026-05-25): return the on-screen ScreenRect of item `i` in
+    // the currently-open dropdown, or an empty rect if no dropdown
+    // exists or `i` is out of range. Used by the focus-ring drawer
+    // to paint a yellow outline around the highlighted item instead
+    // of around the whole dropdown box (which used to suppress the
+    // ring entirely per focus-mode-plan §F.10).
+    ScreenRect WindowDropdownGetItemRect(int32_t i);
 
     void WindowDropdownShowColour(
         WindowBase* w, Widget* widget, ColourWithFlags dropdownColour, Drawing::Colour selectedColour,
@@ -256,6 +283,22 @@ namespace OpenRCT2::Dropdown
         int32_t highlightedIndex{};
         int32_t defaultIndex{};
         NavigationSource navigationSource{ NavigationSource::cursor };
+
+        // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.2+A.3
+        // (2026-05-25): mirror the dropdown window's grid-layout
+        // fields here so focus-mode helpers (per-item ring draw,
+        // 2D directional walker) can compute item rects and cell
+        // moves without downcasting into DropdownWindow's private
+        // members. Written by setTextItems / setImageItems /
+        // setCustomItems alongside the window's own private
+        // NumColumns/NumRows/etc. — single source of truth lives
+        // in the window's setup helpers; gDropdown is the cheap
+        // read-only mirror for external callers.
+        int32_t numColumns{ 1 };
+        int32_t numRows{ 1 };
+        int32_t itemWidth{};
+        int32_t itemHeight{};
+        bool listVertically{ true };
 
         std::optional<CellDrawFunction> cellDrawFunction;
     };

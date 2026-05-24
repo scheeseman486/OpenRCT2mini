@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <bitset>
 #include <iterator>
+#include <openrct2-ui/input/WidgetFocus.h>
 #include <openrct2-ui/interface/Dropdown.h>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2/Context.h>
@@ -267,6 +268,17 @@ namespace OpenRCT2::Ui::Windows
             if (colour.flags.has(ColourFlag::translucent))
                 flags |= WindowFlag::transparent;
             colours[0] = colour;
+
+            // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.2+A.3
+            // (2026-05-25): mirror the just-computed grid layout into
+            // gDropdown so focus-mode helpers (per-item ring draw, 2D
+            // walker) can read it without downcasting into this
+            // window's private members.
+            gDropdown.numColumns = NumColumns;
+            gDropdown.numRows = NumRows;
+            gDropdown.itemWidth = ItemWidth;
+            gDropdown.itemHeight = ItemHeight;
+            gDropdown.listVertically = ListVertically;
         }
 
         void setImageItems(
@@ -300,6 +312,15 @@ namespace OpenRCT2::Ui::Windows
             if (colour.flags.has(ColourFlag::translucent))
                 flags |= WindowFlag::transparent;
             colours[0] = colour;
+
+            // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.2+A.3
+            // (2026-05-25): mirror grid layout into gDropdown (see
+            // setTextItems for rationale).
+            gDropdown.numColumns = NumColumns;
+            gDropdown.numRows = NumRows;
+            gDropdown.itemWidth = ItemWidth;
+            gDropdown.itemHeight = ItemHeight;
+            gDropdown.listVertically = ListVertically;
         }
 
         int32_t GetIndexFromPoint(const ScreenCoordsXY& loc)
@@ -548,6 +569,154 @@ namespace OpenRCT2::Ui::Windows
             }
         }
         // No selectable items — leave highlightedIndex untouched.
+    }
+
+    // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.2 (2026-05-25):
+    // return the on-screen ScreenRect of the item at index `i`. Used by
+    // the focus-ring drawer (WidgetFocus::drawFocusOutlineIfActive) to
+    // paint a yellow outline around the highlighted item — replacing
+    // the unconditional early-return that suppressed the ring across
+    // the entire dropdown window.
+    //
+    // Reuses the cell-layout maths from DropdownWindow::onDraw at line
+    // 193: cellCoords are derived from i + the grid layout in gDropdown,
+    // then screenCoords = windowPos + 2-pixel border + cell offset. The
+    // returned rect spans one item cell (itemWidth × itemHeight).
+    ScreenRect WindowDropdownGetItemRect(int32_t i)
+    {
+        if (i < 0 || i >= gDropdown.numItems)
+            return ScreenRect{};
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return ScreenRect{};
+        auto* w = windowMgr->FindByClass(WindowClass::dropdown);
+        if (w == nullptr)
+            return ScreenRect{};
+        const int32_t cols = std::max(1, gDropdown.numColumns);
+        const int32_t rows = std::max(1, gDropdown.numRows);
+        ScreenCoordsXY cellCoords;
+        if (gDropdown.listVertically)
+            cellCoords = { i / rows, i % rows };
+        else
+            cellCoords = { i % cols, i / cols };
+        const ScreenCoordsXY topLeft = w->windowPos
+            + ScreenCoordsXY{ 2 + cellCoords.x * gDropdown.itemWidth,
+                              2 + cellCoords.y * gDropdown.itemHeight };
+        return ScreenRect{
+            topLeft,
+            { topLeft.x + gDropdown.itemWidth - 1, topLeft.y + gDropdown.itemHeight - 1 },
+        };
+    }
+
+    // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.3 (2026-05-25):
+    // 2D directional navigation for grid-layout dropdowns. Walks the
+    // grid honouring gDropdown.numColumns / numRows / listVertically.
+    // Skips disabled items and separators by stepping in the same
+    // direction until a selectable item is found OR the grid bound is
+    // hit, then wraps within-column (for up/down) or within-row (for
+    // left/right). The linear WindowDropdownMoveHighlight remains as
+    // the back-compat ±1 caller.
+    void WindowDropdownMoveHighlightDir(WidgetFocus::Direction direction)
+    {
+        const int32_t n = gDropdown.numItems;
+        if (n <= 0)
+            return;
+        const int32_t cols = std::max(1, gDropdown.numColumns);
+        const int32_t rows = std::max(1, gDropdown.numRows);
+        // Single column / single row degenerates to the linear walker.
+        if (cols == 1 || rows == 1)
+        {
+            const int32_t delta = (direction == WidgetFocus::Direction::up
+                                   || direction == WidgetFocus::Direction::left)
+                ? -1 : +1;
+            WindowDropdownMoveHighlight(delta);
+            return;
+        }
+
+        gDropdown.navigationSource = Dropdown::NavigationSource::focus;
+
+        // Convert linear index → (col, row) per the layout convention.
+        const auto itemToCell = [&](int32_t idx) -> std::pair<int32_t, int32_t> {
+            if (gDropdown.listVertically)
+                return { idx / rows, idx % rows };
+            else
+                return { idx % cols, idx / cols };
+        };
+        const auto cellToItem = [&](int32_t col, int32_t row) -> int32_t {
+            if (gDropdown.listVertically)
+                return col * rows + row;
+            else
+                return row * cols + col;
+        };
+
+        int32_t curCol, curRow;
+        if (gDropdown.highlightedIndex < 0 || gDropdown.highlightedIndex >= n)
+        {
+            // First press in this dropdown — pick a starting cell based
+            // on the entry direction so e.g. "up" lands on the bottom
+            // row, matching the linear walker's wrap semantics.
+            switch (direction)
+            {
+                case WidgetFocus::Direction::up:
+                    curCol = 0;
+                    curRow = rows; // step will -1 below into bottom row
+                    break;
+                case WidgetFocus::Direction::down:
+                    curCol = 0;
+                    curRow = -1; // step will +1 below into top row
+                    break;
+                case WidgetFocus::Direction::left:
+                    curCol = cols;
+                    curRow = 0;
+                    break;
+                case WidgetFocus::Direction::right:
+                    curCol = -1;
+                    curRow = 0;
+                    break;
+            }
+        }
+        else
+        {
+            std::tie(curCol, curRow) = itemToCell(gDropdown.highlightedIndex);
+        }
+
+        // Step once, then keep stepping past any separator/disabled
+        // landing. Cap the loop at n iterations so a fully-disabled
+        // grid can't infinite-loop us.
+        int32_t targetCol = curCol;
+        int32_t targetRow = curRow;
+        for (int32_t steps = 0; steps < n; steps++)
+        {
+            switch (direction)
+            {
+                case WidgetFocus::Direction::up:
+                    targetRow = ((targetRow - 1) % rows + rows) % rows;
+                    break;
+                case WidgetFocus::Direction::down:
+                    targetRow = ((targetRow + 1) % rows + rows) % rows;
+                    break;
+                case WidgetFocus::Direction::left:
+                    targetCol = ((targetCol - 1) % cols + cols) % cols;
+                    break;
+                case WidgetFocus::Direction::right:
+                    targetCol = ((targetCol + 1) % cols + cols) % cols;
+                    break;
+            }
+            const int32_t targetIdx = cellToItem(targetCol, targetRow);
+            // Out-of-range cells (last column with fewer rows, or a
+            // partial trailing row) — skip past by stepping again.
+            if (targetIdx < 0 || targetIdx >= n)
+                continue;
+            const auto& item = gDropdown.items[targetIdx];
+            if (item.isSeparator() || item.isDisabled())
+                continue;
+            gDropdown.highlightedIndex = targetIdx;
+            auto* windowMgr = GetWindowManager();
+            if (windowMgr != nullptr)
+                windowMgr->InvalidateByClass(WindowClass::dropdown);
+            return;
+        }
+        // No selectable item reachable — leave highlightedIndex alone.
     }
 
     // OPENRCT2MINI focus-mode-plan §F.10: commit a dropdown selection

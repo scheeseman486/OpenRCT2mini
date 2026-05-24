@@ -869,18 +869,19 @@ namespace
                 const auto dir = directionForShortcut(id);
                 if (dir.has_value())
                 {
-                    // Up/Left → step back, Down/Right → step
-                    // forward. The dropdown's NumColumns/NumRows is
-                    // private to the window object so we can't map
-                    // left/right precisely to a column delta — pick
-                    // the simpler "all four directions are ±1"
-                    // semantics until per-direction column delta is
-                    // exposed. Matches how most console-style
-                    // dropdown navigation works anyway.
-                    const int direction = (*dir == OpenRCT2::Ui::WidgetFocus::Direction::up
-                                           || *dir == OpenRCT2::Ui::WidgetFocus::Direction::left)
-                        ? -1 : +1;
-                    OpenRCT2::Ui::Windows::WindowDropdownMoveHighlight(direction);
+                    // OPENRCT2MINI focus-mode-widgets-plan §3.1 /
+                    // Cohort A.3 (2026-05-25): 2D directional walk.
+                    // WindowDropdownMoveHighlightDir honours the
+                    // dropdown's NumColumns/NumRows/ListVertically
+                    // (mirrored to gDropdown by setTextItems /
+                    // setImageItems) so up/down moves between rows
+                    // and left/right within a row on grid dropdowns
+                    // (Change Base Land Style, Footpath Style). For
+                    // single-column / single-row dropdowns the
+                    // helper degenerates to the legacy linear ±1
+                    // walker, preserving existing behaviour for the
+                    // Options / About / right-click menus.
+                    OpenRCT2::Ui::Windows::WindowDropdownMoveHighlightDir(*dir);
                     return Disposition::Consumed;
                 }
                 if (id == ShortcutId::kCursorClick)
@@ -2392,6 +2393,39 @@ void InputManager::setFocus(WindowClass cls, OpenRCT2::WidgetIndex widget)
                 windowMgr->InvalidateByClass(prevCls);
             if (cls != WindowClass::null)
                 windowMgr->InvalidateByClass(cls);
+        }
+    }
+
+    // OPENRCT2MINI focus-mode-widgets-plan §3.2 / Cohort B (2026-05-25):
+    // when focus lands on a list-mode scroll widget AND no scroll item
+    // is seeded yet, default to item 0 so the window's row-highlight
+    // tracks the focus ring from the first frame. Without this, single-
+    // focusable-widget windows like Staff and Scenario Select show the
+    // focus ring around the bare scroll widget but no row-highlight
+    // until the user makes a directional press — and for Scenario
+    // Select that breaks the right-hand preview pane because the
+    // preview is gated on the hovered scenario.
+    //
+    // The "first directional press" path in dispatchDirection seeds the
+    // item via spatial nearestScrollItemTo — that still works for
+    // cursor → focus mode transitions where refPoint is meaningful.
+    // This seed-on-entry path covers the case where focus arrives via
+    // cycleFocusedWindow / snapFocusToTopmostFocusable / enterFocusMode /
+    // restoreFocus, where no directional press has fired.
+    //
+    // Item 0 is the deterministic top-of-list landing. List-item memory
+    // across visits is a separate (larger) feature — see
+    // focus-mode-widgets-plan §5 E3.
+    if (focusChanged && cls != WindowClass::null && widget != OpenRCT2::kWidgetIndexNull
+        && _focusedScrollItem < 0)
+    {
+        if (auto* w = getFocusedWindow();
+            w != nullptr && static_cast<size_t>(widget) < w->widgets.size()
+            && WidgetFocus::isListModeScroll(*w, widget))
+        {
+            _focusedScrollItem = 0;
+            WidgetFocus::ensureScrollItemVisible(*w, widget, 0);
+            restoreFocusedListHover();
         }
     }
 }
