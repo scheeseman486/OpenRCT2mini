@@ -903,4 +903,40 @@ namespace OpenRCT2::Ui::Windows
             gInputFlags.set(InputFlag::allowRightMouseRemoval);
         }
     }
+
+    // OPENRCT2MINI grid-cursor-plan §11.2: gamepad entry points for the
+    // Land tool's raise/lower verbs. Mirrors LandWindow::SelectionRaiseLand
+    // / SelectionLowerLand (this file ~line 355/384) which the mouse path
+    // calls — same game-action shape, just dispatched directly without
+    // needing the LandWindow instance.
+    //
+    // The grid cursor sets `gMapSelectPositionA/B` to the cursor's tile
+    // and `gMapSelectType` to the chosen sub-tile orientation (corner /
+    // edge / full) via WriteGridCursorSelection before this fires.
+    // LandRaiseAction reads those globals so we just dispatch.
+    //
+    // Centre coord = (A + B) / 2 + 16, matching the mouse helpers. For a
+    // single-tile selection A == B == tile world coords, so centre =
+    // tile + 16 (mid-tile point).
+    void WindowLandRaiseAtCursor()
+    {
+        const int32_t centreX = (gMapSelectPositionA.x + gMapSelectPositionB.x) / 2 + 16;
+        const int32_t centreY = (gMapSelectPositionA.y + gMapSelectPositionB.y) / 2 + 16;
+        auto action = GameActions::LandRaiseAction(
+            { centreX, centreY },
+            { gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y },
+            gMapSelectType);
+        GameActions::Execute(&action, getGameState());
+    }
+
+    void WindowLandLowerAtCursor()
+    {
+        const int32_t centreX = (gMapSelectPositionA.x + gMapSelectPositionB.x) / 2 + 16;
+        const int32_t centreY = (gMapSelectPositionA.y + gMapSelectPositionB.y) / 2 + 16;
+        auto action = GameActions::LandLowerAction(
+            { centreX, centreY },
+            { gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y },
+            gMapSelectType);
+        GameActions::Execute(&action, getGameState());
+    }
 } // namespace OpenRCT2::Ui::Windows

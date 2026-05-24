@@ -160,9 +160,6 @@ namespace OpenRCT2::Ui::Windows
     void WindowFootpathPlaceAtTile(const TileCoordsXY& tile, int32_t baseZ);
     // Adjust the placement Z by ±step (±1 = ±kPathHeightStep).
     void WindowFootpathAdjustPlacementZ(int32_t step);
-    // True when the Footpath window's current mode targets path
-    // railings (per-edge); false for the per-tile surface modes.
-    bool WindowFootpathIsRailingsMode();
     // Set / clear the provisional ("ghost") footpath at a tile. The
     // grid cursor calls these from onActivate / onStep / onDeactivate
     // so the ghost tile renders alongside the highlight (mirrors the
@@ -293,6 +290,12 @@ namespace OpenRCT2::Ui::Windows
     // Land
     WindowBase* LandOpen();
     void ToggleLandWindow();
+    // OPENRCT2MINI grid-cursor-plan §11.2: gamepad raise/lower for the
+    // Land tool. Reads gMapSelectPositionA/B and gMapSelectType (set by
+    // the grid cursor's WriteGridCursorSelection); dispatches the
+    // canonical LandRaise/LandLower game action.
+    void WindowLandRaiseAtCursor();
+    void WindowLandLowerAtCursor();
 
     // LandRights
     WindowBase* LandRightsOpen();

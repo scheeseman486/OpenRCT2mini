@@ -18,6 +18,8 @@
 #include "../UiContext.h"
 #include "../interface/ViewportInteraction.h"
 #include "../windows/Windows.h"
+#include "ShortcutIds.h"
+#include "ShortcutManager.h"
 #include "WidgetFocus.h"
 
 #include <openrct2/Context.h>
@@ -51,6 +53,35 @@ namespace OpenRCT2::Ui
     bool isShiftModifierHeldInTool()
     {
         return GetInputManager().isModifierKeyPressed(ModifierKey::shift);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1 (2026-05-24):
+    // precision modifier query. Unlike kInterfaceShiftModifier (which
+    // piggy-backs on ModifierKey::shift), kCursorPrecisionModifier is a
+    // standalone held-only shortcut. We query its held state via the
+    // ShortcutManager's getState() the same way kCursorFastModifier is
+    // queried in UiContext::ProcessWorldCursor.
+    bool isPrecisionModifierHeldInTool()
+    {
+        auto& sm = GetShortcutManager();
+        if (auto* shortcut = sm.getShortcut(ShortcutId::kCursorPrecisionModifier))
+        {
+            return GetInputManager().getState(*shortcut);
+        }
+        return false;
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.2 (2026-05-24): cursor.click
+    // held-state query. Same shape as isPrecisionModifierHeldInTool,
+    // just polling kCursorClick (the verb that PAD A maps to by default).
+    bool isCursorClickHeldInTool()
+    {
+        auto& sm = GetShortcutManager();
+        if (auto* shortcut = sm.getShortcut(ShortcutId::kCursorClick))
+        {
+            return GetInputManager().getState(*shortcut);
+        }
+        return false;
     }
 
     // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): dismiss an
@@ -800,8 +831,283 @@ namespace OpenRCT2::Ui
         return Disposition::Consumed;
     }
 
+    // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1 (2026-05-24):
+    // base implementation of the precision-modifier D-pad picker. Looks
+    // up the chosen MapSelectType per the tool's precisionSubset() and
+    // the D-pad direction, writes it to gridCursor()'s orientation, and
+    // re-emits the selection so the surface paint hook reflects the
+    // change immediately. SubsetType::none → no-op (subset doesn't
+    // care about sub-tile). SubsetType::quadrants → no-op for now
+    // (requires diagonal D-pad which the compass-only ship defers per
+    // §3 banner; the user-spec answer 3 says quadrants are picked via
+    // up+left / up+right / down+left / down+right diagonals — when the
+    // diagonal mode is enabled the dpad value passed here will reflect
+    // a diagonal direction and we can wire the quadrant lookup).
+    // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1 (2026-05-24):
+    // sample held state of all four kFocus* directions. Used by
+    // onPrecisionDpad to detect diagonal chord inputs (e.g. up+right
+    // for picking the NE edge / quadrant — per user 2026-05-24 spec
+    // answer 3 "quadrants are up+left/up+right/down+left/down+right").
+    // Returns the bitmask: bit 0 = up, bit 1 = right, bit 2 = down,
+    // bit 3 = left.
+    static uint8_t sampleFocusDpadHeldMask()
+    {
+        auto& sm = GetShortcutManager();
+        auto& im = GetInputManager();
+        uint8_t mask = 0;
+        if (auto* s = sm.getShortcut(ShortcutId::kFocusUp); s != nullptr && im.getState(*s))
+            mask |= 0x1;
+        if (auto* s = sm.getShortcut(ShortcutId::kFocusRight); s != nullptr && im.getState(*s))
+            mask |= 0x2;
+        if (auto* s = sm.getShortcut(ShortcutId::kFocusDown); s != nullptr && im.getState(*s))
+            mask |= 0x4;
+        if (auto* s = sm.getShortcut(ShortcutId::kFocusLeft); s != nullptr && im.getState(*s))
+            mask |= 0x8;
+        return mask;
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1 (2026-05-24):
+    // map a 4-bit dpad-held mask to a 0..3 diagonal index if exactly
+    // two adjacent cardinals are held. Returns -1 (sentinel via
+    // optional) otherwise.
+    //   diag 0 = up+right  (visually upper-right)
+    //   diag 1 = right+down (visually lower-right)
+    //   diag 2 = down+left  (visually lower-left)
+    //   diag 3 = left+up    (visually upper-left)
+    static std::optional<uint8_t> dpadMaskToDiagonal(uint8_t mask)
+    {
+        switch (mask)
+        {
+            case 0x3: return 0; // up+right
+            case 0x6: return 1; // right+down
+            case 0xC: return 2; // down+left
+            case 0x9: return 3; // left+up
+            default:  return std::nullopt;
+        }
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1
+    // (rewritten 2026-05-24): screen-direction → sub-tile position.
+    //
+    // Approach: mirror stepForDirection's structure — a fixed table of
+    // base WORLD offsets for rotation 0, then rotate by (4 - r) & 3
+    // using CoordsXY::Rotate. Same rotation-handling pattern as the
+    // already-correct cursor stepping; no enum arithmetic, no paint-
+    // code reverse-engineering.
+    //
+    // The picker works by sampling a small world offset from the tile
+    // centre in the direction the user pressed (screen-relative), then
+    // reading the mod_x/mod_y of the resulting world coord to derive
+    // a sub-tile index. The mod_x/mod_y logic mirrors the canonical
+    // helpers ScreenPosToMapPos / ScreenGetMapXYSide (Viewport.cpp) —
+    // duplicated here as 15 lines so we don't have to round-trip
+    // through screen coords just to invoke that math.
+    //
+    // Screen vertex offsets at rotation 0 — these are the DIAGONAL
+    // world directions (NW/NE/SE/SW), because in iso projection the
+    // diamond's four vertices (visible TOP/RIGHT/BOTTOM/LEFT) lie at
+    // the four world-diagonal corners of the tile (NW = visible TOP,
+    // etc.). At rotation 0, screen-up points to the NW world corner
+    // of the tile diamond (matches stepForDirection's kDLeft[0]
+    // comment "top corner of the diamond").
+    //
+    // dpad d (0=up, 1=right, 2=down, 3=left) → kVertex[d]:
+    //   up    → NW = (-1, -1)
+    //   right → NE = (-1, +1)
+    //   down  → SE = (+1, +1)
+    //   left  → SW = (+1, -1)
+    //
+    // Screen side offsets at rotation 0 — these are the CARDINAL world
+    // directions (N/E/S/W), because in iso projection the diamond's
+    // four sides (upper-right / lower-right / lower-left / upper-left)
+    // lie along the four world-cardinal sides of the tile (N world side
+    // = upper-right diamond side, per stepForDirection's kCompass
+    // comment "N at the upper-right diamond edge"). For the chord
+    // diagonals we want the visible diamond SIDE, which corresponds to
+    // a world CARDINAL direction.
+    //
+    // diag d (0=up+right, 1=right+down, 2=down+left, 3=left+up) →
+    // kSide[d]:
+    //   up+right (upper-right diamond side) → N = (-1, 0)
+    //   right+down (lower-right side)        → E = ( 0, +1)
+    //   down+left  (lower-left side)         → S = (+1, 0)
+    //   left+up    (upper-left side)         → W = ( 0, -1)
+    //
+    // Both tables are rotated by `.Rotate((4 - r) & 3)` — identical
+    // rotation transform to stepForDirection (compass/diagonal modes).
+    Disposition ToolContext::onPrecisionDpad(::Direction dpad)
+    {
+        auto* model = getCursorModel();
+        auto* grid = dynamic_cast<GridCursorModel*>(model);
+        if (grid == nullptr)
+            return Disposition::Consumed;
+
+        const auto subset = precisionSubset();
+        if (subset == SubsetType::none)
+            return Disposition::Consumed;
+
+        const uint8_t r = OpenRCT2::GetCurrentRotation() & 3;
+        const uint8_t mask = sampleFocusDpadHeldMask();
+        const auto maybeDiag = dpadMaskToDiagonal(mask);
+
+        // Decide whether this gesture is a vertex pick (single
+        // cardinal) or a side pick (diagonal chord). Drives both
+        // which offset table we use AND which MapSelectType family.
+        const bool wantSide = maybeDiag.has_value();
+
+        // Pick the base world offset (rot 0) and rotate by camera.
+        // Scaled by 8 world units so the sample point lands well
+        // inside a sub-tile quadrant (each is 16x16) — far enough
+        // from the tile centre that the mod-based discriminator
+        // picks the right quadrant, near enough to stay inside the
+        // current tile.
+        constexpr int32_t kSampleStep = 8;
+        static const ::CoordsXY kVertex[4] = {
+            { -1, -1 }, // up    → NW (top vertex)
+            { -1, +1 }, // right → NE (right vertex)
+            { +1, +1 }, // down  → SE (bottom vertex)
+            { +1, -1 }, // left  → SW (left vertex)
+        };
+        static const ::CoordsXY kSide[4] = {
+            { -1,  0 }, // up+right    → N (upper-right side)
+            {  0, +1 }, // right+down  → E (lower-right side)
+            { +1,  0 }, // down+left   → S (lower-left side)
+            {  0, -1 }, // left+up     → W (upper-left side)
+        };
+        const auto base = wantSide
+            ? kSide[*maybeDiag & 3]
+            : kVertex[static_cast<uint8_t>(dpad) & 3];
+        const auto rotated = base.Rotate((4 - r) & 3);
+        const auto offsetWorld = ::CoordsXY{ rotated.x * kSampleStep, rotated.y * kSampleStep };
+
+        // Sample point = tile centre + offset. Then use the
+        // mod_x/mod_y discriminator from ScreenPosToMapPos /
+        // ScreenGetMapXYSide (Viewport.cpp). Sample lands within the
+        // same tile, so the discriminator returns which sub-tile
+        // position the user pointed at.
+        const auto tileCentre = grid->getPosition().ToCoordsXY()
+            + ::CoordsXY{ ::kCoordsXYHalfTile, ::kCoordsXYHalfTile };
+        const auto sample = tileCentre + offsetWorld;
+        const auto mod_x = sample.x & 0x1F;
+        const auto mod_y = sample.y & 0x1F;
+
+        MapSelectType chosen = grid->getOrientation();
+        if (wantSide)
+        {
+            // ScreenGetMapXYSide convention: side index from
+            // mod-quadrant — picks the world side nearest the
+            // sample point. Maps directly to edge_d / quarter_d.
+            uint8_t side;
+            if (mod_x < mod_y)
+                side = (mod_x + mod_y < 32) ? 0 : 1;
+            else
+                side = (mod_x + mod_y < 32) ? 3 : 2;
+
+            switch (subset)
+            {
+                case SubsetType::corners: // corners-subset also accepts diagonals → edges
+                case SubsetType::edges:
+                    chosen = getMapSelectEdge(static_cast<::Direction>(side));
+                    break;
+                case SubsetType::quadrants:
+                    chosen = getMapSelectQuarter(static_cast<::Direction>(side));
+                    break;
+                default:
+                    return Disposition::Consumed;
+            }
+        }
+        else
+        {
+            // ScreenPosToMapPos convention: direction index from
+            // mod-quadrant — picks the world corner nearest the
+            // sample point. Centre region (between sub-tiles) →
+            // direction 4 = MapSelectType::full.
+            int32_t direction;
+            if (mod_x > 8 && mod_x < 24 && mod_y > 8 && mod_y < 24)
+            {
+                direction = 4;
+            }
+            else if (mod_x <= 16)
+            {
+                direction = (mod_y < 16) ? 2 : 3;
+            }
+            else
+            {
+                direction = (mod_y < 16) ? 1 : 0;
+            }
+
+            switch (subset)
+            {
+                case SubsetType::corners:
+                    chosen = (direction == 4)
+                        ? MapSelectType::full
+                        : static_cast<MapSelectType>(direction);
+                    break;
+                case SubsetType::quadrants:
+                    chosen = (direction == 4)
+                        ? MapSelectType::full
+                        : getMapSelectQuarter(static_cast<::Direction>(direction));
+                    break;
+                case SubsetType::edges:
+                    // Edges subset doesn't accept cardinals (no
+                    // sensible "nearest edge" mapping from a vertex
+                    // position) — no-op.
+                    return Disposition::Consumed;
+                default:
+                    return Disposition::Consumed;
+            }
+        }
+        grid->setOrientation(chosen);
+        WriteGridCursorSelection(grid->getPosition(), chosen);
+        return Disposition::Consumed;
+    }
+
     void ToolContext::processFrame(uint32_t /*nowMs*/)
     {
+        // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1
+        // (2026-05-24): precision-modifier press/release edge detection.
+        // Sub-tile orientation gestures live here on the base so every
+        // tool inherits.
+        //   - Press edge (false → true): clear _precisionDpadPressed
+        //     so a subsequent release with no D-pad activity is a
+        //     tap-alone reset.
+        //   - Release edge (true → false): if no dpad was pressed
+        //     during the hold, reset orientation to MapSelectType::full
+        //     and re-emit selection. If dpad WAS pressed, the
+        //     orientation set by onPrecisionDpad stays as-is — the
+        //     release "locks in" the choice. Either way clear the
+        //     _precisionDpadPressed flag for the next gesture.
+        const bool precisionNow = isPrecisionModifierHeldInTool();
+        if (precisionNow != _precisionWasHeld)
+        {
+            if (precisionNow)
+            {
+                // Press edge.
+                _precisionDpadPressed = false;
+            }
+            else
+            {
+                // Release edge.
+                if (!_precisionDpadPressed)
+                {
+                    // Tap-alone — reset to whole-tile.
+                    if (auto* model = getCursorModel(); model != nullptr)
+                    {
+                        if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                        {
+                            if (grid->getOrientation() != MapSelectType::full)
+                            {
+                                grid->setOrientation(MapSelectType::full);
+                                WriteGridCursorSelection(grid->getPosition(), MapSelectType::full);
+                            }
+                        }
+                    }
+                }
+                _precisionDpadPressed = false;
+            }
+            _precisionWasHeld = precisionNow;
+        }
+
         // §10.1 blink pump. The viewport repaints only invalidated
         // tiles, so without this the surface-paint hook's
         // `(ms / 500) & 1` gate runs at most once per WriteGridCursorSelection

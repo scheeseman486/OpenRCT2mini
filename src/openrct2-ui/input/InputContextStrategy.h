@@ -46,6 +46,28 @@ namespace OpenRCT2::Ui
     // different feature.
     bool isShiftModifierHeldInTool();
 
+    // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1 (2026-05-24):
+    // precision modifier query — true while kCursorPrecisionModifier is
+    // held. State machine lives on ToolContext base
+    // (processFrame edge detection + onShortcut intercept of kFocus*
+    // routes to onPrecisionDpad). Driven by kCursorPrecisionModifier
+    // shortcut (Shortcuts.cpp:1037; default keyboard LALT, default pad
+    // PAD BACK). Defined out-of-line in InputContextStrategy.cpp so the
+    // header doesn't pull in ShortcutManager.h.
+    bool isPrecisionModifierHeldInTool();
+
+    // OPENRCT2MINI grid-cursor-plan §11.2 (2026-05-24): cursor.click
+    // held-state query. The Land tool uses PAD A (= cursor.click)
+    // as a hold-modifier — while held + D-pad up/down, the verb dispatch
+    // routes to onRaise/onLower (terrain raise/lower) instead of stepping
+    // the cursor. Same pattern as isShiftModifierHeldInTool but using
+    // the cursor.click shortcut held state rather than ModifierKey::shift.
+    // Tools where onPlace is a no-op (Terrain, Water) get this gesture
+    // for free; tools where onPlace dispatches a real verb (Footpath)
+    // will see the initial press fire onPlace once before the hold
+    // takes effect, which is benign in practice.
+    bool isCursorClickHeldInTool();
+
     // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20): close the
     // error-popup window if one is showing. Returns true if a popup
     // existed and was closed. The popup (WindowClass::error — see
@@ -518,6 +540,22 @@ namespace OpenRCT2::Ui
         // tool start (after a tool cancel and re-arm) re-seeds.
         bool _resumeFromGridExit{ false };
 
+        // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1
+        // (2026-05-24): precision modifier state machine. Tracked here
+        // on the ToolContext base so every concrete tool inherits the
+        // gesture for free.
+        //   - _precisionWasHeld: prev-frame value of
+        //     isPrecisionModifierHeldInTool(), used to detect press /
+        //     release edges in processFrame.
+        //   - _precisionDpadPressed: set true when the user actually
+        //     pressed a D-pad direction during the current hold burst.
+        //     Release-with-true commits whatever orientation the dpad
+        //     last set on gridCursor(); release-with-false resets the
+        //     orientation to MapSelectType::full (tap-alone semantics
+        //     per the user's 2026-05-24 Q3 spec).
+        bool _precisionWasHeld{ false };
+        bool _precisionDpadPressed{ false };
+
     public:
         // Verbs — override as needed. Default returns Consumed so the
         // tool context swallows the shortcut even if the verb hasn't
@@ -591,6 +629,24 @@ namespace OpenRCT2::Ui
         // subclasses override (e.g. FootpathContextImpl returns
         // edges for railings mode).
         virtual SubsetType precisionSubset() const { return SubsetType::none; }
+
+        // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1
+        // (2026-05-24): D-pad direction while the precision modifier
+        // is held selects a sub-tile orientation (corner / edge /
+        // quadrant per the tool's precisionSubset()) instead of
+        // stepping the cursor. The base implementation looks the
+        // direction up via getMapSelectCorner / Edge / Quarter and
+        // writes the chosen MapSelectType onto gridCursor() (then
+        // re-emits the selection so the paint hook reflects it
+        // immediately). Subclasses with bespoke sub-tile semantics
+        // can override; today none need to. SubsetType::none
+        // (default) is a no-op. SubsetType::quadrants requires
+        // diagonal D-pad input which the compass-only ship doesn't
+        // expose — the helper returns Consumed but doesn't change
+        // orientation when only cardinal directions are available
+        // (see §3 banner — diagonals deferred). Defined out-of-line
+        // in InputContextStrategy.cpp.
+        virtual Disposition onPrecisionDpad(::Direction dpad);
 
         // OPENRCT2MINI grid-cursor-plan §14.4 (2026-05-20 follow-up):
         // hook fired after the popup-dismiss intercept in
@@ -770,6 +826,60 @@ namespace OpenRCT2::Ui
             // (FootpathContextImpl) pick this up for free; subclasses
             // that haven't (Scenery, LandRights, …) Consume harmlessly
             // until their Z verbs are wired.
+            // OPENRCT2MINI grid-cursor-plan §11.2 (2026-05-24, precedence
+            // amended after user feedback "holding the precision modifier
+            // cancels out cursor.click inputs"): cursor.click held + D-pad
+            // up/down → onRaise / onLower. RUNS BEFORE the precision-
+            // modifier block so that holding PAD A is the dominant
+            // gesture even when PAD BACK (precision) is also held —
+            // matches the user's mental model: "PAD A is my Land-tool
+            // raise/lower modifier; precision just happens to share the
+            // button (BACK) with dismiss, and shouldn't steal D-pad
+            // inputs from PAD A". User feedback: "we should carve out a
+            // special case (if we need to) to allow these buttons to be
+            // used together" — this is the carve-out, on the
+            // precedence side. Designed for the Land tool but applies
+            // uniformly across the tool set (Footpath's onRaise/onLower
+            // do Z-adjust, etc.).
+            if (isCursorClickHeldInTool())
+            {
+                if (id == ShortcutId::kFocusUp)
+                    return onRaise();
+                if (id == ShortcutId::kFocusDown)
+                    return onLower();
+                if (id == ShortcutId::kFocusLeft || id == ShortcutId::kFocusRight)
+                    return Disposition::Consumed;
+            }
+            // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1
+            // (2026-05-24): when kCursorPrecisionModifier is held, the
+            // D-pad picks sub-tile orientation per the tool's
+            // precisionSubset(); it does NOT step the cursor. The
+            // release-edge in processFrame commits the orientation (or
+            // resets to MapSelectType::full if no direction was
+            // pressed during the hold = tap-alone gesture). This
+            // intercept must run before the shift-modifier block so
+            // a user holding precision + shift doesn't fall through
+            // to Z-adjust. Precedence: cursor.click held (above) wins
+            // over precision modifier — PAD A + D-pad raises/lowers
+            // even if PAD BACK is also held.
+            if (isPrecisionModifierHeldInTool())
+            {
+                if (id == ShortcutId::kFocusUp || id == ShortcutId::kFocusRight
+                    || id == ShortcutId::kFocusDown || id == ShortcutId::kFocusLeft)
+                {
+                    ::Direction d{};
+                    if (id == ShortcutId::kFocusUp)
+                        d = static_cast<::Direction>(0);
+                    else if (id == ShortcutId::kFocusRight)
+                        d = static_cast<::Direction>(1);
+                    else if (id == ShortcutId::kFocusDown)
+                        d = static_cast<::Direction>(2);
+                    else
+                        d = static_cast<::Direction>(3);
+                    _precisionDpadPressed = true;
+                    return onPrecisionDpad(d);
+                }
+            }
             if (isShiftModifierHeldInTool())
             {
                 if (id == ShortcutId::kFocusUp)

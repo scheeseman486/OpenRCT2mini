@@ -1400,13 +1400,14 @@ namespace
             }
         }
 
-        SubsetType precisionSubset() const override
-        {
-            // §11.1 / §11.2: footpath surface is per-tile (no sub-tile
-            // precision); railings is per-edge (edges subset). Detect
-            // mode from FootpathWindow state via the bridge helper.
-            return Windows::WindowFootpathIsRailingsMode() ? SubsetType::edges : SubsetType::none;
-        }
+        // §11.1: Footpath placement is whole-tile. Earlier revisions
+        // had a `precisionSubset() → edges in railings mode` override
+        // that called WindowFootpathIsRailingsMode() — but that helper
+        // was misleadingly named (actually returned true only in
+        // bridgeOrTunnel mode), and edge picking doesn't apply to
+        // bridge construction either. Removed 2026-05-24; base
+        // default SubsetType::none means the precision modifier is a
+        // no-op for Footpath, which matches the tool's actual semantics.
 
     private:
         // OPENRCT2MINI grid-cursor-plan §16 — OnLand mode bodies
@@ -1788,46 +1789,80 @@ namespace
         bool _zAdjustedDuringHold = false;
     };
 
-    // OPENRCT2MINI input-plan Track 3 / Phase 3.F: edge-tile tool
-    // base. Terrain edits tile corners (NE/NW/SE/SW); water edits
-    // tile edges (N/S/E/W). Both share the same model — D-pad cycles
-    // through sub-tile orientations within a tile before advancing to
-    // the neighbour tile. EdgeCursorModel is a stub at Phase 3.F; the
-    // body lands when the verbs need it to compute the affected tile
-    // corner / edge.
-    class EdgeToolBase : public ToolContext
-    {
-        EdgeCursorModel _edge;
-
-    public:
-        ICursorModel* getCursorModel() override
-        {
-            return &_edge;
-        }
-    };
-
-    class TerrainContextImpl final : public EdgeToolBase
+    // OPENRCT2MINI grid-cursor-plan §11.2 / §11.3 (2026-05-24 revision):
+    // earlier sketch had Terrain / Water sharing an EdgeToolBase +
+    // EdgeCursorModel (default orientation corner0 / edge0). Shipped
+    // design (per user 2026-05-24 Q3 + §11.2/§11.3 rewrite) uses the base
+    // GridCursorModel for both:
+    //   - Terrain selects a whole-tile by default; precision modifier
+    //     picks one of the four corners via SubsetType::corners.
+    //   - Water is whole-tile only; no sub-tile precision (vanilla has
+    //     no partial-edge water). Default orientation MapSelectType::full.
+    // EdgeCursorModel remains in the header for a future Wall / Banner
+    // tool that needs per-edge primitives, but no production context
+    // uses it today.
+    class TerrainContextImpl final : public ToolContext
     {
     public:
         InputContext getId() const override
         {
             return InputContext::toolTerrain;
         }
-        // Verb wiring deferred — see Phase 3.E follow-up notes in the
-        // plan. onRaise / onLower will dispatch LandRaiseLandAction /
-        // LandLowerLandAction at the EdgeCursor's focused corner.
+        // §11.2 (re-revised 2026-05-24 after user empirical clarification):
+        // precision modifier on Land tool picks BOTH diamond vertices
+        // (cardinal D-pad → corner sprite, matches mouse Land tool's
+        // corner highlight) AND diamond sides (diagonal D-pad chord →
+        // edge sprite, matches the side-of-diamond highlight). The
+        // `corners` subset handles both halves of that pair — see
+        // ToolContext::onPrecisionDpad. Same visual decoration as the
+        // mouse-driven Land tool.
+        //
+        // Default orientation (GridCursorModel ctor) is
+        // MapSelectType::full — whole-tile, matching the mouse path's
+        // small-size default.
+        SubsetType precisionSubset() const override
+        {
+            return SubsetType::corners;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.2 (2026-05-24): onRaise /
+        // onLower dispatch the canonical LandRaise / LandLower game
+        // actions at the cursor's tile + selected sub-tile orientation
+        // (gMapSelectType, set by the precision picker or default
+        // MapSelectType::full). Triggered by:
+        //   - cursor.click held + D-pad up/down (PAD A as modifier — see
+        //     ToolContext::onShortcut's cursor.click-held block)
+        //   - shift modifier + D-pad up/down (inherited Z-adjust gesture,
+        //     same dispatch path — works on Land too even though there's
+        //     no Z preview)
+        // Either way the user gets a single raise/lower step. The
+        // existing mouse Land tool's logic (LandWindow::SelectionRaise/
+        // LowerLand) takes the same path; we just bypass the LandWindow
+        // instance method by calling Windows::WindowLandRaiseAtCursor.
+        Disposition onRaise() override
+        {
+            Windows::WindowLandRaiseAtCursor();
+            return Disposition::Consumed;
+        }
+        Disposition onLower() override
+        {
+            Windows::WindowLandLowerAtCursor();
+            return Disposition::Consumed;
+        }
     };
 
-    class WaterContextImpl final : public EdgeToolBase
+    class WaterContextImpl final : public ToolContext
     {
     public:
         InputContext getId() const override
         {
             return InputContext::toolWater;
         }
-        // Verb wiring deferred — onRaise / onLower will dispatch the
-        // canonical WaterRaise / WaterLower actions at the EdgeCursor's
-        // focused edge.
+        // §11.3: water is whole-tile only; precisionSubset() inherits
+        // the base default SubsetType::none so the precision modifier
+        // is a no-op. Verb wiring deferred (Phase 3.G) — onRaise /
+        // onLower will dispatch the canonical WaterRaise /
+        // WaterLower actions at the cursor's tile.
     };
 
     // OPENRCT2MINI input-plan Track 3 / Phase 3.G: remaining tool
@@ -1845,9 +1880,17 @@ namespace
         {
             return InputContext::toolScenery;
         }
-        // Scenery's quirk: non-full-tile scenery sits on a tile
-        // quadrant (NE / NW / SE / SW). The verb-wiring follow-up adds
-        // a sub-quadrant rotation on long-press or shoulder buttons.
+        // §11.4: small scenery sits on a tile quadrant (NE / NW / SE /
+        // SW). Precision modifier + diagonal D-pad chord picks the
+        // quadrant (per user 2026-05-24 spec answer 3: "quadrants are
+        // up+left/up+right/down+left/down+right"). onPlace verb wiring
+        // is Phase 3.G follow-up; subset declaration here makes the
+        // selection ring respond to the diagonal chord even before
+        // the verb itself dispatches the SmallSceneryPlace game-action.
+        SubsetType precisionSubset() const override
+        {
+            return SubsetType::quadrants;
+        }
     };
 
     class LandRightsContextImpl final : public ToolContext

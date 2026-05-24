@@ -2959,15 +2959,14 @@ namespace OpenRCT2::Ui::Windows
             fw->KeyboardShortcutShortcutSlopeDown();
     }
 
-    bool WindowFootpathIsRailingsMode()
-    {
-        auto* windowMgr = GetWindowManager();
-        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
-        if (w == nullptr)
-            return false;
-        const auto* fw = static_cast<const FootpathWindow*>(w);
-        return fw->IsBridgeOrTunnelMode();
-    }
+    // OPENRCT2MINI grid-cursor-plan 2026-05-24: removed
+    // WindowFootpathIsRailingsMode() — it was misleadingly named
+    // (returned true only when in bridgeOrTunnel mode, nothing to do
+    // with railings) and had a single consumer in FootpathContextImpl::
+    // precisionSubset() that itself shipped a confused mapping
+    // (precision-modifier sub-tile picking doesn't apply to footpath
+    // placement or bridge construction). Both removed; Footpath's
+    // precisionSubset() now inherits the base default SubsetType::none.
 
     /**
      *
