@@ -2117,6 +2117,17 @@ namespace
             return water - land;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.5 follow-up (2026-05-24,
+        // user request): drag-buy chain — holding PAD A while
+        // D-padding continues to dispatch the buy/set action at each
+        // new tile. Mouse path already does this: onToolDrag at
+        // LandRights.cpp:580-583 simply re-fires onToolDown on every
+        // mouse-move-while-held tick. Same shape as
+        // ClearSceneryContextImpl + Land paint mode (no
+        // raise/lower verb on LandRights, so returning false keeps
+        // D-pad stepping the cursor instead of diverting to a no-op).
+        bool consumeDirectionalsWhenCursorClickHeld() const override { return false; }
+
         Disposition onPlace() override
         {
             Windows::WindowLandRightsApplyAtCursor();
@@ -2126,6 +2137,8 @@ namespace
         Disposition onStep(::Direction dpad) override
         {
             const auto result = ToolContext::onStep(dpad);
+            if (isCursorClickHeldInTool())
+                Windows::WindowLandRightsApplyAtCursor();
             Windows::WindowLandRightsRefreshCost();
             return result;
         }
