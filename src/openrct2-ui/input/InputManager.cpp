@@ -1824,13 +1824,25 @@ namespace
         // §11.2 follow-up (2026-05-24, paint mode): when the user has
         // toggled the paint-landscape mode button on, the mouse path
         // forces MapSelectType::full and ignores corner/edge selection
-        // (Land.cpp ToolUpdateLandPaint:475-478). Mirror that: report
+        // (Land.cpp ToolUpdateLandPaint:515-576). Mirror that: report
         // precisionSubset = none so the precision picker no-ops,
         // keeping the cursor in whole-tile mode where paint expects it.
-        SubsetType precisionSubset() const override
+        //
+        // §18.3 follow-up (2026-05-24): the size > 1 gate is hoisted
+        // to base ToolContext::precisionSubset() — we only handle the
+        // paint-mode gate here. The base returns SubsetType::none
+        // whenever usesGLandToolSize() is true AND gLandToolSize > 1.
+        SubsetType precisionSubsetForTool() const override
         {
             return Windows::WindowLandIsPaintMode() ? SubsetType::none : SubsetType::corners;
         }
+
+        // §18.4.e (2026-05-24): opt in to the multi-cell brush via
+        // gLandToolSize. Combined with the base ToolContext::precision-
+        // Subset() wrapper, holding precision + D-pad at size > 1
+        // becomes a no-op; grid cursor writes an NxN rect instead of
+        // A == B == single tile.
+        bool usesGLandToolSize() const override { return true; }
 
         // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24,
         // paint-mode user feedback "shouldn't disable directional
@@ -1970,7 +1982,11 @@ namespace
         // is Phase 3.G follow-up; subset declaration here makes the
         // selection ring respond to the diagonal chord even before
         // the verb itself dispatches the SmallSceneryPlace game-action.
-        SubsetType precisionSubset() const override
+        //
+        // §18.4.e.1 (2026-05-24): subclass hook renamed
+        // precisionSubsetForTool; base ToolContext::precisionSubset()
+        // wraps it with the size > 1 gate.
+        SubsetType precisionSubsetForTool() const override
         {
             return SubsetType::quadrants;
         }

@@ -16,6 +16,7 @@
 #include "InputContextStrategy.h"
 
 #include "../UiContext.h"
+#include "../interface/LandTool.h"
 #include "../interface/ViewportInteraction.h"
 #include "../windows/Windows.h"
 #include "ShortcutIds.h"
@@ -157,6 +158,29 @@ namespace OpenRCT2::Ui
         MapInvalidateTileFull(world);
     }
 
+    // OPENRCT2MINI grid-cursor-plan §18.4.b (2026-05-24): multi-cell
+    // selection write. Same flag setup as the single-tile path; the
+    // difference is the use of the MapRange overload of
+    // setMapSelectRange (MapSelection.h:81) and MapInvalidateRegion
+    // (Map.h:146) for the brush footprint. MapSelection::invalidate's
+    // built-in prev/curr A/B diff (MapSelection.cpp:82-88) already
+    // handles the case where the previous selection was a different
+    // rect — but we invalidate the new rect explicitly anyway so the
+    // marker draws on the SAME frame as the write (matches the
+    // single-tile path's same-frame invalidate behaviour).
+    static void WriteGridCursorSelection(TileCoordsXY a, TileCoordsXY b, MapSelectType orientation)
+    {
+        const auto worldA = a.ToCoordsXY();
+        const auto worldB = b.ToCoordsXY();
+        gMapSelectFlags.unset(MapSelectFlag::enableArrow);
+        gMapSelectFlags.set(MapSelectFlag::enable);
+        gMapSelectFlags.set(MapSelectFlag::gridCursor);
+        gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
+        gMapSelectType = orientation;
+        setMapSelectRange(MapRange{ worldA, worldB });
+        MapInvalidateRegion(worldA, worldB);
+    }
+
     // OPENRCT2MINI grid-cursor-plan §6.1: margin-aware camera anchor.
     // Scroll the main window so the cursor stays inside the
     // playable rectangle (viewport minus the §6.1 margin) — but
@@ -197,6 +221,42 @@ namespace OpenRCT2::Ui
         if (!nearEdge)
             return;
         WindowScrollToLocation(*main, CoordsXYZ{ worldXY, z });
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §18.4.d (2026-05-24): rect-centre
+    // overload for multi-cell brushes. Projects the centre of the A/B
+    // rect to viewport coords (instead of the anchor tile's centre)
+    // so the camera follows the brush footprint rather than just the
+    // anchor — keeps the brush near viewport centre even at large
+    // sizes. The Z is sampled at the rect centre, which is the right
+    // anchor for the camera-follow heuristic (terrain height varies
+    // across an NxN brush, but the centre tile's elevation is what
+    // the user is targeting). Same edge-margin logic as the
+    // single-tile overload; only the projected anchor differs.
+    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY a, TileCoordsXY b)
+    {
+        auto* main = WindowGetMain();
+        if (main == nullptr || main->viewport == nullptr)
+            return;
+        const auto& vp = *main->viewport;
+        // The centre of a tile rect in world coords:
+        //   each tile is kCoordsXYStep (32) wide; centre = tileCoord*step + halfTile
+        //   centre of [a..b] tile-rect = (a + b) * step / 2 + halfTile
+        const auto worldCentre = CoordsXY{
+            ((a.x + b.x) * kCoordsXYStep) / 2 + kCoordsXYHalfTile,
+            ((a.y + b.y) * kCoordsXYStep) / 2 + kCoordsXYHalfTile,
+        };
+        const int32_t z = TileElementHeight(worldCentre);
+        const auto screen = Translate3DTo2DWithZ(vp.rotation, CoordsXYZ{ worldCentre, z });
+        const int32_t marginVp = vp.zoom.ApplyTo(DiscreteStep::kViewportMargin);
+        const int32_t left = vp.viewPos.x + marginVp;
+        const int32_t right = vp.viewPos.x + vp.ViewWidth() - marginVp;
+        const int32_t top = vp.viewPos.y + marginVp;
+        const int32_t bottom = vp.viewPos.y + vp.ViewHeight() - marginVp;
+        const bool nearEdge = screen.x < left || screen.x > right || screen.y < top || screen.y > bottom;
+        if (!nearEdge)
+            return;
+        WindowScrollToLocation(*main, CoordsXYZ{ worldCentre, z });
     }
 
     // OPENRCT2MINI grid-cursor-plan §6.1 (seed path): compute the
@@ -290,6 +350,74 @@ namespace OpenRCT2::Ui
 
     // ---- GridCursorModel ------------------------------------------------
 
+    // OPENRCT2MINI grid-cursor-plan §18.4.a (2026-05-24): brush-range
+    // math per §18.2 with NW-biased centre for even sizes. A and B are
+    // clamped INDEPENDENTLY to [1, kMaximumMapSizePractical-1], so a
+    // brush near the map edge produces an asymmetric (smaller-than-
+    // size) rect rather than walking the anchor away from the edge.
+    // The five terraform game actions all accept MapRange and tolerate
+    // smaller-than-requested ranges (verified during §18.A: action.cpp
+    // wrappers compute centre = (A+B)/2 + 16 directly from A/B).
+    std::pair<TileCoordsXY, TileCoordsXY> GridCursorModel::computeBrushRange(uint16_t size) const
+    {
+        const int32_t lo = 1;
+        const int32_t hi = kMaximumMapSizePractical - 1;
+        if (size <= 1)
+        {
+            // Fast path: single-tile rect = anchor clamped to playable
+            // range. A == B. Matches the legacy single-tile behaviour
+            // that callers see via the existing getPosition() path.
+            const int32_t x = std::clamp<int32_t>(_position.x, lo, hi);
+            const int32_t y = std::clamp<int32_t>(_position.y, lo, hi);
+            const TileCoordsXY p{ x, y };
+            return { p, p };
+        }
+        // §18.2 NW-biased centre:
+        //   halfHi = size / 2;       (1 for size 2/3, 2 for size 4/5)
+        //   halfLo = (size - 1) / 2; (0 for size 1/2, 1 for size 3/4)
+        // size 2 → A=anchor, B=anchor+(1,1)            (NW-biased)
+        // size 3 → A=anchor-(1,1), B=anchor+(1,1)      (centred)
+        // size 5 → A=anchor-(2,2), B=anchor+(2,2)      (centred)
+        const int32_t halfHi = static_cast<int32_t>(size) / 2;
+        const int32_t halfLo = (static_cast<int32_t>(size) - 1) / 2;
+        const int32_t ax = std::clamp<int32_t>(_position.x - halfLo, lo, hi);
+        const int32_t ay = std::clamp<int32_t>(_position.y - halfLo, lo, hi);
+        const int32_t bx = std::clamp<int32_t>(_position.x + halfHi, lo, hi);
+        const int32_t by = std::clamp<int32_t>(_position.y + halfHi, lo, hi);
+        return { TileCoordsXY{ ax, ay }, TileCoordsXY{ bx, by } };
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §18.4.a (2026-05-24): brush-size
+    // setter. Clamps to [1, UINT16_MAX] (no upper soft-limit — that's
+    // the tool window's job via kLandToolMaximumSize). Re-emits the
+    // selection if active so the change shows on the same frame the
+    // user adjusts size.
+    void GridCursorModel::setBrushSize(uint16_t size)
+    {
+        if (size < 1)
+            size = 1;
+        if (_brushSize == size)
+            return;
+        _brushSize = size;
+        if (_active)
+        {
+            // Re-emit the selection at the new size. Existing
+            // MapSelection::invalidate diffs the old A/B vs the new
+            // A/B and invalidates the symmetric difference, so the
+            // old brush highlight clears without us iterating tiles
+            // here.
+            if (_brushSize > 1)
+            {
+                const auto [a, b] = computeBrushRange(_brushSize);
+                WriteGridCursorSelection(a, b, _orientation);
+            }
+            else
+            {
+                WriteGridCursorSelection(_position, _orientation);
+            }
+        }
+    }
+
     TileCoordsXY GridCursorModel::step(TileCoordsXY delta)
     {
         // Map-edge clamping per §6.3: playable range is
@@ -302,11 +430,28 @@ namespace OpenRCT2::Ui
         _position.y = std::clamp<int32_t>(_position.y + delta.y, lo, hi);
         if (_active)
         {
-            // Invalidate the previous tile so its highlight clears, then
-            // push the new tile into the selection globals.
-            if (prev.x != _position.x || prev.y != _position.y)
-                MapInvalidateTileFull(prev.ToCoordsXY());
-            WriteGridCursorSelection(_position, _orientation);
+            // OPENRCT2MINI grid-cursor-plan §18.4.b/c (2026-05-24):
+            // route through the size-aware writer when the owning tool
+            // has dialled a multi-cell brush. MapSelection::invalidate
+            // (MapSelection.cpp:82-88) diffs prev/curr A/B every frame
+            // and invalidates the symmetric difference on change, so
+            // stale highlights clear automatically without us iterating
+            // the prev rect here. Single-tile path keeps the explicit
+            // prev-tile invalidate as belt-and-braces (matches the
+            // pre-§18 behaviour exactly).
+            if (_brushSize > 1)
+            {
+                const auto [a, b] = computeBrushRange(_brushSize);
+                WriteGridCursorSelection(a, b, _orientation);
+            }
+            else
+            {
+                // Invalidate the previous tile so its highlight clears, then
+                // push the new tile into the selection globals.
+                if (prev.x != _position.x || prev.y != _position.y)
+                    MapInvalidateTileFull(prev.ToCoordsXY());
+                WriteGridCursorSelection(_position, _orientation);
+            }
         }
         return _position;
     }
@@ -425,6 +570,22 @@ namespace OpenRCT2::Ui
     }
 
     // ---- ToolContext lifecycle -----------------------------------------
+
+    // OPENRCT2MINI grid-cursor-plan §18.3 / §18.4.e.1 (2026-05-24):
+    // wrap each subclass's precisionSubsetForTool() with a uniform
+    // size-knob gate. Tools that opt into gLandToolSize via
+    // usesGLandToolSize() return SubsetType::none whenever the
+    // user has dialled size > 1 — sub-tile picking isn't meaningful
+    // on a multi-cell brush (line brushes were considered and
+    // rejected per §18.7.3). Out-of-line so this TU owns the
+    // <openrct2-ui/interface/LandTool.h> include that pulls in
+    // gLandToolSize; the header stays light.
+    SubsetType ToolContext::precisionSubset() const
+    {
+        if (usesGLandToolSize() && gLandToolSize > 1)
+            return SubsetType::none;
+        return precisionSubsetForTool();
+    }
 
     void ToolContext::onActivate()
     {
@@ -592,6 +753,19 @@ namespace OpenRCT2::Ui
             // renders as that stale Arrow instead of the tool's actual
             // cursor — Footpath / Bulldozer / Tree etc.
             ContextSetCurrentCursor(static_cast<CursorID>(gCurrentToolId));
+        }
+        // OPENRCT2MINI grid-cursor-plan §18.4.e (2026-05-24): sync the
+        // brush size from the shared gLandToolSize global into the
+        // cursor model so the very next selection write picks up the
+        // multi-cell footprint. Tools that don't opt in via
+        // usesGLandToolSize() reset the model to size 1 — this
+        // matters when switching from a size-aware tool (Land at 5)
+        // to a tool that ignores size (Footpath); without the reset
+        // the new tool would inherit the stale 5x5 brush.
+        if (auto* model = dynamic_cast<GridCursorModel*>(getCursorModel()); model != nullptr)
+        {
+            const uint16_t size = usesGLandToolSize() ? gLandToolSize : 1;
+            model->setBrushSize(size);
         }
     }
 
@@ -820,7 +994,21 @@ namespace OpenRCT2::Ui
             if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
             {
                 grid->step(delta);
-                ScrollMainWindowIfCursorNearEdge(grid->getPosition());
+                // OPENRCT2MINI grid-cursor-plan §18.4.d (2026-05-24):
+                // when a multi-cell brush is active, scroll the camera
+                // to keep the rect centre near viewport centre rather
+                // than the anchor tile — otherwise a large brush near
+                // a viewport edge would have half its footprint off-
+                // screen.
+                if (grid->getBrushSize() > 1)
+                {
+                    const auto [a, b] = grid->computeBrushRange();
+                    ScrollMainWindowIfCursorNearEdge(a, b);
+                }
+                else
+                {
+                    ScrollMainWindowIfCursorNearEdge(grid->getPosition());
+                }
             }
             else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
             {
@@ -1064,6 +1252,20 @@ namespace OpenRCT2::Ui
 
     void ToolContext::processFrame(uint32_t /*nowMs*/)
     {
+        // OPENRCT2MINI grid-cursor-plan §18.4.e (2026-05-24): per-frame
+        // brush-size sync. The shared gLandToolSize global can change
+        // mid-session via the tool window's DEC/INC widgets (clicked
+        // through widget focus mode) or its numpad-OSK preview entry —
+        // neither path runs through our context, so we poll here.
+        // GridCursorModel::setBrushSize is idempotent when the size is
+        // unchanged, so this is cheap. When the tool doesn't opt in
+        // (usesGLandToolSize() returns false), the model holds at 1.
+        if (auto* model = dynamic_cast<GridCursorModel*>(getCursorModel()); model != nullptr)
+        {
+            const uint16_t size = usesGLandToolSize() ? gLandToolSize : 1;
+            model->setBrushSize(size);
+        }
+
         // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1
         // (2026-05-24): precision-modifier press/release edge detection.
         // Sub-tile orientation gestures live here on the base so every

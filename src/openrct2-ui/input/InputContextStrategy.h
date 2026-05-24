@@ -29,6 +29,7 @@
 
 #include <cstdint>
 #include <string_view>
+#include <utility>  // std::pair for GridCursorModel::computeBrushRange
 
 namespace OpenRCT2::Ui
 {
@@ -142,6 +143,13 @@ namespace OpenRCT2::Ui
     // model step so edge-approaching D-pad presses recruit a pan
     // without every step glueing the cursor to viewport centre.
     void ScrollMainWindowIfCursorNearEdge(TileCoordsXY pos);
+
+    // OPENRCT2MINI grid-cursor-plan §18.4.d (2026-05-24): rect-centre
+    // overload for multi-cell brushes. Projects the centre of the A/B
+    // rect (instead of the anchor tile) so the camera follows the
+    // brush footprint, keeping the full NxN highlight visible even
+    // when the anchor sits near a viewport edge.
+    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY a, TileCoordsXY b);
     // What the active strategy wants the dispatcher to do with this
     // shortcut event:
     //   - Passthrough: shortcut's action lambda fires as normal.
@@ -363,6 +371,31 @@ namespace OpenRCT2::Ui
         MapSelectType getOrientation() const { return _orientation; }
         void setOrientation(MapSelectType o) { _orientation = o; }
 
+        // OPENRCT2MINI grid-cursor-plan §18.4.a (2026-05-24): multi-cell
+        // brush extent. `_brushSize == 1` (default) → single-tile
+        // selection (A == B == _position, existing behaviour). Larger
+        // values produce an NxN footprint centred on _position per the
+        // §18.2 NW-biased centre math. The owning ToolContext sets
+        // this in `onActivate` (and on size-knob changes) by querying
+        // gLandToolSize when usesGLandToolSize() is true; tools that
+        // don't opt in leave the default `1`.
+        uint16_t getBrushSize() const { return _brushSize; }
+        void setBrushSize(uint16_t size);
+
+        // OPENRCT2MINI grid-cursor-plan §18.4.a: compute the brush
+        // range for the given size around `_position`. Uses
+        // halfHi = size/2, halfLo = (size-1)/2 (NW-biased centre per
+        // §18.2). A and B are clamped independently to
+        // `[1, kMaximumMapSizePractical-1]`, so a brush at the map
+        // edge produces an asymmetric (smaller-than-size) rect rather
+        // than walking the anchor away from the edge. Defined out-of-
+        // line in InputContextStrategy.cpp.
+        std::pair<TileCoordsXY, TileCoordsXY> computeBrushRange(uint16_t size) const;
+        std::pair<TileCoordsXY, TileCoordsXY> computeBrushRange() const
+        {
+            return computeBrushRange(_brushSize);
+        }
+
         // Step the cursor by a TileCoordsXY delta. Clamps to the
         // playable map range. Returns the new position.
         TileCoordsXY step(TileCoordsXY delta);
@@ -385,6 +418,10 @@ namespace OpenRCT2::Ui
         MapSelectType _orientation{ MapSelectType::full };
         int32_t _z{ 0 };
         HoldState _holdState[4]{};
+        // §18.4.a: brush size in tiles, NxN footprint centred on
+        // _position when > 1. Default 1 = single-tile (existing
+        // behaviour). Set by the owning ToolContext via setBrushSize.
+        uint16_t _brushSize{ 1 };
     };
 
     // OPENRCT2MINI grid-cursor-plan §14.1: edge-tile cursor. Same
@@ -624,11 +661,36 @@ namespace OpenRCT2::Ui
         virtual Disposition onStep(::Direction dpad);
 
         // OPENRCT2MINI grid-cursor-plan §4.1 / §11: per-tool sub-tile
-        // subset that the precision modifier cycles through. Base
-        // default = none (precision modifier becomes a no-op);
-        // subclasses override (e.g. FootpathContextImpl returns
-        // edges for railings mode).
-        virtual SubsetType precisionSubset() const { return SubsetType::none; }
+        // subset that the precision modifier cycles through. Returns
+        // SubsetType::none unconditionally when the tool opts into
+        // gLandToolSize and the current size > 1 — sub-tile picking
+        // isn't meaningful on a multi-cell brush (§18.3 / §18.7.3,
+        // user 2026-05-24). Subclasses override
+        // precisionSubsetForTool() with their per-tool subset; the
+        // base wraps that with the size-knob gate so every size-
+        // aware tool inherits the suppression for free without each
+        // override repeating the `gLandToolSize > 1` check.
+        // Defined out-of-line in InputContextStrategy.cpp so we don't
+        // pull <openrct2-ui/interface/LandTool.h> into this header.
+        SubsetType precisionSubset() const;
+
+        // Per-tool subset hook — override in subclasses. Default no-op.
+        // FootpathContextImpl returns edges for railings mode;
+        // TerrainContextImpl returns corners (or none in paint mode).
+        virtual SubsetType precisionSubsetForTool() const { return SubsetType::none; }
+
+        // OPENRCT2MINI grid-cursor-plan §18.4.e (2026-05-24): per-tool
+        // opt-in for the size-knob (gLandToolSize) multi-cell brush.
+        // Default false — Footpath / Scenery / etc. ignore the size
+        // knob and write A == B == single tile via
+        // WriteGridCursorSelection's single-tile path. Tools that
+        // share the global size knob (Terrain / Water / LandRights /
+        // ClearScenery / PatrolArea) override to true; the model's
+        // computeBrushRange + base precisionSubset gating both
+        // consult this. Combined with `gLandToolSize > 1`, this is
+        // the single source of truth for "this tool wants an NxN
+        // brush right now".
+        virtual bool usesGLandToolSize() const { return false; }
 
         // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24,
         // Land paint mode): per-tool opt-out for the cursor.click-

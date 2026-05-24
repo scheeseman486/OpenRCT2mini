@@ -1041,8 +1041,11 @@ namespace OpenRCT2::Ui::Windows
     // — dispatches SurfaceSetStyleAction over the current map
     // selection. Caller (TerrainContextImpl::onPlace) is responsible
     // for ensuring gMapSelectType is `full` and the selection range
-    // is set (the grid cursor's WriteGridCursorSelection writes a
-    // single-tile A==B range, which the paint action accepts).
+    // is set. Post-§18 (multi-cell cursor), the grid cursor writes
+    // either a single-tile A == B range (size 1) or an NxN rect
+    // (size > 1) via GridCursorModel::computeBrushRange; either way
+    // SurfaceSetStyleAction accepts the MapRange and paints every
+    // tile inside it.
     void WindowLandPaintAtCursor()
     {
         auto action = GameActions::SurfaceSetStyleAction(
