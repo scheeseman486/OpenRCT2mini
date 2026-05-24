@@ -1123,13 +1123,38 @@ namespace OpenRCT2
 
         if (w != nullptr && widgetIndex != kWidgetIndexNull && widget->type == WidgetType::scroll)
         {
-            int32_t scroll_part, scrollId;
-            ScreenCoordsXY newScreenCoords;
-            widgetScrollGetPart(*w, widget, screenCoords, newScreenCoords, &scroll_part, &scrollId);
-
-            if (scroll_part == SCROLL_PART_VIEW)
+            // OPENRCT2MINI focus-mode-widgets-plan addendum (2026-05-26):
+            // suppress cursor-driven onScrollMouseOver while the selector
+            // is active (Focus Mode is owning the UI, cursor hidden). The
+            // virtual cursor's position is still being polled — without
+            // this gate, every frame fires onScrollMouseOver at whatever
+            // content-local coord the invisible cursor happens to sit
+            // over, which sets the list's _highlighted* state to whatever
+            // row the cursor maps to. For ScenarioSelect this manifests
+            // as the row darken + preview pane locked on a different
+            // scenario than the focus ring (e.g. ring on Alton Towers
+            // but preview/darken on Six Flags over Texas because the
+            // cursor parked there before the user entered focus mode).
+            //
+            // ProcessMouseOver already has an identical gate (around
+            // line 1326), but THIS path runs from GameHandleInputMouse's
+            // MouseState::released case (line 299) — a separate dispatch
+            // that doesn't share the gate. Focus-mode owns its own
+            // hover state via restoreFocusedListHover (called every
+            // frame from InvalidateAllWindowsAfterInput); real mouse
+            // motion transitions the selector back to hidden and
+            // resumes cursor-driven hover on the next frame.
+            auto& mgr = OpenRCT2::Ui::GetInputManager();
+            if (mgr.getSelectorMode() != OpenRCT2::Ui::InputManager::SelectorMode::active)
             {
-                w->onScrollMouseOver(scrollId, newScreenCoords);
+                int32_t scroll_part, scrollId;
+                ScreenCoordsXY newScreenCoords;
+                widgetScrollGetPart(*w, widget, screenCoords, newScreenCoords, &scroll_part, &scrollId);
+
+                if (scroll_part == SCROLL_PART_VIEW)
+                {
+                    w->onScrollMouseOver(scrollId, newScreenCoords);
+                }
             }
         }
 
