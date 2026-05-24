@@ -182,25 +182,40 @@ namespace OpenRCT2::Ui::WidgetFocus
             return std::numeric_limits<int64_t>::max();
         }
 
-        // Wrap-around cost: distance maximised in the OPPOSITE
-        // direction so the search finds the candidate that's "furthest
-        // wrong" — i.e. the leftmost when wrapping for D-pad-right.
-        // Returns negative cost so smaller-cost-wins still selects the
-        // right candidate. The "perpendicular" axis keeps its
-        // alignment bias.
+        // Wrap-around cost: when pass 1 (in-direction) finds nothing,
+        // `from` is at the edge for `dir` and every remaining candidate
+        // lies in the half-plane OPPOSITE `dir`. We want to land on the
+        // widget furthest along that opposite axis (= the visual far
+        // edge of the window, so wrap feels like "rolling over the
+        // side"). Min-cost-wins, so cost is signed to be MOST NEGATIVE
+        // for the furthest candidate. Perpendicular distance keeps its
+        // 2× penalty as an alignment bias.
+        //
+        // OPENRCT2MINI focus-mode-wrap-around-plan §3 (2026-05-24): the
+        // original sign table was inverted — it picked the candidate
+        // NEAREST `from` in the opposite half-plane, which read to
+        // the user as a bounce-back to a neighbouring widget instead
+        // of a wrap to the far edge. Flipped all four cases so each
+        // direction's leading delta makes the cost most-negative for
+        // the largest-magnitude offset.
+        //
+        // NOTE: `findNearestInSetDirection` carries an in-lambda copy
+        // of this table (cf. wrapCost in that function). Keep them in
+        // sync — if the formula changes here, mirror the edit there.
         int64_t wrapAroundCost(const WidgetCentre& from, const WidgetCentre& candidate, Direction dir) noexcept
         {
             const int64_t dx = static_cast<int64_t>(candidate.x) - from.x;
             const int64_t dy = static_cast<int64_t>(candidate.y) - from.y;
-            // For wrap: prefer candidates furthest in the OPPOSITE
-            // direction (negative cost), penalise by perpendicular
-            // distance.
             switch (dir)
             {
-                case Direction::up:    return dy + 2 * std::abs(dx);    // dy >= 0 (candidate below — opposite of up)
-                case Direction::down:  return -dy + 2 * std::abs(dx);   // candidate above
-                case Direction::left:  return dx + 2 * std::abs(dy);
-                case Direction::right: return -dx + 2 * std::abs(dy);
+                // After pass 1 failed, candidates lie in the half-plane
+                // opposite `dir`. Sign each leading delta so the cost
+                // is most-negative for the candidate furthest into
+                // that half-plane.
+                case Direction::up:    return -dy + 2 * std::abs(dx); // candidates below (dy >= 0); largest dy wins
+                case Direction::down:  return  dy + 2 * std::abs(dx); // candidates above (dy <= 0); most-negative dy wins
+                case Direction::left:  return -dx + 2 * std::abs(dy); // candidates right of from (dx >= 0); largest dx wins
+                case Direction::right: return  dx + 2 * std::abs(dy); // candidates left of from (dx <= 0); most-negative dx wins
             }
             return std::numeric_limits<int64_t>::max();
         }
@@ -898,15 +913,22 @@ namespace OpenRCT2::Ui::WidgetFocus
             }
             return std::numeric_limits<int64_t>::max();
         };
+        // OPENRCT2MINI focus-mode-wrap-around-plan §4.2 (2026-05-24):
+        // mirrors the corrected signs in wrapAroundCost (single-window
+        // walker). Pass-2 wrap picks the candidate FURTHEST into the
+        // half-plane opposite `dir`; min-cost-wins requires most-
+        // negative for the largest-magnitude offset. Previous table
+        // had the signs inverted, producing a bounce-back to a near
+        // neighbour instead of a wrap to the far edge.
         const auto wrapCost = [&](const Candidate& c) -> int64_t {
             const int64_t dx = static_cast<int64_t>(c.x) - from.x;
             const int64_t dy = static_cast<int64_t>(c.y) - from.y;
             switch (dir)
             {
-                case Direction::up:    return dy + 2 * std::abs(dx);
-                case Direction::down:  return -dy + 2 * std::abs(dx);
-                case Direction::left:  return dx + 2 * std::abs(dy);
-                case Direction::right: return -dx + 2 * std::abs(dy);
+                case Direction::up:    return -dy + 2 * std::abs(dx); // largest dy wins (bottommost)
+                case Direction::down:  return  dy + 2 * std::abs(dx); // most-negative dy wins (topmost)
+                case Direction::left:  return -dx + 2 * std::abs(dy); // largest dx wins (rightmost)
+                case Direction::right: return  dx + 2 * std::abs(dy); // most-negative dx wins (leftmost)
             }
             return std::numeric_limits<int64_t>::max();
         };
