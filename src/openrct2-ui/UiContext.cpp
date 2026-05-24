@@ -2133,7 +2133,26 @@ private:
                 if (auto* model = strategy.getCursorModel(); model != nullptr)
                 {
                     if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
-                        syncTo = ViewportInteractionMapToScreen(grid->getPosition().ToCoordsXY(), cursorZOffset);
+                    {
+                        // OPENRCT2MINI grid-cursor-plan §18.A follow-up
+                        // (2026-05-24, second user report): for multi-cell
+                        // brushes the NW-biased anchor is NOT the visual
+                        // centre of the brush footprint — at even sizes it's
+                        // offset by (+0.5, +0.5) tiles toward the SE. Park
+                        // the sprite at the actual rect centre by projecting
+                        // the midpoint of A.ToCoordsXY() and B.ToCoordsXY()
+                        // (ViewportInteractionMapToScreen adds a half-tile
+                        // internally to convert NW corner → centre, so for
+                        // a rect the right input is the midpoint of the two
+                        // NW corners). Single-tile brushes (size 1, and
+                        // centred odd sizes 3/5/7) collapse to the
+                        // anchor's tile-centre — same as the legacy path.
+                        const auto [a, b] = grid->computeBrushRange();
+                        const auto aXY = a.ToCoordsXY();
+                        const auto bXY = b.ToCoordsXY();
+                        const CoordsXY rectCentreInput{ (aXY.x + bXY.x) / 2, (aXY.y + bXY.y) / 2 };
+                        syncTo = ViewportInteractionMapToScreen(rectCentreInput, cursorZOffset);
+                    }
                     else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
                         syncTo = ViewportInteractionMapToScreen(edge->getPosition().ToCoordsXY(), cursorZOffset);
                 }
@@ -2142,7 +2161,29 @@ private:
                 && (gMapSelectFlags.has(MapSelectFlag::enable)
                     || gMapSelectFlags.has(MapSelectFlag::enableConstruct)))
             {
-                syncTo = ViewportInteractionMapToScreen(gMapSelectPositionA, cursorZOffset);
+                // OPENRCT2MINI grid-cursor-plan §18.A follow-up
+                // (2026-05-24, second user report): parked-state path —
+                // selectorActive is false (transitioned to widgetFocus),
+                // but the enable flag is still set, so we route through
+                // gMapSelectPositionA/B (set by WriteGridCursorSelection's
+                // setMapSelectRange call). For multi-cell brushes those
+                // globals describe a rect with A != B; the anchor (A) is
+                // NW-biased, so projecting it parks the sprite to the
+                // upper-left of the brush rather than its visual centre.
+                // Midpoint of A and B (with the helper's internal
+                // half-tile add) lands on the rect centre. Single-tile
+                // selections (A == B) collapse to the existing behaviour.
+                const CoordsXY& a = gMapSelectPositionA;
+                const CoordsXY& b = gMapSelectPositionB;
+                if (a != b)
+                {
+                    const CoordsXY rectCentreInput{ (a.x + b.x) / 2, (a.y + b.y) / 2 };
+                    syncTo = ViewportInteractionMapToScreen(rectCentreInput, cursorZOffset);
+                }
+                else
+                {
+                    syncTo = ViewportInteractionMapToScreen(a, cursorZOffset);
+                }
             }
             if (!syncTo.has_value())
             {

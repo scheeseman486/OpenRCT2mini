@@ -3568,8 +3568,23 @@ void InputManager::process()
     // Fire the per-frame invalidate here, independent of which
     // strategy is active. Cheap when the flag is off (one
     // FlagHolder::has check).
+    //
+    // OPENRCT2MINI grid-cursor-plan §18.A follow-up (2026-05-24,
+    // second user report): when the brush is multi-cell (parked
+    // selection rect spans more than one tile, i.e.
+    // gMapSelectPositionA != gMapSelectPositionB), invalidating just
+    // the anchor tile leaves the other N²-1 tiles untouched — their
+    // blink frames render on top of stale viewport pixels. Detect
+    // multi-cell by comparing A and B and use MapInvalidateRegion
+    // for the whole brush footprint. Same shape as the active-state
+    // pump fix in ToolContext::processFrame.
     if (gMapSelectFlags.has(MapSelectFlag::gridCursorParked))
-        MapInvalidateTileFull(gMapSelectPositionA);
+    {
+        if (gMapSelectPositionA != gMapSelectPositionB)
+            MapInvalidateRegion(gMapSelectPositionA, gMapSelectPositionB);
+        else
+            MapInvalidateTileFull(gMapSelectPositionA);
+    }
     processEvents();
     processHoldEvents();
     handleViewScrolling();
