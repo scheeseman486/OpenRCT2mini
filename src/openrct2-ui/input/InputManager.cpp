@@ -1955,9 +1955,36 @@ namespace
         }
         // §11.3: water is whole-tile only; precisionSubset() inherits
         // the base default SubsetType::none so the precision modifier
-        // is a no-op. Verb wiring deferred (Phase 3.G) — onRaise /
-        // onLower will dispatch the canonical WaterRaise /
-        // WaterLower actions at the cursor's tile.
+        // is a no-op.
+        //
+        // §18.C (2026-05-24): opt in to the multi-cell brush via
+        // gLandToolSize — the Water window already exposes the same
+        // size DEC/INC/preview triplet the Land window does, and the
+        // WaterRaise/WaterLower actions accept a MapRange natively
+        // (see Water.cpp:266-289 mouse path). The base ToolContext's
+        // per-frame poll (processFrame) sets GridCursorModel::_brushSize
+        // from gLandToolSize, and step() routes through the rect writer
+        // when brushSize > 1; nothing else needs doing here.
+        bool usesGLandToolSize() const override { return true; }
+
+        // §18.C: verb dispatch. Cursor.click held + D-pad up/down (PAD A
+        // as modifier — handled by ToolContext::onShortcut's cursor.click-
+        // held block) and the shift-modifier Z-adjust gesture both route
+        // through onRaise/onLower. Both hooks call into the Water window
+        // helpers, which dispatch WaterRaiseAction / WaterLowerAction
+        // against the current map selection rect (set by
+        // WriteGridCursorSelection — single-tile A == B at size 1, NxN
+        // rect at size > 1).
+        Disposition onRaise() override
+        {
+            Windows::WindowWaterRaiseAtCursor();
+            return Disposition::Consumed;
+        }
+        Disposition onLower() override
+        {
+            Windows::WindowWaterLowerAtCursor();
+            return Disposition::Consumed;
+        }
     };
 
     // OPENRCT2MINI input-plan Track 3 / Phase 3.G: remaining tool

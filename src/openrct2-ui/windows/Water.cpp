@@ -452,4 +452,28 @@ namespace OpenRCT2::Ui::Windows
             gInputFlags.set(InputFlag::allowRightMouseRemoval);
         }
     }
+
+    // OPENRCT2MINI grid-cursor-plan §18.C (2026-05-24): grid-cursor
+    // raise/lower dispatch for the Water tool. Mirrors the Land helpers
+    // in Land.cpp — reads gMapSelectPositionA/B (set by the grid cursor's
+    // WriteGridCursorSelection at size 1 or by its multi-cell sibling at
+    // size > 1) and dispatches the canonical Water actions. Both actions
+    // accept the four-coord MapRange constructor and operate on the
+    // whole rect natively (Water.cpp's mouse-driven onToolDrag at
+    // lines 266-289 uses the same constructor signature). Same shape as
+    // WindowLandRaiseAtCursor / WindowLandLowerAtCursor; Water has no
+    // mountain/paint mode equivalents, so no branching here.
+    void WindowWaterRaiseAtCursor()
+    {
+        auto action = GameActions::WaterRaiseAction(
+            { gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y });
+        GameActions::Execute(&action, getGameState());
+    }
+
+    void WindowWaterLowerAtCursor()
+    {
+        auto action = GameActions::WaterLowerAction(
+            { gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y });
+        GameActions::Execute(&action, getGameState());
+    }
 } // namespace OpenRCT2::Ui::Windows

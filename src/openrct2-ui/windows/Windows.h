@@ -617,4 +617,13 @@ namespace OpenRCT2::Ui::Windows
     // Water
     WindowBase* WaterOpen();
     void ToggleWaterWindow();
+    // OPENRCT2MINI grid-cursor-plan §18.C (2026-05-24): grid-cursor
+    // raise/lower dispatch for the Water tool. Mirrors the Land helpers
+    // (WindowLandRaiseAtCursor / WindowLandLowerAtCursor) — reads the
+    // current map selection rect (set by WriteGridCursorSelection at
+    // size 1 or by its multi-cell sibling at size > 1) and dispatches
+    // WaterRaiseAction / WaterLowerAction, both of which accept a
+    // MapRange natively.
+    void WindowWaterRaiseAtCursor();
+    void WindowWaterLowerAtCursor();
 } // namespace OpenRCT2::Ui::Windows
