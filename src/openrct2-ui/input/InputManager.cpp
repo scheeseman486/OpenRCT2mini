@@ -4415,6 +4415,48 @@ int32_t InputManager::getAnyRegisteredCursorZ() const
 // own the action backbone; routing only interposes.
 bool InputManager::shouldSuppressAction(std::string_view shortcutId, const InputEvent& e) const
 {
+    // OPENRCT2MINI focus-mode-widgets-plan §13 (2026-05-26): when ANY
+    // dropdown is open, kCursorCancel (PAD B) always closes the
+    // dropdown first — regardless of which input context is active.
+    // Without this universal pre-check, tool contexts route PAD B
+    // through ToolContext::onShortcut → onCancel (delete tile element)
+    // and the dropdown stays up; widgetFocus routes through its
+    // close-box fallback when focus didn't snap to the dropdown,
+    // dismissing the parent tool window instead. The dropdown is
+    // always the topmost interactive thing — PAD B over a dropdown
+    // should always dismiss the dropdown before any other
+    // interpretation. Mirrors the dropdown branch inside
+    // WidgetFocusContextImpl's onShortcut (which only fires when
+    // active context is widgetFocus AND focus is actually on the
+    // dropdown — neither always holds when a dropdown is open).
+    //
+    // Non-mouse devices fire immediately (no tap-vs-drag ambiguity).
+    // Mouse cursor.cancel deliberately falls through to the strategy
+    // path so the existing short-press / right-click disambiguation
+    // gate in WorldContext / ToolContext still runs — the dropdown
+    // is in screen space the mouse cursor isn't necessarily over.
+    if (shortcutId == ShortcutId::kCursorCancel
+        && e.deviceKind != InputDeviceKind::mouse)
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr != nullptr
+            && windowMgr->FindByClass(WindowClass::dropdown) != nullptr)
+        {
+            OpenRCT2::Ui::Windows::WindowDropdownClose();
+            OpenRCT2::_inputState = OpenRCT2::InputState::Normal;
+            if (OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::widgetPressed))
+                OpenRCT2::gInputFlags.unset(OpenRCT2::InputFlag::widgetPressed);
+            // Pop focus back to the widget that opened the dropdown,
+            // matching the focus-mode dropdown branch's behaviour.
+            // const_cast: shouldSuppressAction is const but we own
+            // the InputManager singleton — the side effects here are
+            // intentional cleanup, not logical state mutation.
+            auto& mgr = const_cast<InputManager&>(*this);
+            if (!mgr.restoreFocus())
+                mgr.snapFocusToTopmostFocusable();
+            return true;
+        }
+    }
     auto& strategy = getActiveContextStrategy();
     return strategy.onShortcut(shortcutId, e) == Disposition::Consumed;
 }
