@@ -27,6 +27,7 @@
 #include <array>
 #include <cstring>
 #include <openrct2-ui/UiContext.h>
+#include <openrct2-ui/input/InputContextStrategy.h>
 #include <openrct2-ui/input/InputManager.h>
 #include <openrct2-ui/input/ShortcutIds.h>
 #include <openrct2-ui/input/ShortcutManager.h>
@@ -198,10 +199,14 @@ namespace OpenRCT2::Ui::Windows
             char data[8] = {};
         };
 
-        // Repeat-on-hold cadence — kept identical to pre-rework values
-        // so users feel no change in key-repeat tempo.
-        constexpr uint32_t kRepeatInitialMs = 250;
-        constexpr uint32_t kRepeatIntervalMs = 60;
+        // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): repeat-on-
+        // hold cadence routes through the shared DiscreteStep
+        // constants so OSK typing, focus-mode navigation, and grid
+        // cursor stepping all use the same 500/80 ms rhythm. Pre-§8.5
+        // values were 250/60 ms — slightly faster — but consistency
+        // across the input surface is worth the small tempo change.
+        using OpenRCT2::Ui::DiscreteStep::kInitialDelayMs;
+        using OpenRCT2::Ui::DiscreteStep::kRepeatIntervalMs;
 
         constexpr uint8_t kPressFlashFrames = 4;
         constexpr uint8_t kRejectFlashFrames = 8;
@@ -707,7 +712,10 @@ namespace OpenRCT2::Ui::Windows
             // ShortcutManager held-state queries, not SDL scancode
             // polling. cursor.click repeats activation of the currently
             // focused key (re-pressed); cursor.cancel repeats Backspace.
-            // Same 250/60 ms cadence as before.
+            // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): cadence
+            // unified onto the shared DiscreteStep constants (500/80 ms)
+            // so OSK typing, focus-mode navigation, and grid cursor
+            // stepping all match.
             void ProcessRepeats()
             {
                 auto& mgr = OpenRCT2::Ui::GetInputManager();
@@ -750,7 +758,7 @@ namespace OpenRCT2::Ui::Windows
                     if (key == nullptr || !ShouldRepeatAction(key->action))
                         return;
                 }
-                if (now - _heldSinceMs < kRepeatInitialMs)
+                if (now - _heldSinceMs < kInitialDelayMs)
                     return;
                 if (now - _lastFireMs < kRepeatIntervalMs)
                     return;

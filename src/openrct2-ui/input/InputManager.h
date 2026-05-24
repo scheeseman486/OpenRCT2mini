@@ -17,6 +17,7 @@
 #include <queue>
 #include <set>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -411,6 +412,32 @@ namespace OpenRCT2::Ui
         // some pathological flow somehow stacks deeper than that.
         std::vector<std::pair<WindowClass, WidgetIndex>> _focusStack;
 
+        // OPENRCT2MINI focus-memory-plan §3 (2026-05-25): per-window
+        // selection memory. Written by setFocus() on every non-null
+        // (cls, widget) update; consulted by resolveLandingWidget()
+        // as the PRIMARY source-of-truth for "what widget should I
+        // land on when entering this window?" before falling back to
+        // the window-set's defaultWidget or firstFocusable.
+        //
+        // The map complements _focusStack — the stack owns
+        // WHICH-WINDOW for chained-back navigation (close A's child
+        // → return to A), the map owns WHICH-WIDGET on every entry
+        // path (cycle, auto-snap, enterFocusMode, restoreFocus).
+        // They're orthogonal.
+        //
+        // Stale entries (window class no longer alive at lookup
+        // time) are detected lazily by FindByClass returning null
+        // in the helper and fall through to the defaultWidget /
+        // firstFocusable chain. No window-close hook needed.
+        //
+        // Capped at kFocusMemoryCap = 64 entries. On insert past
+        // cap, evict the first entry whose backing class no longer
+        // exists; if all entries are still live (rare — engine has
+        // ~50 distinct window classes), drop an arbitrary entry to
+        // make room. Tracked as the most-recent-insert hint to avoid
+        // a per-frame O(N) scan of the map.
+        std::unordered_map<WindowClass, WidgetIndex> _focusMemory;
+
     public:
         // OPENRCT2MINI focus-mode-plan / Phase F.1: focus-mode toggle.
         // Called from the kInterfaceEnterFocusMode shortcut lambda
@@ -601,6 +628,27 @@ namespace OpenRCT2::Ui
         // (close box, dropdown cancel) so backing out lands on the
         // exact widget the user was on before opening the child.
         bool restoreFocus();
+
+        // OPENRCT2MINI focus-memory-plan §3 (2026-05-25): given a
+        // target window class, return the widget index that should
+        // receive focus on entry. Consultation order:
+        //   1. _focusMemory[cls] — the last widget focused on this
+        //      window, when the saved index is still in-bounds and
+        //      focusable (handles tab rebuilds / resizes by re-
+        //      validating).
+        //   2. The window-set's defaultWidget (if cls is a set
+        //      member and that default widget is still focusable on
+        //      its defaultClass).
+        //   3. WidgetFocus::firstFocusable(*window).
+        //   4. kWidgetIndexNull if no focusable widget exists (or
+        //      the window itself can't be found).
+        //
+        // Returned by all four window-entry paths (cycleFocusedWindow,
+        // snapFocusToTopmostFocusable, enterFocusMode, restoreFocus)
+        // instead of re-implementing the defaultWidget / firstFocusable
+        // ladder. cls is the FINAL class to focus (set resolution to
+        // defaultClass happens at the caller before this).
+        OpenRCT2::WidgetIndex resolveLandingWidget(WindowClass cls);
 
         // OPENRCT2MINI cursor-selector-modal-plan v2 follow-up:
         // explicit "enter selector mode and land on the first widget

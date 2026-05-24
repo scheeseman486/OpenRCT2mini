@@ -326,10 +326,268 @@ namespace
     // See focus-mode-plan.md §F.4 for the full design.
     class WidgetFocusContextImpl final : public IInputContext
     {
+        // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): directional
+        // repeat-on-hold tracker. Initial press fires through
+        // onShortcut → dispatchDirection and calls notePress() to
+        // anchor the press timestamp; processFrame polls every frame
+        // and re-fires dispatchDirection for any direction still held
+        // past kInitialDelayMs / kRepeatIntervalMs. Slot order matches
+        // OpenRCT2::Ui::WidgetFocus::Direction (up=0, down=1, left=2,
+        // right=3). SDL OS auto-repeat is already filtered at
+        // UiContext.cpp:1041 (task #516), so the poll owns ALL repeats
+        // uniformly across keyboard and gamepad.
+        OpenRCT2::Ui::DirectionalRepeat _repeat{};
+
+        // Helper extracted from onShortcut's direction-handler block.
+        // Both onShortcut (initial press) and processFrame (repeats)
+        // call this with the same Direction so the full dispatch path
+        // — drag-scroll arm, list-mode arm, set-aware walker, list
+        // re-seed on cross-window hop — runs identically for both.
+        Disposition dispatchDirection(OpenRCT2::Ui::WidgetFocus::Direction direction)
+        {
+            auto& mgr = OpenRCT2::Ui::GetInputManager();
+            // OPENRCT2MINI cursor-selector-modal-plan §2.1 / CS.3:
+            // a focus.* direction confirms selector use. Wake the
+            // selector from `mixed`/`hidden` back to `active`.
+            // No-op when already `active`.
+            mgr.onTransitionEvent(InputManager::SelectorTransitionSource::virtualUserInput);
+            auto* w = mgr.getFocusedWindow();
+            if (w != nullptr)
+            {
+                const auto from = mgr.getFocusedWidget();
+
+                // OPENRCT2MINI list-focus-plan: drag-scroll arm.
+                // When kInterfaceCameraDrag is held AND focus is on
+                // a scroll widget, the four directional inputs
+                // scroll the content rather than stepping focus.
+                if (from != OpenRCT2::kWidgetIndexNull
+                    && static_cast<size_t>(from) < w->widgets.size()
+                    && w->widgets[from].type == OpenRCT2::WidgetType::scroll)
+                {
+                    auto& shortcutMgr = GetShortcutManager();
+                    const auto* dragShortcut = shortcutMgr.getShortcut(ShortcutId::kInterfaceCameraDrag);
+                    if (dragShortcut != nullptr && mgr.getState(*dragShortcut))
+                    {
+                        constexpr int32_t kScrollDragStep = 16;
+                        const auto& wd = w->widgets[from];
+                        const auto scrollIdx = OpenRCT2::WindowGetScrollDataIndex(*w, from);
+                        auto& s = w->scrolls[scrollIdx];
+                        const bool canScrollH = (s.flags & OpenRCT2::HSCROLLBAR_VISIBLE) != 0;
+                        const bool canScrollV = (s.flags & OpenRCT2::VSCROLLBAR_VISIBLE) != 0;
+                        bool moved = false;
+                        switch (direction)
+                        {
+                            case OpenRCT2::Ui::WidgetFocus::Direction::up:
+                                if (canScrollV)
+                                {
+                                    s.contentOffsetY = std::max(0, s.contentOffsetY - kScrollDragStep);
+                                    moved = true;
+                                }
+                                break;
+                            case OpenRCT2::Ui::WidgetFocus::Direction::down:
+                                if (canScrollV)
+                                {
+                                    const int32_t viewH = std::max(0, wd.bottom - wd.top - 2);
+                                    const int32_t maxY = std::max(
+                                        0, static_cast<int32_t>(s.contentHeight) - viewH);
+                                    s.contentOffsetY = std::min(maxY, s.contentOffsetY + kScrollDragStep);
+                                    moved = true;
+                                }
+                                break;
+                            case OpenRCT2::Ui::WidgetFocus::Direction::left:
+                                if (canScrollH)
+                                {
+                                    s.contentOffsetX = std::max(0, s.contentOffsetX - kScrollDragStep);
+                                    moved = true;
+                                }
+                                break;
+                            case OpenRCT2::Ui::WidgetFocus::Direction::right:
+                                if (canScrollH)
+                                {
+                                    const int32_t viewW = std::max(0, wd.right - wd.left - 2);
+                                    const int32_t maxX = std::max(
+                                        0, static_cast<int32_t>(s.contentWidth) - viewW);
+                                    s.contentOffsetX = std::min(maxX, s.contentOffsetX + kScrollDragStep);
+                                    moved = true;
+                                }
+                                break;
+                        }
+                        if (moved)
+                        {
+                            widgetScrollUpdateThumbs(*w, from);
+                            w->invalidate();
+                        }
+                        return Disposition::Consumed;
+                    }
+                }
+
+                // OPENRCT2MINI list-focus-plan §2.3: list-mode arm.
+                const ScreenCoordsXY refPoint = computeListEntryReference(
+                    *w, from, mgr.getFocusedScrollItem());
+
+                if (OpenRCT2::Ui::WidgetFocus::isListModeScroll(*w, from))
+                {
+                    const auto scrollIdx = OpenRCT2::WindowGetScrollDataIndex(*w, from);
+                    const int32_t n = w->scrollFocusGetItemCount(scrollIdx);
+                    const int32_t cols = std::max(1, w->scrollFocusGetColumnCount(scrollIdx));
+                    const int32_t cur = mgr.getFocusedScrollItem();
+
+                    if (cur < 0)
+                    {
+                        int32_t seed = OpenRCT2::Ui::WidgetFocus::nearestScrollItemTo(*w, from, refPoint);
+                        if (seed < 0)
+                            seed = 0;
+                        mgr.setFocusScrollItem(seed);
+                        OpenRCT2::Ui::WidgetFocus::ensureScrollItemVisible(*w, from, seed);
+                        syncFocusItemHover(*w, from, seed);
+                        w->invalidate();
+                        return Disposition::Consumed;
+                    }
+
+                    int32_t step = cur;
+                    bool exit = false;
+                    switch (direction)
+                    {
+                        case OpenRCT2::Ui::WidgetFocus::Direction::up:
+                            step = cur - cols;
+                            if (step < 0)
+                                exit = true;
+                            break;
+                        case OpenRCT2::Ui::WidgetFocus::Direction::down:
+                            step = cur + cols;
+                            if (step >= n)
+                                exit = true;
+                            break;
+                        case OpenRCT2::Ui::WidgetFocus::Direction::left:
+                            if (cols > 1 && (cur % cols) > 0)
+                                step = cur - 1;
+                            else
+                                exit = true;
+                            break;
+                        case OpenRCT2::Ui::WidgetFocus::Direction::right:
+                            if (cols > 1 && (cur % cols) < (cols - 1) && (cur + 1) < n)
+                                step = cur + 1;
+                            else
+                                exit = true;
+                            break;
+                    }
+
+                    while (!exit && step >= 0 && step < n)
+                    {
+                        const auto cellRect = w->scrollFocusGetItemRect(scrollIdx, step);
+                        if (cellRect.GetLeft() < cellRect.GetRight()
+                            && cellRect.GetTop() < cellRect.GetBottom())
+                            break;
+                        switch (direction)
+                        {
+                            case OpenRCT2::Ui::WidgetFocus::Direction::up:
+                                step -= cols;
+                                if (step < 0)
+                                    exit = true;
+                                break;
+                            case OpenRCT2::Ui::WidgetFocus::Direction::down:
+                                step += cols;
+                                if (step >= n)
+                                    exit = true;
+                                break;
+                            case OpenRCT2::Ui::WidgetFocus::Direction::left:
+                                if (cols > 1 && (step % cols) > 0)
+                                    step -= 1;
+                                else
+                                    exit = true;
+                                break;
+                            case OpenRCT2::Ui::WidgetFocus::Direction::right:
+                                if (cols > 1 && (step % cols) < (cols - 1) && (step + 1) < n)
+                                    step += 1;
+                                else
+                                    exit = true;
+                                break;
+                        }
+                    }
+
+                    if (!exit && step >= 0 && step < n)
+                    {
+                        mgr.setFocusScrollItem(step);
+                        OpenRCT2::Ui::WidgetFocus::ensureScrollItemVisible(*w, from, step);
+                        syncFocusItemHover(*w, from, step);
+                        w->invalidate();
+                        return Disposition::Consumed;
+                    }
+
+                    mgr.clearFocusScrollItem();
+                    w->invalidate();
+                }
+
+                // OPENRCT2MINI window-set-plan §3.2: set-aware walker.
+                WindowClass nextCls = w->classification;
+                const auto next = OpenRCT2::Ui::WidgetFocus::findNearestInSetDirection(
+                    w->classification, from, direction, &nextCls);
+                if (next != OpenRCT2::kWidgetIndexNull
+                    && (nextCls != w->classification || next != from))
+                {
+                    mgr.setFocus(nextCls, next);
+                    w->invalidate();
+                    if (nextCls != w->classification)
+                    {
+                        auto* windowMgr = GetWindowManager();
+                        if (windowMgr != nullptr)
+                            windowMgr->InvalidateByClass(nextCls);
+                    }
+
+                    auto* nextWin = mgr.getFocusedWindow();
+                    if (nextWin != nullptr
+                        && OpenRCT2::Ui::WidgetFocus::isListModeScroll(*nextWin, next))
+                    {
+                        int32_t seed = OpenRCT2::Ui::WidgetFocus::nearestScrollItemTo(
+                            *nextWin, next, refPoint);
+                        if (seed < 0)
+                            seed = 0;
+                        mgr.setFocusScrollItem(seed);
+                        OpenRCT2::Ui::WidgetFocus::ensureScrollItemVisible(*nextWin, next, seed);
+                        syncFocusItemHover(*nextWin, next, seed);
+                    }
+                }
+            }
+            return Disposition::Consumed;
+        }
+
     public:
         InputContext getId() const override
         {
             return InputContext::widgetFocus;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §8.5: reset repeat state on
+        // context boundary crossings so a held direction during the
+        // transition requires a fresh press in the new context.
+        void onActivate() override { _repeat.reset(); }
+        void onDeactivate() override { _repeat.reset(); }
+
+        // OPENRCT2MINI grid-cursor-plan §8.5: per-frame repeat poll.
+        // Step 0 happens in onShortcut + notePress; subsequent steps
+        // fire here every kRepeatIntervalMs after kInitialDelayMs.
+        void processFrame(uint32_t nowMs) override
+        {
+            auto& shortcutMgr = OpenRCT2::Ui::GetShortcutManager();
+            auto& mgr = OpenRCT2::Ui::GetInputManager();
+            const auto checkHeld = [&](std::string_view shortcutId) -> bool {
+                if (const auto* s = shortcutMgr.getShortcut(shortcutId); s != nullptr)
+                    return mgr.getState(*s);
+                return false;
+            };
+            // Slot order matches OpenRCT2::Ui::WidgetFocus::Direction.
+            const bool held[4] = {
+                checkHeld(OpenRCT2::Ui::ShortcutId::kFocusUp),
+                checkHeld(OpenRCT2::Ui::ShortcutId::kFocusDown),
+                checkHeld(OpenRCT2::Ui::ShortcutId::kFocusLeft),
+                checkHeld(OpenRCT2::Ui::ShortcutId::kFocusRight),
+            };
+            const uint8_t fire = _repeat.tick(nowMs, held);
+            for (uint8_t i = 0; i < 4; i++)
+            {
+                if (fire & static_cast<uint8_t>(1u << i))
+                    dispatchDirection(static_cast<OpenRCT2::Ui::WidgetFocus::Direction>(i));
+            }
         }
 
         Disposition onShortcut(std::string_view id, const InputEvent& e) override
@@ -666,285 +924,21 @@ namespace
                 return Disposition::Passthrough;
             }
 
-            // Translate cursor.* to a direction. The four directional
+            // Translate focus.* to a direction. The four directional
             // bindings are the only ones that drive directional
             // navigation; anything else falls through.
+            //
+            // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): the
+            // full direction-dispatch body lives in dispatchDirection
+            // so processFrame's repeat poll can call the same path.
+            // Initial press fires through here, notes the press
+            // timestamp via _repeat.notePress, then enters
+            // dispatchDirection.
             const auto direction = directionForShortcut(id);
             if (direction.has_value())
             {
-                // OPENRCT2MINI cursor-selector-modal-plan §2.1 / CS.3:
-                // a focus.* direction confirms selector use. Wake the
-                // selector from `mixed`/`hidden` back to `active`.
-                // No-op when already `active`.
-                mgr.onTransitionEvent(InputManager::SelectorTransitionSource::virtualUserInput);
-                auto* w = mgr.getFocusedWindow();
-                if (w != nullptr)
-                {
-                    const auto from = mgr.getFocusedWidget();
-
-                    // OPENRCT2MINI list-focus-plan: drag-scroll arm.
-                    // When kInterfaceCameraDrag is held AND focus is on
-                    // a scroll widget, the four directional inputs
-                    // scroll the content rather than stepping focus.
-                    // Mirrors the cursor-driven behaviour: holding the
-                    // drag-camera input over a scroll widget pans the
-                    // content under the cursor. For gamepad / focus
-                    // mode, "panning" = a fixed pixel step per press
-                    // (kScrollDragStep, ~one row tall). Returns
-                    // Consumed so the list-mode arm and generic walker
-                    // are skipped entirely — the user explicitly opted
-                    // out of item-step navigation by holding the drag
-                    // input.
-                    if (from != OpenRCT2::kWidgetIndexNull
-                        && static_cast<size_t>(from) < w->widgets.size()
-                        && w->widgets[from].type == OpenRCT2::WidgetType::scroll)
-                    {
-                        auto& shortcutMgr = GetShortcutManager();
-                        const auto* dragShortcut = shortcutMgr.getShortcut(ShortcutId::kInterfaceCameraDrag);
-                        if (dragShortcut != nullptr && mgr.getState(*dragShortcut))
-                        {
-                            constexpr int32_t kScrollDragStep = 16;
-                            const auto& wd = w->widgets[from];
-                            const auto scrollIdx = OpenRCT2::WindowGetScrollDataIndex(*w, from);
-                            auto& s = w->scrolls[scrollIdx];
-                            const bool canScrollH = (s.flags & OpenRCT2::HSCROLLBAR_VISIBLE) != 0;
-                            const bool canScrollV = (s.flags & OpenRCT2::VSCROLLBAR_VISIBLE) != 0;
-                            bool moved = false;
-                            switch (*direction)
-                            {
-                                case OpenRCT2::Ui::WidgetFocus::Direction::up:
-                                    if (canScrollV)
-                                    {
-                                        s.contentOffsetY = std::max(0, s.contentOffsetY - kScrollDragStep);
-                                        moved = true;
-                                    }
-                                    break;
-                                case OpenRCT2::Ui::WidgetFocus::Direction::down:
-                                    if (canScrollV)
-                                    {
-                                        const int32_t viewH = std::max(0, wd.bottom - wd.top - 2);
-                                        const int32_t maxY = std::max(
-                                            0, static_cast<int32_t>(s.contentHeight) - viewH);
-                                        s.contentOffsetY = std::min(maxY, s.contentOffsetY + kScrollDragStep);
-                                        moved = true;
-                                    }
-                                    break;
-                                case OpenRCT2::Ui::WidgetFocus::Direction::left:
-                                    if (canScrollH)
-                                    {
-                                        s.contentOffsetX = std::max(0, s.contentOffsetX - kScrollDragStep);
-                                        moved = true;
-                                    }
-                                    break;
-                                case OpenRCT2::Ui::WidgetFocus::Direction::right:
-                                    if (canScrollH)
-                                    {
-                                        const int32_t viewW = std::max(0, wd.right - wd.left - 2);
-                                        const int32_t maxX = std::max(
-                                            0, static_cast<int32_t>(s.contentWidth) - viewW);
-                                        s.contentOffsetX = std::min(maxX, s.contentOffsetX + kScrollDragStep);
-                                        moved = true;
-                                    }
-                                    break;
-                            }
-                            if (moved)
-                            {
-                                widgetScrollUpdateThumbs(*w, from);
-                                w->invalidate();
-                            }
-                            // Consume regardless — drag-held + direction
-                            // means "scroll", not "step focus". Even an
-                            // axis the widget can't scroll (e.g. left/
-                            // right on a VERTICAL-only list) shouldn't
-                            // fall through to item stepping while the
-                            // user is holding drag.
-                            return Disposition::Consumed;
-                        }
-                    }
-
-                    // OPENRCT2MINI list-focus-plan §2.3: list-mode arm.
-                    // When the focused widget is a list-mode scroll
-                    // widget, directional navigation steps through its
-                    // items first. Three sub-cases:
-                    //   (a) cur == -1 (just entered the list): seed
-                    //       _focusedScrollItem via nearestScrollItemTo
-                    //       using the scroll widget's screen centre,
-                    //       auto-scroll into view, consume.
-                    //   (b) step stays inside [0, n) per §2.4 table:
-                    //       move the item, auto-scroll, consume.
-                    //   (c) step would exit (off-by-one in scan dir
-                    //       or row-edge for L/R in 1D mode): clear
-                    //       _focusedScrollItem and fall through to the
-                    //       generic walker so the user lands on the
-                    //       neighbour widget outside the list.
-                    // The reference point used for entering a NEW
-                    // list (after the generic walker hops) is computed
-                    // BEFORE clearing — falls back to widget centre if
-                    // we never had an item in the source list.
-                    const ScreenCoordsXY refPoint = computeListEntryReference(
-                        *w, from, mgr.getFocusedScrollItem());
-
-                    if (OpenRCT2::Ui::WidgetFocus::isListModeScroll(*w, from))
-                    {
-                        const auto scrollIdx = OpenRCT2::WindowGetScrollDataIndex(*w, from);
-                        const int32_t n = w->scrollFocusGetItemCount(scrollIdx);
-                        const int32_t cols = std::max(1, w->scrollFocusGetColumnCount(scrollIdx));
-                        const int32_t cur = mgr.getFocusedScrollItem();
-
-                        if (cur < 0)
-                        {
-                            // First-press seeding via spatial nearest.
-                            // refPoint is the source widget centre here
-                            // (no prior item to anchor on).
-                            int32_t seed = OpenRCT2::Ui::WidgetFocus::nearestScrollItemTo(*w, from, refPoint);
-                            if (seed < 0)
-                                seed = 0;
-                            mgr.setFocusScrollItem(seed);
-                            OpenRCT2::Ui::WidgetFocus::ensureScrollItemVisible(*w, from, seed);
-                            syncFocusItemHover(*w, from, seed);
-                            w->invalidate();
-                            return Disposition::Consumed;
-                        }
-
-                        // §2.4 step semantics.
-                        int32_t step = cur;
-                        bool exit = false;
-                        switch (*direction)
-                        {
-                            case OpenRCT2::Ui::WidgetFocus::Direction::up:
-                                step = cur - cols;
-                                if (step < 0)
-                                    exit = true;
-                                break;
-                            case OpenRCT2::Ui::WidgetFocus::Direction::down:
-                                step = cur + cols;
-                                if (step >= n)
-                                    exit = true;
-                                break;
-                            case OpenRCT2::Ui::WidgetFocus::Direction::left:
-                                if (cols > 1 && (cur % cols) > 0)
-                                    step = cur - 1;
-                                else
-                                    exit = true;
-                                break;
-                            case OpenRCT2::Ui::WidgetFocus::Direction::right:
-                                if (cols > 1 && (cur % cols) < (cols - 1) && (cur + 1) < n)
-                                    step = cur + 1;
-                                else
-                                    exit = true;
-                                break;
-                        }
-
-                        // OPENRCT2MINI list-focus-plan §3.5: skip past
-                        // empty-rect items (cells the window opted
-                        // out of — e.g. ShortcutKeys label slot or a
-                        // bin cell whose adjacent binding is empty).
-                        // Continues stepping in the same direction
-                        // until a valid item is found OR the same exit
-                        // condition trips. Prevents the focus ring
-                        // from landing on cells the user can't see
-                        // and can't activate.
-                        while (!exit && step >= 0 && step < n)
-                        {
-                            const auto cellRect = w->scrollFocusGetItemRect(scrollIdx, step);
-                            if (cellRect.GetLeft() < cellRect.GetRight()
-                                && cellRect.GetTop() < cellRect.GetBottom())
-                                break; // valid landing spot
-                            switch (*direction)
-                            {
-                                case OpenRCT2::Ui::WidgetFocus::Direction::up:
-                                    step -= cols;
-                                    if (step < 0)
-                                        exit = true;
-                                    break;
-                                case OpenRCT2::Ui::WidgetFocus::Direction::down:
-                                    step += cols;
-                                    if (step >= n)
-                                        exit = true;
-                                    break;
-                                case OpenRCT2::Ui::WidgetFocus::Direction::left:
-                                    if (cols > 1 && (step % cols) > 0)
-                                        step -= 1;
-                                    else
-                                        exit = true;
-                                    break;
-                                case OpenRCT2::Ui::WidgetFocus::Direction::right:
-                                    if (cols > 1 && (step % cols) < (cols - 1) && (step + 1) < n)
-                                        step += 1;
-                                    else
-                                        exit = true;
-                                    break;
-                            }
-                        }
-
-                        if (!exit && step >= 0 && step < n)
-                        {
-                            mgr.setFocusScrollItem(step);
-                            OpenRCT2::Ui::WidgetFocus::ensureScrollItemVisible(*w, from, step);
-                            syncFocusItemHover(*w, from, step);
-                            w->invalidate();
-                            return Disposition::Consumed;
-                        }
-
-                        // Exit path. Clear the item; the generic walker
-                        // below picks up from the bare scroll widget.
-                        // refPoint already captured the last item's on-
-                        // screen centre (computeListEntryReference saw
-                        // cur >= 0), so the destination list's seeding
-                        // happens with the user's last visual position.
-                        mgr.clearFocusScrollItem();
-                        w->invalidate();
-                    }
-
-                    // OPENRCT2MINI window-set-plan §3.2: use the
-                    // set-aware walker so a step across a set
-                    // boundary (e.g. top toolbar → bottom toolbar)
-                    // works without an explicit cycle. For windows
-                    // not in any set, the walker internally falls
-                    // back to the single-window cost-minimiser.
-                    WindowClass nextCls = w->classification;
-                    const auto next = OpenRCT2::Ui::WidgetFocus::findNearestInSetDirection(
-                        w->classification, from, *direction, &nextCls);
-                    if (next != OpenRCT2::kWidgetIndexNull
-                        && (nextCls != w->classification || next != from))
-                    {
-                        mgr.setFocus(nextCls, next);
-                        // Mark both the source and destination
-                        // windows dirty so the focus ring is
-                        // repainted on both sides of a set-boundary
-                        // hop (the leaving window needs to clear its
-                        // ring, the arriving window needs to draw a
-                        // new one).
-                        w->invalidate();
-                        if (nextCls != w->classification)
-                        {
-                            auto* windowMgr = GetWindowManager();
-                            if (windowMgr != nullptr)
-                                windowMgr->InvalidateByClass(nextCls);
-                        }
-
-                        // OPENRCT2MINI list-focus-plan §2.3 / C1: if
-                        // the new focus lands on a list-mode scroll
-                        // widget, seed _focusedScrollItem to the item
-                        // spatially nearest refPoint (the user's last
-                        // visual position) so the ring appears on a
-                        // real list item from the get-go, not on the
-                        // bare scroll widget.
-                        auto* nextWin = mgr.getFocusedWindow();
-                        if (nextWin != nullptr
-                            && OpenRCT2::Ui::WidgetFocus::isListModeScroll(*nextWin, next))
-                        {
-                            int32_t seed = OpenRCT2::Ui::WidgetFocus::nearestScrollItemTo(
-                                *nextWin, next, refPoint);
-                            if (seed < 0)
-                                seed = 0;
-                            mgr.setFocusScrollItem(seed);
-                            OpenRCT2::Ui::WidgetFocus::ensureScrollItemVisible(*nextWin, next, seed);
-                            syncFocusItemHover(*nextWin, next, seed);
-                        }
-                    }
-                }
-                return Disposition::Consumed;
+                _repeat.notePress(static_cast<uint8_t>(*direction), SDL_GetTicks());
+                return dispatchDirection(*direction);
             }
 
             if (id == ShortcutId::kCursorClick)
@@ -2332,6 +2326,51 @@ void InputManager::setFocus(WindowClass cls, OpenRCT2::WidgetIndex widget)
     _focusedWindowClass = cls;
     _focusedWidget = widget;
 
+    // OPENRCT2MINI focus-memory-plan §3 (2026-05-25): single write
+    // site for the per-window memory map. Every setFocus that lands
+    // on a real (cls, widget) records it, so cycle / auto-snap /
+    // restoreFocus can later read back where the user was on each
+    // window. On 65th distinct window insert, evict the first entry
+    // whose backing class no longer exists (lazy stale cleanup); if
+    // all entries are still live, drop an arbitrary one — extremely
+    // unlikely (engine has ~50 distinct focusable classes).
+    if (cls != WindowClass::null && widget != OpenRCT2::kWidgetIndexNull)
+    {
+        constexpr size_t kFocusMemoryCap = 64;
+        _focusMemory[cls] = widget;
+        if (_focusMemory.size() > kFocusMemoryCap)
+        {
+            auto* windowMgr = GetWindowManager();
+            bool evicted = false;
+            if (windowMgr != nullptr)
+            {
+                for (auto it = _focusMemory.begin(); it != _focusMemory.end(); ++it)
+                {
+                    if (it->first == cls)
+                        continue; // never evict the one we just wrote
+                    if (windowMgr->FindByClass(it->first) == nullptr)
+                    {
+                        _focusMemory.erase(it);
+                        evicted = true;
+                        break;
+                    }
+                }
+            }
+            if (!evicted)
+            {
+                // No stale entry found — drop the first non-current entry.
+                for (auto it = _focusMemory.begin(); it != _focusMemory.end(); ++it)
+                {
+                    if (it->first != cls)
+                    {
+                        _focusMemory.erase(it);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     // OPENRCT2MINI focus-ring redraw (2026-05-24): the yellow focus
     // ring is overlaid by WindowDraw → drawFocusOutlineIfActive, and
     // that only fires on windows whose dirty region intersects the
@@ -2461,35 +2500,20 @@ void InputManager::snapFocusToTopmostFocusable()
         auto* windowMgr = GetWindowManager();
         if (windowMgr != nullptr)
         {
-            // Pick the set's defaultClass+defaultWidget if applicable,
-            // else firstFocusable on the topmost member.
+            // Pick the set's defaultClass for set-aware landing; the
+            // widget on that class is resolved by resolveLandingWidget
+            // (which consults per-window memory FIRST, then set
+            // defaultWidget, then firstFocusable).
+            // OPENRCT2MINI focus-memory-plan §4.2.
             WindowClass landingCls = topmost;
-            WidgetIndex landingWidget = kWidgetIndexNull;
-            const auto* set = WidgetFocus::findSetFor(topmost);
-            if (set != nullptr && set->defaultClass != WindowClass::null)
+            if (const auto* set = WidgetFocus::findSetFor(topmost);
+                set != nullptr && set->defaultClass != WindowClass::null)
             {
                 auto* dfltW = windowMgr->FindByClass(set->defaultClass);
                 if (dfltW != nullptr && !dfltW->flags.has(WindowFlag::dead))
-                {
                     landingCls = set->defaultClass;
-                    if (set->defaultWidget != kWidgetIndexNull
-                        && set->defaultWidget < dfltW->widgets.size()
-                        && WidgetFocus::isFocusable(dfltW->widgets[set->defaultWidget]))
-                    {
-                        landingWidget = set->defaultWidget;
-                    }
-                    else
-                    {
-                        landingWidget = WidgetFocus::firstFocusable(*dfltW);
-                    }
-                }
             }
-            if (landingWidget == kWidgetIndexNull)
-            {
-                auto* w = windowMgr->FindByClass(landingCls);
-                if (w != nullptr)
-                    landingWidget = WidgetFocus::firstFocusable(*w);
-            }
+            const WidgetIndex landingWidget = resolveLandingWidget(landingCls);
             if (landingWidget != kWidgetIndexNull)
             {
                 // OPENRCT2MINI focus-mode-plan §F.16: push the old
@@ -2543,15 +2567,18 @@ bool InputManager::restoreFocus()
             continue;
         // Validate the saved widget index against the current
         // widget list (the window might have re-laid-out its
-        // widgets between the push and pop). Fall back to
-        // firstFocusable when the saved index no longer points
-        // at a focusable target.
+        // widgets between the push and pop). Prefer the stack-saved
+        // widget if still valid (that's the exact state at the time
+        // the child was opened); otherwise fall through to the
+        // per-window memory and the rest of the resolveLandingWidget
+        // ladder.
+        // OPENRCT2MINI focus-memory-plan §4.4.
         WidgetIndex widget = entry.second;
         if (widget == OpenRCT2::kWidgetIndexNull
             || widget >= w->widgets.size()
             || !WidgetFocus::isFocusable(w->widgets[widget]))
         {
-            widget = WidgetFocus::firstFocusable(*w);
+            widget = resolveLandingWidget(entry.first);
         }
         if (widget == OpenRCT2::kWidgetIndexNull)
             continue;
@@ -2563,6 +2590,58 @@ bool InputManager::restoreFocus()
         return true;
     }
     return false;
+}
+
+OpenRCT2::WidgetIndex InputManager::resolveLandingWidget(WindowClass cls)
+{
+    // OPENRCT2MINI focus-memory-plan §3 + §4 (2026-05-25): one
+    // helper, four entry-path callers (cycleFocusedWindow,
+    // snapFocusToTopmostFocusable, enterFocusMode, restoreFocus).
+    // Consults the per-window memory FIRST so the user lands on the
+    // widget they last touched on this window; falls back to the
+    // window-set's defaultWidget then firstFocusable. Each candidate
+    // is validated against the LIVE widget list so a tab rebuild or
+    // resize that invalidated the saved index falls through cleanly.
+    if (cls == WindowClass::null)
+        return kWidgetIndexNull;
+    auto* windowMgr = GetWindowManager();
+    if (windowMgr == nullptr)
+        return kWidgetIndexNull;
+    auto* w = windowMgr->FindByClass(cls);
+    if (w == nullptr)
+        return kWidgetIndexNull;
+
+    // 1. Per-window memory. The recorded index may be stale (window
+    //    re-laid-out its widget list, focusable bit flipped off).
+    //    Validate before returning; if it fails, fall through.
+    if (auto it = _focusMemory.find(cls); it != _focusMemory.end())
+    {
+        const auto saved = it->second;
+        if (saved != kWidgetIndexNull
+            && saved < w->widgets.size()
+            && WidgetFocus::isFocusable(w->widgets[saved]))
+        {
+            return saved;
+        }
+    }
+
+    // 2. Window-set default. Only applies when cls IS the set's
+    //    defaultClass — otherwise the caller picked a non-default
+    //    set member intentionally and we shouldn't override that
+    //    choice. The defaultWidget index must still be focusable on
+    //    the live window.
+    if (const auto* set = WidgetFocus::findSetFor(cls);
+        set != nullptr && set->defaultClass == cls && set->defaultWidget != kWidgetIndexNull)
+    {
+        if (set->defaultWidget < w->widgets.size()
+            && WidgetFocus::isFocusable(w->widgets[set->defaultWidget]))
+        {
+            return set->defaultWidget;
+        }
+    }
+
+    // 3. First focusable widget.
+    return WidgetFocus::firstFocusable(*w);
 }
 
 void InputManager::clearFocus()
@@ -2990,26 +3069,20 @@ void InputManager::cycleFocusedWindow(int direction)
     if (windowMgr == nullptr)
         return;
     // OPENRCT2MINI window-set-plan §3.5: if the target is in a set,
-    // land on the set's defaultClass + defaultWidget when defined,
-    // else firstFocusable of the canonical entry's window.
+    // land on the set's defaultClass; the widget on that class is
+    // resolved by resolveLandingWidget (per-window memory FIRST,
+    // then set defaultWidget, then firstFocusable).
+    // OPENRCT2MINI focus-memory-plan §4.1.
     WindowClass landingCls = nextCls;
-    WidgetIndex landingWidget = kWidgetIndexNull;
-    if (const auto* set = WidgetFocus::findSetFor(nextCls); set != nullptr)
+    if (const auto* set = WidgetFocus::findSetFor(nextCls);
+        set != nullptr && set->defaultClass != WindowClass::null)
     {
-        if (set->defaultClass != WindowClass::null)
-            landingCls = set->defaultClass;
-        if (set->defaultWidget != kWidgetIndexNull)
-            landingWidget = set->defaultWidget;
+        landingCls = set->defaultClass;
     }
     auto* w = windowMgr->FindByClass(landingCls);
     if (w == nullptr)
         return;
-    if (landingWidget == kWidgetIndexNull
-        || landingWidget >= w->widgets.size()
-        || !WidgetFocus::isFocusable(w->widgets[landingWidget]))
-    {
-        landingWidget = WidgetFocus::firstFocusable(*w);
-    }
+    const WidgetIndex landingWidget = resolveLandingWidget(landingCls);
     if (landingWidget == kWidgetIndexNull)
         return;
     setFocus(landingCls, landingWidget);
@@ -3163,10 +3236,11 @@ bool InputManager::enterFocusModeOnTopmost()
         return false;
 
     // OPENRCT2MINI window-set-plan §3.5: if the topmost is in a set,
-    // honour its defaultClass+defaultWidget when present, else fall
-    // through to firstFocusable on the canonical entry.
+    // honour its defaultClass; the widget on that class is resolved
+    // by resolveLandingWidget (per-window memory FIRST, then set
+    // defaultWidget, then firstFocusable).
+    // OPENRCT2MINI focus-memory-plan §4.3.
     WindowClass landingCls = topmost;
-    WidgetIndex landingWidget = kWidgetIndexNull;
     if (const auto* set = WidgetFocus::findSetFor(topmost); set != nullptr
         && set->defaultClass != WindowClass::null)
     {
@@ -3174,23 +3248,9 @@ bool InputManager::enterFocusModeOnTopmost()
             dfltW != nullptr && !dfltW->flags.has(WindowFlag::dead))
         {
             landingCls = set->defaultClass;
-            if (set->defaultWidget != kWidgetIndexNull
-                && set->defaultWidget < dfltW->widgets.size()
-                && WidgetFocus::isFocusable(dfltW->widgets[set->defaultWidget]))
-            {
-                landingWidget = set->defaultWidget;
-            }
-            else
-            {
-                landingWidget = WidgetFocus::firstFocusable(*dfltW);
-            }
         }
     }
-    if (landingWidget == kWidgetIndexNull)
-    {
-        if (auto* w = windowMgr->FindByClass(landingCls); w != nullptr)
-            landingWidget = WidgetFocus::firstFocusable(*w);
-    }
+    WidgetIndex landingWidget = resolveLandingWidget(landingCls);
     if (landingWidget == kWidgetIndexNull)
         return false;
 

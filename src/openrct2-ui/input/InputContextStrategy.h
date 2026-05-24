@@ -27,6 +27,8 @@
 #include <openrct2/world/Location.hpp>  // TileCoordsXY, Direction
 #include <openrct2/world/MapSelection.h> // MapSelectType
 
+#include <SDL_timer.h>  // SDL_GetTicks for §8.5 DirectionalRepeat notePress
+
 #include <cstdint>
 #include <string_view>
 #include <utility>  // std::pair for GridCursorModel::computeBrushRange
@@ -106,15 +108,29 @@ namespace OpenRCT2::Ui
         quadrants = 3,
     };
 
-    // OPENRCT2MINI grid-cursor-plan §8.2: shared discrete-step rate
-    // constants. The grid cursor's per-frame held-state poll fires
-    // the first step immediately on press; subsequent steps fire
-    // kRepeatIntervalMs apart after the kInitialDelayMs hold. Future
-    // focus-mode list-step work can consume the same constants if
-    // desired.
+    // OPENRCT2MINI grid-cursor-plan §8.2 / §8.5 (2026-05-25): shared
+    // discrete-step rate constants for directional repeat-on-hold.
+    // Consumed by both ToolContext::processFrame (grid cursor) AND
+    // WidgetFocusContextImpl::processFrame (focus mode + OSK by
+    // inheritance), so directional navigation feels identical across
+    // tool windows, focus mode, and OSK key-grid traversal.
+    //
+    // Press flow: per-event onShortcut fires step 0 immediately and
+    // notes the press timestamp. Per-frame tick() then fires step N
+    // every kRepeatIntervalMs after kInitialDelayMs of continuous
+    // hold. SDL OS auto-repeat is filtered globally at
+    // UiContext.cpp:1041 (e.key.repeat != 0 → drop) from task #516,
+    // so the poll owns ALL repeats uniformly across keyboard and
+    // gamepad — no device-dependent rate to fight.
     namespace DiscreteStep
     {
-        constexpr uint32_t kInitialDelayMs = 200;
+        // 500 ms initial delay prevents accidental double-step on a
+        // quick tap; matters more in widget focus where each step
+        // jumps to a different widget than in grid cursor where each
+        // step is one tile. 80 ms repeat ≈ 12.5 steps/sec — fast
+        // enough to cross a 254-tile map in ~20 s, slow enough to
+        // land precisely on a target widget.
+        constexpr uint32_t kInitialDelayMs = 500;
         constexpr uint32_t kRepeatIntervalMs = 80;
         // §6.1: viewport inset margin in pixels. If the grid cursor's
         // screen projection falls within this distance of any
@@ -123,9 +139,109 @@ namespace OpenRCT2::Ui
         constexpr int32_t kViewportMargin = 64;
         // §11.3 / §8.4: fast-modifier multiplier. When
         // kCursorFastModifier is held (and precision is not),
-        // multiply the step granularity by this factor.
+        // multiply the step granularity by this factor. Unused
+        // pending task #619 (kCursorFastModifier wedge diagnosis) —
+        // see §8.5.7.
         constexpr int32_t kFastMultiplier = 4;
     } // namespace DiscreteStep
+
+    // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): per-context
+    // directional repeat tracker. Owned by both ToolContext and
+    // WidgetFocusContextImpl. Each holds 4 timestamp slots — one per
+    // Direction (up=0, down=1, left=2, right=3, matching the
+    // WidgetFocus::Direction enum order). The owning context calls
+    // tick() once per frame with the live held state; tick() returns
+    // a bitmask of directions that should fire a REPEAT this frame.
+    // The owning context also calls notePress() from its per-event
+    // onShortcut handler so the per-frame tick() knows step 0
+    // already happened and doesn't double-fire.
+    //
+    // SDL OS auto-repeat is filtered globally at UiContext.cpp:1041
+    // (task #516), so notePress() is called exactly once per genuine
+    // press — no idempotency machinery needed.
+    struct DirectionalRepeat
+    {
+        // pressStartMs == 0 means "no active press on this slot".
+        // Otherwise, the timestamp of the genuine initial press.
+        uint32_t pressStartMs[4] = { 0, 0, 0, 0 };
+        // Timestamp of the most recent step (initial press OR repeat).
+        // Used to gate repeat firings to kRepeatIntervalMs cadence.
+        uint32_t lastStepMs[4] = { 0, 0, 0, 0 };
+
+        // Called every frame with the live held state for each of
+        // the four directions (indexed 0..3 matching Direction).
+        // Returns a bitmask of directions whose REPEAT (not initial
+        // press) should fire this frame; bit N set means
+        // Direction(N) repeats. The initial press is NOT in this
+        // bitmask — the per-event onShortcut path owns it.
+        //
+        // Resets a slot's timestamps when its held bit is false.
+        // Adopts a slot's press if held arrives without a prior
+        // notePress() (defensive — keyboard repeat-suppression at
+        // UiContext.cpp:1041 means this should not normally happen,
+        // but if a held state is observed without seeing the press
+        // event we still want repeat to eventually kick in).
+        uint8_t tick(uint32_t nowMs, const bool held[4])
+        {
+            uint8_t fire = 0;
+            for (int i = 0; i < 4; i++)
+            {
+                if (!held[i])
+                {
+                    pressStartMs[i] = 0;
+                    lastStepMs[i] = 0;
+                    continue;
+                }
+                if (pressStartMs[i] == 0)
+                {
+                    // Held arrived without a notePress(). Adopt the
+                    // press at now; the initial-delay clock starts
+                    // here. No fire this frame (step 0 already
+                    // happened via per-event dispatch OR was missed —
+                    // either way, treat this frame as the press
+                    // boundary, not a repeat).
+                    pressStartMs[i] = nowMs;
+                    lastStepMs[i] = nowMs;
+                    continue;
+                }
+                if (nowMs - pressStartMs[i] < DiscreteStep::kInitialDelayMs)
+                    continue; // still in initial-delay window
+                if (nowMs - lastStepMs[i] < DiscreteStep::kRepeatIntervalMs)
+                    continue; // repeat window not yet reached
+                fire |= static_cast<uint8_t>(1u << i);
+                lastStepMs[i] = nowMs;
+            }
+            return fire;
+        }
+
+        // Called from the owning context's per-event onShortcut
+        // direction handler immediately after firing step 0 of a
+        // new press, so the per-frame tick() knows the press start
+        // timestamp and the repeat clock is anchored correctly.
+        // `dir` is the WidgetFocus::Direction enum value (0..3).
+        void notePress(uint8_t dir, uint32_t nowMs)
+        {
+            if (dir >= 4)
+                return;
+            pressStartMs[dir] = nowMs;
+            lastStepMs[dir] = nowMs;
+        }
+
+        // Clear all slot state. Called from the owning context's
+        // onActivate() / onDeactivate() so a direction held during a
+        // context boundary crossing requires a fresh press in the
+        // new context — otherwise the new context would observe the
+        // held bit on its first tick() and start the initial-delay
+        // clock too early.
+        void reset()
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                pressStartMs[i] = 0;
+                lastStepMs[i] = 0;
+            }
+        }
+    };
 
     // OPENRCT2MINI grid-cursor-plan §3.3 / §14.1: D-pad direction →
     // TileCoordsXY delta under the active GridCursorMode and the
@@ -593,6 +709,12 @@ namespace OpenRCT2::Ui
         bool _precisionWasHeld{ false };
         bool _precisionDpadPressed{ false };
 
+        // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): per-frame
+        // directional repeat tracker. processFrame polls this every
+        // frame; onShortcut's direction handler notes the initial
+        // press; onActivate / onDeactivate reset to avoid carry-over.
+        DirectionalRepeat _repeat{};
+
     public:
         // Verbs — override as needed. Default returns Consumed so the
         // tool context swallows the shortcut even if the verb hasn't
@@ -1000,14 +1122,26 @@ namespace OpenRCT2::Ui
                 if (id == ShortcutId::kFocusLeft || id == ShortcutId::kFocusRight)
                     return Disposition::Consumed;
             }
+            // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): note the
+            // initial press timestamp BEFORE dispatching so the per-
+            // frame tick() in processFrame knows step 0 already
+            // happened and the repeat clock anchors correctly. Slot
+            // index matches the ::Direction value used in onStep
+            // (0=N, 1=E, 2=S, 3=W). The corresponding processFrame
+            // poll queries kFocusUp/Right/Down/Left into the same
+            // slot mapping.
+            const auto noteAndStep = [&](uint8_t dir) {
+                _repeat.notePress(dir, SDL_GetTicks());
+                return onStep(static_cast<::Direction>(dir));
+            };
             if (id == ShortcutId::kFocusUp)
-                return onStep(static_cast<::Direction>(0));
+                return noteAndStep(0);
             if (id == ShortcutId::kFocusRight)
-                return onStep(static_cast<::Direction>(1));
+                return noteAndStep(1);
             if (id == ShortcutId::kFocusDown)
-                return onStep(static_cast<::Direction>(2));
+                return noteAndStep(2);
             if (id == ShortcutId::kFocusLeft)
-                return onStep(static_cast<::Direction>(3));
+                return noteAndStep(3);
             // Z-raise / Z-lower verbs map to the construction Z-lock
             // modifier paired with the existing height-adjust path
             // — Phase 3.E ships the verb hooks but defers the actual

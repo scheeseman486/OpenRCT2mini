@@ -589,6 +589,16 @@ namespace OpenRCT2::Ui
 
     void ToolContext::onActivate()
     {
+        // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): clear any
+        // carry-over directional repeat state from a prior context.
+        // If the user crossed a context boundary with a direction
+        // still held, we want the new context to require a fresh
+        // press before the repeat clock starts — otherwise the new
+        // context's first tick() would observe the held bit and
+        // initial-delay would tick from "now", which feels wrong
+        // (the new context never saw the initial press).
+        _repeat.reset();
+
         // Pixel cursor hide / show — mirror Focus mode's lifecycle.
         // Save the current SelectorMode so onDeactivate can restore
         // it. On the Mini the user typically boots into
@@ -1284,19 +1294,42 @@ namespace OpenRCT2::Ui
         return Disposition::Consumed;
     }
 
-    void ToolContext::processFrame(uint32_t /*nowMs*/)
+    void ToolContext::processFrame(uint32_t nowMs)
     {
         // OPENRCT2MINI grid-cursor-plan §18.4.e (2026-05-24): per-frame
         // brush-size sync. The shared gLandToolSize global can change
         // mid-session via the tool window's DEC/INC widgets (clicked
-        // through widget focus mode) or its numpad-OSK preview entry —
-        // neither path runs through our context, so we poll here.
-        // GridCursorModel::setBrushSize is idempotent when the size is
-        // unchanged, so this is cheap. When the tool doesn't opt in
-        // (usesGLandToolSize() returns false), the model holds at 1.
+        // through widget focus mode), its numpad-OSK preview entry, or
+        // the §18.D bindable size shortcuts — none of those paths run
+        // through our context, so we poll here. GridCursorModel::set-
+        // BrushSize is idempotent when the size is unchanged, so this
+        // is cheap. When the tool doesn't opt in (usesGLandToolSize()
+        // returns false), the model holds at 1.
+        //
+        // §18.5.1: when the size transitions 1 → >1 the cursor model's
+        // _orientation may hold a stale corner/edge/quadrant from a
+        // previous precision pick at size 1. Precision is gated off at
+        // size > 1 (§18.3) so there's no way to clear it from the user
+        // side, and the rect writer would happily paint with a stale
+        // sub-tile gMapSelectType. Snap orientation back to the per-
+        // tool default whole-tile type and re-emit the selection so the
+        // brush renders cleanly. Single canonical place for the reset:
+        // catches the widget DEC/INC path (via widget-focus roundtrip
+        // then return), the numpad text-input path, and the new §18.D
+        // shortcut path uniformly.
         if (auto* model = dynamic_cast<GridCursorModel*>(getCursorModel()); model != nullptr)
         {
+            const uint16_t prevSize = model->getBrushSize();
             const uint16_t size = usesGLandToolSize() ? gLandToolSize : 1;
+            // Reset orientation BEFORE setBrushSize so the size-driven
+            // re-emit inside setBrushSize picks up the fresh orientation
+            // in a single WriteGridCursorSelection call (no double-paint).
+            if (prevSize == 1 && size > 1)
+            {
+                const auto defaultOrient = defaultMapSelectType();
+                if (model->getOrientation() != defaultOrient)
+                    model->setOrientation(defaultOrient);
+            }
             model->setBrushSize(size);
         }
 
@@ -1351,6 +1384,50 @@ namespace OpenRCT2::Ui
             _precisionWasHeld = precisionNow;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): directional
+        // repeat-on-hold. Per-event onShortcut fires step 0 + calls
+        // notePress() to anchor the press timestamp; this poll fires
+        // subsequent steps every DiscreteStep::kRepeatIntervalMs after
+        // DiscreteStep::kInitialDelayMs of continuous hold. SDL OS
+        // auto-repeat is already filtered globally at UiContext.cpp:1041
+        // (task #516), so the poll owns all repeats uniformly across
+        // keyboard and gamepad.
+        //
+        // Slot convention: 0=kFocusUp (::Direction N), 1=kFocusRight
+        // (::Direction E), 2=kFocusDown (::Direction S), 3=kFocusLeft
+        // (::Direction W) — matches the noteAndStep lambda in
+        // ToolContext::onShortcut. Repeats route through onStep() —
+        // the same virtual the initial press dispatches to — so per-
+        // tool overrides apply identically. Skip the poll if the
+        // shift modifier is held: in that case the directions drive
+        // raise/lower verbs (per onShortcut), not stepping, and we
+        // don't want held shift+up to rapidly raise Z.
+        if (!isShiftModifierHeldInTool())
+        {
+            auto& shortcutMgr = GetShortcutManager();
+            const auto checkHeld = [&](std::string_view id) -> bool {
+                if (const auto* s = shortcutMgr.getShortcut(id); s != nullptr)
+                    return GetInputManager().getState(*s);
+                return false;
+            };
+            const bool held[4] = {
+                checkHeld(ShortcutId::kFocusUp),
+                checkHeld(ShortcutId::kFocusRight),
+                checkHeld(ShortcutId::kFocusDown),
+                checkHeld(ShortcutId::kFocusLeft),
+            };
+            const uint8_t fire = _repeat.tick(nowMs, held);
+            for (uint8_t i = 0; i < 4; i++)
+                if (fire & static_cast<uint8_t>(1u << i))
+                    onStep(static_cast<::Direction>(i));
+        }
+        else
+        {
+            // Shift held — clear repeat state so a fresh shift-release
+            // followed by direction press starts a clean repeat clock.
+            _repeat.reset();
+        }
+
         // §10.1 blink pump. The viewport repaints only invalidated
         // tiles, so without this the surface-paint hook's
         // `(ms / 500) & 1` gate runs at most once per WriteGridCursorSelection
@@ -1394,6 +1471,12 @@ namespace OpenRCT2::Ui
 
     void ToolContext::onDeactivate()
     {
+        // OPENRCT2MINI grid-cursor-plan §8.5 (2026-05-25): clear
+        // directional repeat state so a direction held during the
+        // context transition doesn't carry into the next context's
+        // first tick(). Symmetric with onActivate's reset.
+        _repeat.reset();
+
         // OPENRCT2MINI grid-cursor-plan §12.1 (amendment 2026-05-17 #7
         // — blinking-parked-cursor): differentiate tool-still-armed
         // (parked) from tool-cancelled. When parked, KEEP the
