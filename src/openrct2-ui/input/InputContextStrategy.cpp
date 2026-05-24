@@ -1316,12 +1316,36 @@ namespace OpenRCT2::Ui
         // call (i.e. on entry and on each step). Invalidating the
         // current cursor tile every frame keeps the paint pipeline
         // ticking the blink gate.
+        //
+        // OPENRCT2MINI grid-cursor-plan §18.A follow-up (2026-05-24,
+        // user-reported dirty-draw): for multi-cell brushes
+        // (brushSize > 1), the single anchor-tile invalidate isn't
+        // enough — the N²-1 other tiles miss the per-frame tick and
+        // their highlights go stale (rendered on top of stale
+        // viewport pixels from before the cursor moved, producing
+        // the dirty-draw artefact the user sees at sizes 3/5/etc.).
+        // For Grid model + multi-cell, invalidate the whole brush
+        // rect via MapInvalidateRegion — the same primitive
+        // WriteGridCursorSelection uses on writes. Same shape as
+        // tasks #591-593's dirty-draw fixes (window shadows,
+        // playfield outline) — per-frame invalidation must cover
+        // every screen block the overlay paints into.
         if (!_wroteSelection)
             return;
         if (auto* model = getCursorModel(); model != nullptr)
         {
             if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
-                MapInvalidateTileFull(grid->getPosition().ToCoordsXY());
+            {
+                if (grid->getBrushSize() > 1)
+                {
+                    const auto [a, b] = grid->computeBrushRange();
+                    MapInvalidateRegion(a.ToCoordsXY(), b.ToCoordsXY());
+                }
+                else
+                {
+                    MapInvalidateTileFull(grid->getPosition().ToCoordsXY());
+                }
+            }
             else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
                 MapInvalidateTileFull(edge->getPosition().ToCoordsXY());
         }
