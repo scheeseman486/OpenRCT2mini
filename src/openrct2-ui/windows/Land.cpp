@@ -46,6 +46,10 @@ namespace OpenRCT2::Ui::Windows
         WIDX_BACKGROUND,
         WIDX_TITLE,
         WIDX_CLOSE,
+        // OPENRCT2MINI: third radio button for the default raise/lower mode.
+        // Pressed by default; the previous mountain/paint XOR-toggle is now
+        // a three-way radio (default / mountain / paint, only one pressed).
+        WIDX_DEFAULTMODE,
         WIDX_MOUNTAINMODE,
         WIDX_PAINTMODE,
         WIDX_PREVIEW,
@@ -61,16 +65,20 @@ namespace OpenRCT2::Ui::Windows
         apply,
     };
 
+    // OPENRCT2MINI mode-button layout: three 24x24 buttons in a row,
+    // centred in the 98-px window. Padding 9 px on each side, 4 px gap
+    // between buttons (9 + 24 + 4 + 24 + 4 + 24 + 9 = 98).
     // clang-format off
     static const auto window_land_widgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
-        makeWidget     ({19,  19}, {24, 24}, WidgetType::flatBtn, WindowColour::secondary, ImageId(SPR_RIDE_CONSTRUCTION_SLOPE_UP), STR_ENABLE_MOUNTAIN_TOOL_TIP), // mountain mode
-        makeWidget     ({55,  19}, {24, 24}, WidgetType::flatBtn, WindowColour::secondary, ImageId(SPR_PAINTBRUSH),                 STR_DISABLE_ELEVATION),        // paint mode
-        makeWidget     ({27,  48}, {44, 32}, WidgetType::imgBtn,  WindowColour::primary  , ImageId(SPR_LAND_TOOL_SIZE_0),           kStringIdNone),                // preview box
-        makeRemapWidget({28,  49}, {16, 16}, WidgetType::trnBtn,  WindowColour::secondary, SPR_LAND_TOOL_DECREASE,                  STR_ADJUST_SMALLER_LAND_TIP),  // decrement size
-        makeRemapWidget({54,  63}, {16, 16}, WidgetType::trnBtn,  WindowColour::secondary, SPR_LAND_TOOL_INCREASE,                  STR_ADJUST_LARGER_LAND_TIP),   // increment size
-        makeWidget     ({ 2, 106}, {47, 36}, WidgetType::flatBtn, WindowColour::secondary, 0xFFFFFFFF,                              STR_CHANGE_BASE_LAND_TIP),     // floor texture
-        makeWidget     ({49, 106}, {47, 36}, WidgetType::flatBtn, WindowColour::secondary, 0xFFFFFFFF,                              STR_CHANGE_VERTICAL_LAND_TIP)  // wall texture
+        makeWidget     ({ 9,  19}, {24, 24}, WidgetType::flatBtn, WindowColour::secondary, ImageId(SPR_RIDE_CONSTRUCTION_VERTICAL_RISE), STR_RAISE_OR_LOWER_LAND_TIP),  // default mode
+        makeWidget     ({37,  19}, {24, 24}, WidgetType::flatBtn, WindowColour::secondary, ImageId(SPR_RIDE_CONSTRUCTION_SLOPE_UP),      STR_ENABLE_MOUNTAIN_TOOL_TIP), // mountain mode
+        makeWidget     ({65,  19}, {24, 24}, WidgetType::flatBtn, WindowColour::secondary, ImageId(SPR_PAINTBRUSH),                      STR_DISABLE_ELEVATION),        // paint mode
+        makeWidget     ({27,  48}, {44, 32}, WidgetType::imgBtn,  WindowColour::primary  , ImageId(SPR_LAND_TOOL_SIZE_0),                kStringIdNone),                // preview box
+        makeRemapWidget({28,  49}, {16, 16}, WidgetType::trnBtn,  WindowColour::secondary, SPR_LAND_TOOL_DECREASE,                       STR_ADJUST_SMALLER_LAND_TIP),  // decrement size
+        makeRemapWidget({54,  63}, {16, 16}, WidgetType::trnBtn,  WindowColour::secondary, SPR_LAND_TOOL_INCREASE,                       STR_ADJUST_LARGER_LAND_TIP),   // increment size
+        makeWidget     ({ 2, 106}, {47, 36}, WidgetType::flatBtn, WindowColour::secondary, 0xFFFFFFFF,                                   STR_CHANGE_BASE_LAND_TIP),     // floor texture
+        makeWidget     ({49, 106}, {47, 36}, WidgetType::flatBtn, WindowColour::secondary, 0xFFFFFFFF,                                   STR_CHANGE_VERTICAL_LAND_TIP)  // wall texture
     );
     // clang-format on
 
@@ -161,15 +169,30 @@ namespace OpenRCT2::Ui::Windows
                 case WIDX_CLOSE:
                     close();
                     break;
+                // OPENRCT2MINI: three-way radio. Each click selects that
+                // mode; clicking the already-selected button is a no-op
+                // (you can't deselect a radio by re-clicking it — you
+                // pick a different one to change modes). The Mountain
+                // and Paint buttons used to be XOR-toggles where
+                // clicking the active one cleared all flags to reach
+                // the now-named "default" mode, but with no visible
+                // indicator that default mode was the active state.
+                // The new WIDX_DEFAULTMODE makes the default explicit.
+                case WIDX_DEFAULTMODE:
+                    _landToolMountainMode = false;
+                    _landToolPaintMode = false;
+                    invalidate();
+                    EngageGridCursorIfFocusMode();
+                    break;
                 case WIDX_MOUNTAINMODE:
-                    _landToolMountainMode ^= 1;
+                    _landToolMountainMode = true;
                     _landToolPaintMode = false;
                     invalidate();
                     EngageGridCursorIfFocusMode();
                     break;
                 case WIDX_PAINTMODE:
                     _landToolMountainMode = false;
-                    _landToolPaintMode ^= 1;
+                    _landToolPaintMode = true;
                     invalidate();
                     EngageGridCursorIfFocusMode();
                     break;
@@ -284,6 +307,9 @@ namespace OpenRCT2::Ui::Windows
         {
             setWidgetPressed(WIDX_FLOOR, gLandToolTerrainSurface != kObjectEntryIndexNull);
             setWidgetPressed(WIDX_WALL, gLandToolTerrainEdge != kObjectEntryIndexNull);
+            // OPENRCT2MINI: three-way radio — default is pressed when
+            // neither mountain nor paint is active.
+            setWidgetPressed(WIDX_DEFAULTMODE, !_landToolMountainMode && !_landToolPaintMode);
             setWidgetPressed(WIDX_MOUNTAINMODE, _landToolMountainMode);
             setWidgetPressed(WIDX_PAINTMODE, _landToolPaintMode);
 

@@ -3994,3 +3994,5 @@ STR_7154    :When enabled, this binding only fires if the modifier keys are held
 STR_7155    :Cursor precision modifier
 STR_7156    :Construction Z raise
 STR_7157    :Construction Z lower
+# OPENRCT2MINI Land tool default-mode button — third radio button alongside mountain / paint.
+STR_7158    :Raise or lower land
