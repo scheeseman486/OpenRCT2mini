@@ -3283,7 +3283,18 @@ void InputManager::checkJoysticks()
     constexpr uint32_t kCheckInternalMs = 5000;
 
     auto tick = SDL_GetTicks();
-    if (tick > _lastJoystickCheck + kCheckInternalMs)
+    // OPENRCT2MINI 2026-05-24: fire the first scan immediately. The
+    // prior `tick > _lastJoystickCheck + 5000` condition required
+    // `tick > 5000` on the first call because `_lastJoystickCheck`
+    // value-inits to 0, meaning controllers stayed unopened (and
+    // therefore unresponsive) for the first 5 seconds of every
+    // launch. The SDL_CONTROLLERDEVICEADDED event handler resets
+    // `_lastJoystickCheck = 0` to force a rescan — that's also a
+    // first-scan sentinel and should fire immediately for the same
+    // reason. Either condition now lets the open run; once the first
+    // scan stamps a non-zero tick, the 5-second cadence resumes for
+    // background hot-plug polling.
+    if (_lastJoystickCheck == 0 || tick > _lastJoystickCheck + kCheckInternalMs)
     {
         _lastJoystickCheck = tick;
 
