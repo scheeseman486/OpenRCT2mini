@@ -1832,6 +1832,21 @@ namespace
             return Windows::WindowLandIsPaintMode() ? SubsetType::none : SubsetType::corners;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24,
+        // paint-mode user feedback "shouldn't disable directional
+        // inputs while the activation button is held"): in paint mode
+        // the cursor.click-held + D-pad gesture should keep stepping
+        // the cursor, not divert to onRaise/onLower. Mirrors the mouse
+        // path of paint: onToolDrag fires SurfaceSetStyleAction on
+        // every tick as the mouse pans, so panning across tiles to
+        // paint a strip is the natural workflow. Outside paint mode
+        // (raise/lower / mountain), keep the default consume so PAD A
+        // held + D-pad up/down remains the raise/lower modifier.
+        bool consumeDirectionalsWhenCursorClickHeld() const override
+        {
+            return !Windows::WindowLandIsPaintMode();
+        }
+
         // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24):
         // paint mode. When the user has the paint-landscape button
         // pressed, cursor.click dispatches SurfaceSetStyleAction over

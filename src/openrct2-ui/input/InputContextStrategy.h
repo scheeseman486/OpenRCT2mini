@@ -630,6 +630,21 @@ namespace OpenRCT2::Ui
         // edges for railings mode).
         virtual SubsetType precisionSubset() const { return SubsetType::none; }
 
+        // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24,
+        // Land paint mode): per-tool opt-out for the cursor.click-
+        // held D-pad routing block in onShortcut. Base default = true
+        // (PAD A held + D-pad up/down → onRaise/onLower, left/right
+        // suppressed — the Land tool's raise/lower modifier
+        // gesture). Tools whose primary cursor.click verb is a place-
+        // action that wants to be repeatable while panning override
+        // to false so D-pad keeps stepping the cursor while PAD A is
+        // held. Currently only Land paint mode needs this — the
+        // mouse path of paint dispatches SurfaceSetStyleAction on
+        // every onToolDrag tick AND doesn't change the held cursor
+        // hover semantics, so panning across tiles to paint a strip
+        // is the natural workflow.
+        virtual bool consumeDirectionalsWhenCursorClickHeld() const { return true; }
+
         // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1
         // (2026-05-24): D-pad direction while the precision modifier
         // is held selects a sub-tile orientation (corner / edge /
@@ -841,7 +856,14 @@ namespace OpenRCT2::Ui
             // precedence side. Designed for the Land tool but applies
             // uniformly across the tool set (Footpath's onRaise/onLower
             // do Z-adjust, etc.).
-            if (isCursorClickHeldInTool())
+            //
+            // §11.2 follow-up (2026-05-24, paint mode): the per-tool
+            // consumeDirectionalsWhenCursorClickHeld() hook lets a
+            // tool opt out — Land paint mode wants D-pad to step the
+            // cursor freely so PAD A held + D-pad pans across tiles
+            // (the natural "drag-paint" gesture, mirroring the mouse
+            // path's onToolDrag chain of SurfaceSetStyleActions).
+            if (isCursorClickHeldInTool() && consumeDirectionalsWhenCursorClickHeld())
             {
                 if (id == ShortcutId::kFocusUp)
                     return onRaise();
