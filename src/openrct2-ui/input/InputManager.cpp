@@ -1862,6 +1862,23 @@ namespace
             return Disposition::Consumed;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24,
+        // paint-mode drag-paint): when paint mode is engaged AND the
+        // user is holding PAD A while stepping the cursor, dispatch
+        // SurfaceSetStyleAction at every new tile. Mirrors the mouse
+        // path's onToolDrag chain of paints during a hold-and-drag
+        // gesture. The base onStep updates the cursor position and
+        // re-writes gMapSelectPositionA/B via GridCursorModel::step
+        // → WriteGridCursorSelection, so by the time we get here the
+        // selection globals already point at the destination tile.
+        Disposition onStep(::Direction dpad) override
+        {
+            const auto result = ToolContext::onStep(dpad);
+            if (Windows::WindowLandIsPaintMode() && isCursorClickHeldInTool())
+                Windows::WindowLandPaintAtCursor();
+            return result;
+        }
+
         // OPENRCT2MINI grid-cursor-plan §11.2 (2026-05-24): onRaise /
         // onLower dispatch the canonical LandRaise / LandLower game
         // actions at the cursor's tile + selected sub-tile orientation
