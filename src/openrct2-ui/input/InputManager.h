@@ -146,6 +146,10 @@ namespace OpenRCT2::Ui
         toolLandRights,
         toolTileInspector,
         toolRideConstruction,
+        // OPENRCT2MINI grid-cursor-plan §11.9 / §18.C (2026-05-24):
+        // ClearScenery (bulldozer) tool. Same shape as toolLandRights
+        // (single-click brush over gLandToolSize footprint).
+        toolClearScenery,
         // listScroll,     // future: cursor.* drives a focused scrollable list
     };
 
@@ -215,7 +219,7 @@ namespace OpenRCT2::Ui
         // Sized to cover every current enum entry plus a margin for
         // the commented-out listScroll stub. Phase 3.G's tool entries
         // reach index 14; bump to 16 for headroom.
-        static constexpr size_t kInputContextCount = 16;
+        static constexpr size_t kInputContextCount = 17;
         // No NSDMI brace-init `{}` here on purpose. GCC 8.3 (OnionUI
         // toolchain) instantiates `unique_ptr<IInputContext>::~unique_ptr`
         // at the NSDMI site when `{}` is present, which then requires

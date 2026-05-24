@@ -204,6 +204,12 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.9.1 (2026-05-24): setter
+        // for the free-function cost-refresh helper (defined at the
+        // bottom of this file) to write through. Mirrors LandRights'
+        // SetLandRightsCost.
+        void SetClearSceneryCost(money64 cost) { _clearSceneryCost = cost; }
+
         GameActions::ClearAction GetClearAction()
         {
             auto range = MapRange(gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y);
@@ -393,5 +399,54 @@ namespace OpenRCT2::Ui::Windows
             ToolSet(*toolWindow, WIDX_BACKGROUND, Tool::bulldozer);
             gInputFlags.set(InputFlag::allowRightMouseRemoval);
         }
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.9 / §18.C (2026-05-24):
+    // grid-cursor dispatch + cost preview for the ClearScenery tool.
+    // Same shape as LandRights (§11.5). The window class is named
+    // `CleanSceneryWindow` upstream (typo), so the cast uses that name
+    // even though our helpers and WindowClass::clearScenery use the
+    // corrected spelling.
+    static CleanSceneryWindow* findClearSceneryWindow()
+    {
+        auto* wm = GetWindowManager();
+        if (wm == nullptr)
+            return nullptr;
+        return static_cast<CleanSceneryWindow*>(wm->FindByClass(WindowClass::clearScenery));
+    }
+
+    void WindowClearSceneryAtCursor()
+    {
+        auto* w = findClearSceneryWindow();
+        if (w == nullptr)
+            return;
+        // Mirror the mouse onToolDrag's guard at ClearScenery.cpp:339
+        // — bail when an error popup is up so a held PAD A doesn't
+        // spam more errors at the user. The Execute itself would just
+        // fail repeatedly without this; the guard keeps the UX clean.
+        auto* wm = GetWindowManager();
+        if (wm != nullptr && wm->FindByClass(WindowClass::error) != nullptr)
+            return;
+        auto action = w->GetClearAction();
+        GameActions::Execute(&action, getGameState());
+    }
+
+    // §11.9.1 (live cost preview, v1 requirement): mirror the mouse
+    // ToolUpdateSceneryClear cost recompute at ClearScenery.cpp:296-
+    // so the cost line stays current under grid-cursor flow. Query
+    // is side-effect-free.
+    void WindowClearSceneryRefreshCost()
+    {
+        auto* w = findClearSceneryWindow();
+        if (w == nullptr)
+            return;
+        auto action = w->GetClearAction();
+        action.SetFlags({ GameActions::CommandFlag::allowDuringPaused });
+        auto res = GameActions::Query(&action, getGameState());
+        const money64 cost = res.error == GameActions::Status::ok ? res.cost : kMoney64Undefined;
+        w->SetClearSceneryCost(cost);
+        auto* wm = GetWindowManager();
+        if (wm != nullptr)
+            wm->InvalidateByClass(WindowClass::clearScenery);
     }
 } // namespace OpenRCT2::Ui::Windows

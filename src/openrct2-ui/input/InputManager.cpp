@@ -2119,6 +2119,45 @@ namespace
         }
     };
 
+    // OPENRCT2MINI grid-cursor-plan §11.9 / §18.C (2026-05-24):
+    // ClearScenery (bulldozer) wired with the same shape as
+    // LandRights. No tinted highlight (mouse path uses
+    // MapSelectType::full at ClearScenery.cpp:244) and no
+    // water-aware cursor parking (ScreenGetMapXY at
+    // ClearScenery.cpp:229 doesn't include the water filter).
+    // Default brush size at window open is 2 (ClearScenery.cpp:83),
+    // not 1; the per-frame setBrushSize poll handles that without
+    // any extra work here.
+    class ClearSceneryContextImpl final : public ToolContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolClearScenery;
+        }
+
+        bool usesGLandToolSize() const override { return true; }
+
+        Disposition onPlace() override
+        {
+            Windows::WindowClearSceneryAtCursor();
+            return Disposition::Consumed;
+        }
+
+        Disposition onStep(::Direction dpad) override
+        {
+            const auto result = ToolContext::onStep(dpad);
+            Windows::WindowClearSceneryRefreshCost();
+            return result;
+        }
+
+        void onActivate() override
+        {
+            ToolContext::onActivate();
+            Windows::WindowClearSceneryRefreshCost();
+        }
+    };
+
     class TileInspectorContextImpl final : public ToolContext
     {
     public:
@@ -2186,6 +2225,7 @@ InputManager::InputManager()
     _contextRegistry[static_cast<size_t>(InputContext::toolLandRights)] = std::make_unique<LandRightsContextImpl>();
     _contextRegistry[static_cast<size_t>(InputContext::toolTileInspector)] = std::make_unique<TileInspectorContextImpl>();
     _contextRegistry[static_cast<size_t>(InputContext::toolRideConstruction)] = std::make_unique<RideConstructionContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolClearScenery)] = std::make_unique<ClearSceneryContextImpl>();
 
     // OPENRCT2MINI cursor-selector-modal-plan §3.1: seed selector
     // mode from config. widgetFocusAlwaysOn defaulted true today,
@@ -2789,7 +2829,7 @@ void InputManager::cycleFocusedWindow(int direction)
         static constexpr WindowClass kToolClasses[] = {
             WindowClass::footpath,         WindowClass::land,             WindowClass::water,
             WindowClass::scenery,          WindowClass::rideConstruction, WindowClass::landRights,
-            WindowClass::tileInspector,
+            WindowClass::tileInspector,    WindowClass::clearScenery,
         };
         const auto isToolWindowClass = [](WindowClass c) {
             for (auto t : kToolClasses)
@@ -3892,6 +3932,9 @@ InputContext InputManager::resolveActiveContext() const
             WindowClass::rideConstruction,
             WindowClass::landRights,
             WindowClass::tileInspector,
+            // OPENRCT2MINI grid-cursor-plan §11.9 / §18.C (2026-05-24):
+            // ClearScenery (bulldozer) is its own tool window class.
+            WindowClass::clearScenery,
         };
         const auto topmost = OpenRCT2::GetTopmostWindowClassInSet(
             kToolClasses, std::size(kToolClasses));
@@ -3911,6 +3954,8 @@ InputContext InputManager::resolveActiveContext() const
                 return InputContext::toolLandRights;
             case WindowClass::tileInspector:
                 return InputContext::toolTileInspector;
+            case WindowClass::clearScenery:
+                return InputContext::toolClearScenery;
             default:
                 break;
         }
@@ -4134,6 +4179,7 @@ bool InputManager::isShortcutMeaningfulInContext(std::string_view shortcutId, In
         case InputContext::toolLandRights:
         case InputContext::toolTileInspector:
         case InputContext::toolRideConstruction:
+        case InputContext::toolClearScenery:
             return true;
 
         // OPENRCT2MINI focus-mode-plan / Phase F.1: widget-focus mode.

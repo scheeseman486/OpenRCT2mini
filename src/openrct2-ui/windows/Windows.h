@@ -103,6 +103,14 @@ namespace OpenRCT2::Ui::Windows
     // ClearScenery
     WindowBase* ClearSceneryOpen();
     void ToggleClearSceneryWindow();
+    // OPENRCT2MINI grid-cursor-plan §11.9 / §18.C (2026-05-24):
+    // grid-cursor dispatch + cost preview for the ClearScenery tool.
+    // Apply runs ClearAction (with an error-popup guard that mirrors
+    // the mouse onToolDrag); RefreshCost runs the Query path and
+    // writes the result to the window's cost member so the cost line
+    // stays current as the user steps the brush or resizes it.
+    void WindowClearSceneryAtCursor();
+    void WindowClearSceneryRefreshCost();
 
     // CustomCurrency
     WindowBase* CustomCurrencyOpen();
