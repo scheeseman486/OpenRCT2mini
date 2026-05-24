@@ -313,6 +313,16 @@ namespace OpenRCT2::Ui::Windows
 
     // LandRights
     WindowBase* LandRightsOpen();
+    // OPENRCT2MINI grid-cursor-plan §11.5 / §18.C (2026-05-24):
+    // grid-cursor dispatch + cost preview for the LandRights tool.
+    // WindowLandRightsApplyAtCursor mirrors mouse onToolDown and
+    // branches on IsOwnershipMode() to pick LandSetRights vs
+    // LandBuyRights. WindowLandRightsRefreshCost runs the Query
+    // path of the same action and writes the result back to the
+    // window's display-cost member so the cost line stays current
+    // as the user steps the brush or resizes it.
+    void WindowLandRightsApplyAtCursor();
+    void WindowLandRightsRefreshCost();
 
     // LoadSave
     WindowBase* LoadsaveOpen(

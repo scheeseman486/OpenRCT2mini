@@ -2061,11 +2061,62 @@ namespace
         {
             return InputContext::toolLandRights;
         }
-        // Owns the cheaper variant of GridCursor — LandRights paints
-        // larger areas without per-tile precision, so a discrete D-pad
-        // step that jumps several tiles at once will probably feel
-        // better than the single-tile step Footpath uses. Tuning is
-        // for the verb-wiring follow-up.
+
+        // OPENRCT2MINI grid-cursor-plan §11.5 / §18.C (2026-05-24): wire
+        // LandRights to the multi-cell brush. Same opt-in shape as Land
+        // (§18.A) and Water (§18.C). Per-tool visual + verb deltas:
+        //
+        //   - fullLandRights highlight tint (mirrors Land Rights.cpp:491-495)
+        //   - Water-aware cursor parking (the mouse path's
+        //     GetMapCoordinatesFromPos at LandRights.cpp:469 includes
+        //     ViewportInteractionItem::water, i.e. underwater tiles are
+        //     valid targets, so the sprite should float on water
+        //     rather than sit on the bed beneath it — same logic as
+        //     WaterContextImpl::cursorParkZExtra)
+        //   - onPlace dispatches via the new WindowLandRightsApplyAtCursor
+        //     helper which branches on IsOwnershipMode() to pick
+        //     LandSetRights vs LandBuyRights (mirrors mouse onToolDown
+        //     at LandRights.cpp:562-578)
+        //   - onStep/onActivate refresh the cost preview so the
+        //     LandRights window's cost line stays current as the user
+        //     steps the brush or resizes it (§11.5.1 — replaces the
+        //     mouse path's per-onToolUpdate cost recompute, which
+        //     never fires in pure grid-cursor flow)
+        bool usesGLandToolSize() const override { return true; }
+
+        MapSelectType defaultMapSelectType() const override
+        {
+            return MapSelectType::fullLandRights;
+        }
+
+        int32_t cursorParkZExtra(CoordsXY worldCoord) const override
+        {
+            const auto centre = worldCoord + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
+            const int32_t land = OpenRCT2::TileElementHeight(centre);
+            const int32_t water = OpenRCT2::TileElementWaterHeight(centre);
+            if (water <= land)
+                return 0;
+            return water - land;
+        }
+
+        Disposition onPlace() override
+        {
+            Windows::WindowLandRightsApplyAtCursor();
+            return Disposition::Consumed;
+        }
+
+        Disposition onStep(::Direction dpad) override
+        {
+            const auto result = ToolContext::onStep(dpad);
+            Windows::WindowLandRightsRefreshCost();
+            return result;
+        }
+
+        void onActivate() override
+        {
+            ToolContext::onActivate();
+            Windows::WindowLandRightsRefreshCost();
+        }
     };
 
     class TileInspectorContextImpl final : public ToolContext

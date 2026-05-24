@@ -99,10 +99,18 @@ namespace OpenRCT2::Ui::Windows
         LandRightsMode _landRightsMode;
         money64 _landRightsCost;
 
+    public:
+        // OPENRCT2MINI grid-cursor-plan §11.5 / §18.C (2026-05-24):
+        // promoted to public so the free-function helpers (declared in
+        // Windows.h and defined at the bottom of this file) can drive
+        // the LandRights tool from the grid cursor's ToolContext.
+        // Identical semantics to the private versions they replace;
+        // moved purely for cross-translation-unit reachability.
         bool IsOwnershipMode() const
         {
             return isInEditorMode() != 0 || getGameState().cheats.sandboxMode;
         }
+    private:
 
         void SwitchToMode(LandRightsMode mode)
         {
@@ -427,6 +435,16 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
+    public:
+        // OPENRCT2MINI grid-cursor-plan §11.5 / §18.C (2026-05-24):
+        // promoted to public so the free-function helpers
+        // (WindowLandRightsApplyAtCursor / RefreshCost) can build and
+        // dispatch the same actions the mouse path uses. Identical
+        // semantics — only the access changed. SetLandRightsCost is
+        // new: it's how the cost-refresh helper writes back into the
+        // window's display-cost member without breaking encapsulation.
+        void SetLandRightsCost(money64 cost) { _landRightsCost = cost; }
+
         GameActions::LandBuyRightsAction GetLandBuyAction()
         {
             auto mode = (_landRightsMode == LandRightsMode::BuyLand) ? GameActions::LandBuyRightSetting::BuyLand
@@ -599,5 +617,67 @@ namespace OpenRCT2::Ui::Windows
         auto* windowMgr = GetWindowManager();
         return windowMgr->FocusOrCreate<LandRightsWindow>(
             WindowClass::landRights, ScreenCoordsXY(ContextGetWidth() - kWindowSize.width, 29), kWindowSize, {});
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.5 / §18.C (2026-05-24):
+    // grid-cursor dispatch helpers for the LandRights tool. Mirrors
+    // the Land tool's WindowLandRaiseAtCursor / WindowLandPaintAtCursor
+    // pattern in Land.cpp — reads gMapSelectPositionA/B (set by the
+    // grid cursor's WriteGridCursorSelection rect writer) and runs
+    // the same actions the mouse onToolDown dispatches.
+    static LandRightsWindow* findLandRightsWindow()
+    {
+        auto* wm = GetWindowManager();
+        if (wm == nullptr)
+            return nullptr;
+        return static_cast<LandRightsWindow*>(wm->FindByClass(WindowClass::landRights));
+    }
+
+    void WindowLandRightsApplyAtCursor()
+    {
+        auto* w = findLandRightsWindow();
+        if (w == nullptr)
+            return;
+        auto& gameState = getGameState();
+        if (w->IsOwnershipMode())
+        {
+            auto action = w->GetLandSetAction();
+            GameActions::Execute(&action, gameState);
+        }
+        else
+        {
+            auto action = w->GetLandBuyAction();
+            GameActions::Execute(&action, gameState);
+        }
+    }
+
+    // §11.5.1 (live cost preview, v1 requirement): mirror the mouse
+    // onToolUpdate's cost recompute path (LandRights.cpp:538-549) so
+    // the cost line in the LandRights window stays current as the
+    // user steps the grid cursor or resizes the brush. The action
+    // Query is side-effect-free.
+    void WindowLandRightsRefreshCost()
+    {
+        auto* w = findLandRightsWindow();
+        if (w == nullptr)
+            return;
+        auto& gameState = getGameState();
+        money64 cost = kMoney64Undefined;
+        if (w->IsOwnershipMode())
+        {
+            auto action = w->GetLandSetAction();
+            auto res = GameActions::Query(&action, gameState);
+            cost = res.error == GameActions::Status::ok ? res.cost : kMoney64Undefined;
+        }
+        else
+        {
+            auto action = w->GetLandBuyAction();
+            auto res = GameActions::Query(&action, gameState);
+            cost = res.error == GameActions::Status::ok ? res.cost : kMoney64Undefined;
+        }
+        w->SetLandRightsCost(cost);
+        auto* wm = GetWindowManager();
+        if (wm != nullptr)
+            wm->InvalidateByClass(WindowClass::landRights);
     }
 } // namespace OpenRCT2::Ui::Windows
