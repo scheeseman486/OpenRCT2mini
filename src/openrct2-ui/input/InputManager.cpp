@@ -1866,13 +1866,28 @@ namespace
         // helpers themselves branch on WindowLandIsMountainMode and
         // swap to LandSmoothAction when mountain mode is engaged — the
         // gamepad path doesn't need a per-mode override here.
+        //
+        // §11.2 follow-up (2026-05-24, paint mode user feedback): paint
+        // mode and raise/lower are mutually exclusive in the mouse
+        // path — Land.cpp's onToolDown/onToolDrag dispatches
+        // SurfaceSetStyleAction when _landToolPaintMode is set and
+        // never calls SelectionRaise/LowerLand in that branch. Mirror
+        // that here: when paint mode is engaged, the cursor.click-
+        // held + D-pad up/down gesture (and the shift-modifier Z-
+        // adjust gesture, which routes through the same onRaise /
+        // onLower hooks) is a Consumed no-op so the user can't
+        // accidentally terrain-edit while painting.
         Disposition onRaise() override
         {
+            if (Windows::WindowLandIsPaintMode())
+                return Disposition::Consumed;
             Windows::WindowLandRaiseAtCursor();
             return Disposition::Consumed;
         }
         Disposition onLower() override
         {
+            if (Windows::WindowLandIsPaintMode())
+                return Disposition::Consumed;
             Windows::WindowLandLowerAtCursor();
             return Disposition::Consumed;
         }
