@@ -1109,6 +1109,15 @@ static constexpr float kWindowScrollLocations[][2] = {
     // (+1, +2) offset. The Rectangle::filter clips to windowRT's
     // dirty-region bounds — see §2.3 for why this MUST be called from
     // WindowDrawAll, not WindowDrawSingle.
+    //
+    // OPENRCT2MINI 2026-05-26: split each strip around any window
+    // ABOVE the active one in z-order so the shadow doesn't paint
+    // over dropdowns / tooltips / other stickToFront popups that
+    // happen to overlap the shadow region. Previously the strip was
+    // painted as a single filter() call regardless of what's on
+    // top, producing visible darkened pixels overlapping dropdown
+    // items when the dropdown opened off the bottom or right edge
+    // of the active window.
     static void DrawActiveWindowDropShadow(Drawing::RenderTarget& rt, const WindowBase& w)
     {
         constexpr int32_t kShadowOffX = 1;
@@ -1119,16 +1128,116 @@ static constexpr float kWindowScrollLocations[][2] = {
         const int32_t wh = w.height;
         if (ww <= 0 || wh <= 0)
             return;
-        // Right strip — 1 wide, wh tall, starting +2 below window top.
-        Drawing::Rectangle::filter(
-            rt, { { wx + ww, wy + kShadowOffY }, { wx + ww, wy + kShadowOffY + wh - 1 } },
-            Drawing::FilterPaletteID::paletteDarken2);
-        // Bottom strip — (ww - 1) wide, 2 tall, starting +1 right of window left.
+
+        // Collect bounds of every later-z-order window (drawn ON TOP
+        // of the active one). gWindowList front-to-back ordering is
+        // back-to-front in z; iterate strictly AFTER the active
+        // window's slot. Skip dead and transparent windows because
+        // WindowDrawAll skips them too — their pixel coverage is
+        // zero.
+        struct Rect
+        {
+            int32_t left, top, right, bottom; // inclusive
+        };
+        std::vector<Rect> covers;
+        covers.reserve(4);
+        bool seenActive = false;
+        for (const auto& other : gWindowList)
+        {
+            if (other.get() == &w)
+            {
+                seenActive = true;
+                continue;
+            }
+            if (!seenActive)
+                continue;
+            if (other->flags.has(WindowFlag::dead))
+                continue;
+            if (other->flags.has(WindowFlag::transparent))
+                continue;
+            if (other->width <= 0 || other->height <= 0)
+                continue;
+            covers.push_back(Rect{
+                other->windowPos.x,
+                other->windowPos.y,
+                other->windowPos.x + other->width - 1,
+                other->windowPos.y + other->height - 1,
+            });
+        }
+
+        // Subtract a 1D occlusion range from a list of 1D ranges
+        // along one axis. Each input range that intersects the
+        // occlusion is split into at most two output ranges.
+        struct Range1D { int32_t a, b; };
+        auto subtract = [](std::vector<Range1D>& ranges, int32_t occA, int32_t occB) {
+            std::vector<Range1D> next;
+            next.reserve(ranges.size() * 2);
+            for (const auto& r : ranges)
+            {
+                if (occB < r.a || occA > r.b)
+                {
+                    next.push_back(r);
+                    continue;
+                }
+                if (occA > r.a)
+                    next.push_back({ r.a, occA - 1 });
+                if (occB < r.b)
+                    next.push_back({ occB + 1, r.b });
+            }
+            ranges = std::move(next);
+        };
+
+        // Right strip — vertical, 1 px wide at x = wx + ww, y in
+        // [wy + 2, wy + 2 + wh - 1]. Occlusion checks intersect by
+        // x-column inside the later window, then subtract the
+        // overlapping y-range.
+        {
+            const int32_t stripX = wx + ww;
+            const int32_t y0 = wy + kShadowOffY;
+            const int32_t y1 = wy + kShadowOffY + wh - 1;
+            std::vector<Range1D> ranges{ { y0, y1 } };
+            for (const auto& c : covers)
+            {
+                if (stripX < c.left || stripX > c.right)
+                    continue;
+                subtract(ranges, c.top, c.bottom);
+                if (ranges.empty())
+                    break;
+            }
+            for (const auto& r : ranges)
+            {
+                Drawing::Rectangle::filter(
+                    rt, { { stripX, r.a }, { stripX, r.b } },
+                    Drawing::FilterPaletteID::paletteDarken2);
+            }
+        }
+        // Bottom strip — horizontal band y in [wy + wh, wy + wh + 1],
+        // x in [wx + 1, wx + ww - 1]. Treat the two y-rows as one
+        // unit (both rows always share occlusion since the strip is
+        // only 2 px tall — splitting per row would just complicate
+        // the math). Per-cover: intersect by y-row inside the later
+        // window, then subtract the overlapping x-range.
         if (ww >= 2)
         {
-            Drawing::Rectangle::filter(
-                rt, { { wx + kShadowOffX, wy + wh }, { wx + ww - 1, wy + wh + kShadowOffY - 1 } },
-                Drawing::FilterPaletteID::paletteDarken2);
+            const int32_t stripYTop = wy + wh;
+            const int32_t stripYBot = wy + wh + kShadowOffY - 1;
+            const int32_t x0 = wx + kShadowOffX;
+            const int32_t x1 = wx + ww - 1;
+            std::vector<Range1D> ranges{ { x0, x1 } };
+            for (const auto& c : covers)
+            {
+                if (stripYBot < c.top || stripYTop > c.bottom)
+                    continue;
+                subtract(ranges, c.left, c.right);
+                if (ranges.empty())
+                    break;
+            }
+            for (const auto& r : ranges)
+            {
+                Drawing::Rectangle::filter(
+                    rt, { { r.a, stripYTop }, { r.b, stripYBot } },
+                    Drawing::FilterPaletteID::paletteDarken2);
+            }
         }
     }
 
