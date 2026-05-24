@@ -319,6 +319,20 @@ namespace OpenRCT2::Ui::Windows
     bool WindowLandIsMountainMode();
     bool WindowLandIsPaintMode();
 
+    // OPENRCT2MINI grid-cursor-plan §18.D (2026-05-24): bump gLandToolSize
+    // from a bound shortcut without leaving grid cursor mode. Finds the
+    // topmost size-aware tool window (Land / Water / LandRights /
+    // ClearScenery) via GetTopmostWindowClassInSet, applies an inc/dec
+    // delta with the same kLandToolMinimumSize / kLandToolMaximumSize
+    // clamps the DEC/INC widgets use, invalidates the window, and
+    // refreshes the live cost preview where applicable. Returns true
+    // if a matching tool window was found (i.e. the shortcut had a
+    // valid target); false if no size-aware tool window is open.
+    // Per-tool orientation reset on size 1 → >1 transitions is handled
+    // by ToolContext::processFrame (§18.5.1), so this helper does NOT
+    // need to touch the active cursor model directly.
+    bool WindowToolBumpSize(int delta);
+
     // LandRights
     WindowBase* LandRightsOpen();
     // OPENRCT2MINI grid-cursor-plan §11.5 / §18.C (2026-05-24):

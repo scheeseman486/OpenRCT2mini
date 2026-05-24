@@ -3996,3 +3996,6 @@ STR_7156    :Construction Z raise
 STR_7157    :Construction Z lower
 # OPENRCT2MINI Land tool default-mode button — third radio button alongside mountain / paint.
 STR_7158    :Raise or lower land
+# OPENRCT2MINI grid-cursor-plan §18.D — bindable tool brush-size shortcuts (Land / Water / LandRights / ClearScenery).
+STR_7159    :Increase tool size
+STR_7160    :Decrease tool size

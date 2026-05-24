@@ -284,4 +284,18 @@ namespace OpenRCT2::Ui::ShortcutId
     // "right-click action without drag" channel via its own polling;
     // this shortcut owns the press-and-hold camera-drag gesture.
     constexpr std::string_view kInterfaceCameraDrag = "interface.general.camera_drag";
+
+    // OPENRCT2MINI grid-cursor-plan §18.D (2026-05-24): bindable brush-size
+    // shortcuts for the four size-aware tool windows (Land, Water,
+    // LandRights, ClearScenery). When fired, finds the topmost open
+    // size-aware tool window and bumps `gLandToolSize` ±1 with the same
+    // clamps the existing DEC/INC widgets use (kLandToolMinimumSize /
+    // kLandToolMaximumSize), invalidates the window, and refreshes the
+    // live cost preview where applicable. Unbound by default — power
+    // users opt in via the Input Bindings UI rather than risk colliding
+    // with an existing default. Reachable from grid cursor mode without
+    // leaving focus mode, closing the §18.5 Option A "step out to widget
+    // focus, click DEC/INC, step back" workflow gap.
+    constexpr std::string_view kInterfaceToolSizeIncrement = "interface.tool.size_increment";
+    constexpr std::string_view kInterfaceToolSizeDecrement = "interface.tool.size_decrement";
 } // namespace OpenRCT2::Ui::ShortcutId

@@ -1104,6 +1104,25 @@ void ShortcutManager::registerDefaultShortcuts()
     registerShortcut(ShortcutId::kInterfaceCameraDrag,
                      STR_SHORTCUT_CAMERA_DRAG,                "",       []() {});
 
+    // OPENRCT2MINI grid-cursor-plan §18.D (2026-05-24): bindable tool
+    // brush-size shortcuts. Each fires `WindowToolBumpSize(±1)` which
+    // walks the window stack for the topmost size-aware tool window
+    // (Land / Water / LandRights / ClearScenery) and bumps
+    // gLandToolSize with the same kLandToolMinimumSize /
+    // kLandToolMaximumSize clamps the DEC/INC widgets use. Default
+    // keyboard / pad bindings are empty — power users opt in via the
+    // Input Bindings UI rather than risk colliding with an existing
+    // default. No-ops when no size-aware tool window is open. Reachable
+    // from grid cursor mode without leaving focus mode (§18.5 Option B).
+    registerShortcut(ShortcutId::kInterfaceToolSizeIncrement,
+                     STR_SHORTCUT_TOOL_SIZE_INCREMENT,        "",       []() {
+        Windows::WindowToolBumpSize(+1);
+    });
+    registerShortcut(ShortcutId::kInterfaceToolSizeDecrement,
+                     STR_SHORTCUT_TOOL_SIZE_DECREMENT,        "",       []() {
+        Windows::WindowToolBumpSize(-1);
+    });
+
     // OPENRCT2MINI text-editing-de-hardcode: bindable caret + clipboard
     // shortcuts. Each replaces a specific case of the previously-
     // hardcoded SDL_KEYDOWN dispatch in TextComposition.cpp. Action

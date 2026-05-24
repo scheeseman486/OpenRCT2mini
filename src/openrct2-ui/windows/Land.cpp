@@ -1053,4 +1053,67 @@ namespace OpenRCT2::Ui::Windows
             gLandToolTerrainSurface, gLandToolTerrainEdge);
         GameActions::Execute(&action, getGameState());
     }
+
+    // OPENRCT2MINI grid-cursor-plan §18.D (2026-05-24): bump gLandToolSize
+    // from a bound shortcut. Routes through the same topmost-tool-window
+    // lookup that InputManager::resolveActiveContext uses (§17.6 multi-
+    // tool routing), so when several size-aware tool windows are open
+    // simultaneously the binding hits the same tool the grid cursor is
+    // currently driving — consistent with how multi-tool inputs are
+    // resolved everywhere else.
+    //
+    // Clamps to [kLandToolMinimumSize, kLandToolMaximumSize] (the same
+    // bounds the DEC/INC widgets and numpad text input use), invalidates
+    // the matching window so the size preview redraws, and fires the
+    // per-tool live cost refresh helper (Land has no cost preview).
+    //
+    // §18.5.1 orientation reset is handled centrally by
+    // ToolContext::processFrame (which polls gLandToolSize every frame
+    // and re-seeds the cursor model's orientation on 1 → >1 transitions
+    // via the per-tool defaultMapSelectType()). This helper doesn't need
+    // to touch the active cursor model directly.
+    bool WindowToolBumpSize(int delta)
+    {
+        if (delta == 0)
+            return false;
+        static constexpr WindowClass kSizeAwareToolClasses[] = {
+            WindowClass::land,
+            WindowClass::water,
+            WindowClass::landRights,
+            WindowClass::clearScenery,
+        };
+        const auto topmost = OpenRCT2::GetTopmostWindowClassInSet(
+            kSizeAwareToolClasses, std::size(kSizeAwareToolClasses));
+        if (topmost == WindowClass::null)
+            return false;
+        const uint16_t prev = gLandToolSize;
+        const int32_t target = static_cast<int32_t>(gLandToolSize) + delta;
+        const int32_t clamped = std::clamp<int32_t>(
+            target, kLandToolMinimumSize, kLandToolMaximumSize);
+        gLandToolSize = static_cast<uint16_t>(clamped);
+        if (gLandToolSize == prev)
+            return true; // already at clamp; shortcut still consumed
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr != nullptr)
+            windowMgr->InvalidateByClass(topmost);
+        switch (topmost)
+        {
+            case WindowClass::water:
+                WindowWaterRefreshCost();
+                break;
+            case WindowClass::landRights:
+                WindowLandRightsRefreshCost();
+                break;
+            case WindowClass::clearScenery:
+                WindowClearSceneryRefreshCost();
+                break;
+            case WindowClass::land:
+            default:
+                // Land has no live cost preview — the only feedback is
+                // the size readout, which the InvalidateByClass above
+                // redraws.
+                break;
+        }
+        return true;
+    }
 } // namespace OpenRCT2::Ui::Windows

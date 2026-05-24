@@ -544,6 +544,14 @@ namespace OpenRCT2
 
         STR_SHORTCUT_CONSTRUCTION_Z_LOWER = 7157,
 
+        // OPENRCT2MINI grid-cursor-plan §18.D: bindable tool brush-size
+        // shortcuts. Bump gLandToolSize on the topmost size-aware tool
+        // window (Land / Water / LandRights / ClearScenery) without
+        // leaving grid cursor mode. Unbound by default.
+        STR_SHORTCUT_TOOL_SIZE_INCREMENT = 7159,
+
+        STR_SHORTCUT_TOOL_SIZE_DECREMENT = 7160,
+
         STR_OR = 7000,
 
         // Widgets
