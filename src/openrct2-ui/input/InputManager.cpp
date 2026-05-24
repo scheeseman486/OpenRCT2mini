@@ -2156,6 +2156,19 @@ namespace
 
         bool usesGLandToolSize() const override { return true; }
 
+        // OPENRCT2MINI grid-cursor-plan §11.9 follow-up (2026-05-24,
+        // user request): ClearScenery should behave like Land paint
+        // mode — holding PAD A while D-padding around continues to
+        // clear at each new tile, rather than requiring per-tile
+        // press-and-release. The base ToolContext default routes
+        // PAD-A-held + D-pad to onRaise/onLower (the raise/lower
+        // modifier gesture); ClearScenery has no raise/lower verb,
+        // so returning false here keeps the D-pad steps firing
+        // normally while PAD A stays held. onStep then chains another
+        // dispatch when isCursorClickHeldInTool(). Same shape as
+        // TerrainContextImpl's paint-mode override.
+        bool consumeDirectionalsWhenCursorClickHeld() const override { return false; }
+
         Disposition onPlace() override
         {
             Windows::WindowClearSceneryAtCursor();
@@ -2165,6 +2178,13 @@ namespace
         Disposition onStep(::Direction dpad) override
         {
             const auto result = ToolContext::onStep(dpad);
+            // §11.9 drag-clear chain: re-fire the action on each
+            // step while PAD A is held, mirroring Land paint mode.
+            // WindowClearSceneryAtCursor already includes the
+            // error-popup guard (won't fire while WindowClass::error
+            // is open) so a held button during an error doesn't spam.
+            if (isCursorClickHeldInTool())
+                Windows::WindowClearSceneryAtCursor();
             Windows::WindowClearSceneryRefreshCost();
             return result;
         }
