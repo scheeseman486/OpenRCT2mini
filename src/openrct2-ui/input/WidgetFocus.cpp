@@ -625,25 +625,39 @@ namespace OpenRCT2::Ui::WidgetFocus
         window.onMouseUp(effective);
 
         // OPENRCT2MINI focus-mode-widgets-plan §3.1 / Cohort A.1
-        // (2026-05-25): seed gDropdown.highlightedIndex on dropdown
-        // entry. The parent's onMouseDown opened the dropdown and
-        // (optionally) set gDropdown.defaultIndex; the dropdown's own
+        // (2026-05-25, fixed 2026-05-26): seed gDropdown.highlightedIndex
+        // on dropdown entry. The parent's onMouseDown opened the dropdown
+        // and (optionally) set gDropdown.defaultIndex; the dropdown's own
         // onOpen reset highlightedIndex to -1. Without a seed,
         // ProcessMouseOver derives highlightedIndex from the virtual
         // cursor's position each frame — and because the dropdown
         // opens centred on the originating widget, the virtual cursor
         // is over some middle item, NOT the first item.
         //
+        // The original guard `if (openingDropdown)` was wrong — that
+        // flag is only true for `dropdownMenu`+chevron widget pairs
+        // (Options.cpp-style paired widgets), but most user-facing
+        // dropdowns are opened by bare `trnBtn`/`flatBtn` triggers
+        // (top-toolbar gear/view/scenery/land/etc., dropdowns
+        // inside the Park window, etc.) that fall straight through
+        // the chevron-redirect with openingDropdown=false. The fixed
+        // gate detects "a dropdown window now exists AND its
+        // highlightedIndex is still -1" — i.e. the dropdown's onOpen
+        // just ran and seeded -1, meaning this click is what opened
+        // it. Subsequent clicks on the same dropdown (or unrelated
+        // widgets while a dropdown is up) have a non-negative
+        // highlightedIndex and won't be re-seeded.
+        //
         // Prefer the parent's defaultIndex (the >>-marked currently-
         // selected item) when present and selectable; otherwise land
         // on the first non-separator non-disabled item. Mark
         // navigationSource = focus so ProcessMouseOver stops
         // clobbering until the next real SDL_MOUSEMOTION.
-        if (openingDropdown)
         {
             using namespace OpenRCT2::Ui::Windows;
             auto* windowMgr = GetWindowManager();
-            if (windowMgr != nullptr && windowMgr->FindByClass(WindowClass::dropdown) != nullptr)
+            if (windowMgr != nullptr && windowMgr->FindByClass(WindowClass::dropdown) != nullptr
+                && gDropdown.highlightedIndex < 0)
             {
                 gDropdown.navigationSource = Dropdown::NavigationSource::focus;
                 int32_t seed = -1;
