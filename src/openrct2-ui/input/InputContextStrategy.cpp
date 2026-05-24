@@ -719,7 +719,29 @@ namespace OpenRCT2::Ui
                 // (Terrain / LandRights / etc.) get MapSelectType::full
                 // which matches the legacy behaviour exactly.
                 grid->setOrientation(defaultMapSelectType());
-                WriteGridCursorSelection(grid->getPosition(), grid->getOrientation());
+                // OPENRCT2MINI grid-cursor-plan §18.A follow-up
+                // (2026-05-24, user report): sync brushSize from
+                // gLandToolSize and route through the rect writer when
+                // > 1. Without this, the resume path (tool → focus →
+                // tool via Start press) wrote a single-tile selection
+                // every time — the model's _brushSize persists across
+                // activations, so the per-frame processFrame poll
+                // (which is a no-op when size hasn't changed) couldn't
+                // restore the rect. The fix: do the sync here too,
+                // then mirror step()'s brushSize branch when calling
+                // WriteGridCursorSelection. Tools that don't opt in
+                // get size = 1 and the existing single-tile path.
+                const uint16_t brushSize = usesGLandToolSize() ? gLandToolSize : 1;
+                grid->setBrushSize(brushSize);
+                if (grid->getBrushSize() > 1)
+                {
+                    const auto [a, b] = grid->computeBrushRange();
+                    WriteGridCursorSelection(a, b, grid->getOrientation());
+                }
+                else
+                {
+                    WriteGridCursorSelection(grid->getPosition(), grid->getOrientation());
+                }
                 if (!seed)
                     ScrollMainWindowIfCursorNearEdge(grid->getPosition());
                 _wroteSelection = true;
