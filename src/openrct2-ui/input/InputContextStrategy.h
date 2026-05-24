@@ -707,6 +707,33 @@ namespace OpenRCT2::Ui
         // is the natural workflow.
         virtual bool consumeDirectionalsWhenCursorClickHeld() const { return true; }
 
+        // OPENRCT2MINI grid-cursor-plan §18.C follow-up (2026-05-24):
+        // per-tool default orientation for the grid cursor highlight.
+        // GridCursorModel::_orientation defaults to MapSelectType::full
+        // (white whole-tile diamond — Terrain / LandRights / etc.), but
+        // some tools want a tinted variant: the mouse Water tool sets
+        // gMapSelectType = MapSelectType::fullWater on every tool
+        // update (Water.cpp:354-358) so the diamond renders blue,
+        // matching the water surface. Mirror that for grid-cursor users
+        // by seeding the model's orientation from this hook on onActivate
+        // and resetting to it on precision tap-alone (instead of
+        // hardcoded MapSelectType::full).
+        virtual MapSelectType defaultMapSelectType() const { return MapSelectType::full; }
+
+        // OPENRCT2MINI grid-cursor-plan §18.C follow-up (2026-05-24):
+        // per-tool extra Z offset for the parked cursor sprite. The
+        // baseline projection in ViewportInteractionMapToScreen uses
+        // TileElementHeight which returns terrain Z; for water tiles
+        // that's the bed beneath the water, not the surface. The Water
+        // tool overrides this to return max(0, waterHeight - landHeight)
+        // so the sprite sits ON the water rather than under it.
+        // SyncHiddenCursorParking adds the return value to the grid
+        // model's accumulated Z before calling the projection helper.
+        // Takes the world coord being projected (caller may pass the
+        // rect centre for multi-cell brushes); the override is
+        // responsible for sampling whatever tile it cares about.
+        virtual int32_t cursorParkZExtra(CoordsXY /*worldCoord*/) const { return 0; }
+
         // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1
         // (2026-05-24): D-pad direction while the precision modifier
         // is held selects a sub-tile orientation (corner / edge /

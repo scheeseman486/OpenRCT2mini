@@ -707,6 +707,18 @@ namespace OpenRCT2::Ui
                 // re-raising.
                 if (cameFromCursorMode)
                     grid->setZ(0);
+                // OPENRCT2MINI grid-cursor-plan §18.C follow-up
+                // (2026-05-24): seed the model's orientation from the
+                // tool's per-tool default. The model persists across
+                // tool-context switches (Water → Land → Water reuses
+                // the same model instance), and the precision picker
+                // can also flip orientation mid-session — so the
+                // tool-specific tint (Water's fullWater) must be
+                // re-applied on every activate to wash out any state
+                // from the previous tool. Default-returning tools
+                // (Terrain / LandRights / etc.) get MapSelectType::full
+                // which matches the legacy behaviour exactly.
+                grid->setOrientation(defaultMapSelectType());
                 WriteGridCursorSelection(grid->getPosition(), grid->getOrientation());
                 if (!seed)
                     ScrollMainWindowIfCursorNearEdge(grid->getPosition());
@@ -1292,15 +1304,22 @@ namespace OpenRCT2::Ui
                 // Release edge.
                 if (!_precisionDpadPressed)
                 {
-                    // Tap-alone — reset to whole-tile.
+                    // Tap-alone — reset to the tool's default whole-tile
+                    // orientation (MapSelectType::full for Terrain etc.,
+                    // MapSelectType::fullWater for the Water tool — see
+                    // §18.C). Hardcoded `full` would wipe the per-tool
+                    // tint every time the user tapped the precision
+                    // modifier; routing through defaultMapSelectType()
+                    // preserves it.
                     if (auto* model = getCursorModel(); model != nullptr)
                     {
                         if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
                         {
-                            if (grid->getOrientation() != MapSelectType::full)
+                            const auto defaultOrient = defaultMapSelectType();
+                            if (grid->getOrientation() != defaultOrient)
                             {
-                                grid->setOrientation(MapSelectType::full);
-                                WriteGridCursorSelection(grid->getPosition(), MapSelectType::full);
+                                grid->setOrientation(defaultOrient);
+                                WriteGridCursorSelection(grid->getPosition(), defaultOrient);
                             }
                         }
                     }

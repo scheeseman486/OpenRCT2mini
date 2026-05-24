@@ -1985,6 +1985,41 @@ namespace
             Windows::WindowWaterLowerAtCursor();
             return Disposition::Consumed;
         }
+
+        // §18.C follow-up (2026-05-24, visual parity): the mouse Water
+        // tool sets gMapSelectType = MapSelectType::fullWater on every
+        // tool update (Water.cpp:354-358) so the selection diamond
+        // renders with the blue water tint instead of the white land
+        // tint. Mirror that on the grid cursor by overriding the
+        // per-tool default orientation — ToolContext::onActivate seeds
+        // the GridCursorModel from this, and the precision tap-alone
+        // reset routes through this too so the tint survives a
+        // precision-modifier tap.
+        MapSelectType defaultMapSelectType() const override
+        {
+            return MapSelectType::fullWater;
+        }
+
+        // §18.C follow-up (2026-05-24, visual parity): park the cursor
+        // sprite on the water surface, not on the terrain bed under
+        // the water. SyncHiddenCursorParking adds the return value to
+        // the cursor model's accumulated Z when projecting. For tiles
+        // with water, return the delta `waterHeight - landHeight`
+        // (positive) so the projection ends up at the water surface.
+        // For dry tiles waterHeight is 0 from TileElementWaterHeight,
+        // which would clamp to a negative delta — guard with max(0).
+        // The caller passes the rect-centre world coord for multi-cell
+        // brushes, so a brush partially over water still uses the
+        // centre tile's water height as the parking reference.
+        int32_t cursorParkZExtra(CoordsXY worldCoord) const override
+        {
+            const auto centre = worldCoord + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
+            const int32_t land = OpenRCT2::TileElementHeight(centre);
+            const int32_t water = OpenRCT2::TileElementWaterHeight(centre);
+            if (water <= land)
+                return 0;
+            return water - land;
+        }
     };
 
     // OPENRCT2MINI input-plan Track 3 / Phase 3.G: remaining tool

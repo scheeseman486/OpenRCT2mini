@@ -2151,7 +2151,18 @@ private:
                         const auto aXY = a.ToCoordsXY();
                         const auto bXY = b.ToCoordsXY();
                         const CoordsXY rectCentreInput{ (aXY.x + bXY.x) / 2, (aXY.y + bXY.y) / 2 };
-                        syncTo = ViewportInteractionMapToScreen(rectCentreInput, cursorZOffset);
+                        // OPENRCT2MINI grid-cursor-plan §18.C follow-up
+                        // (2026-05-24, water Z parity): give the active
+                        // ToolContext a chance to add tool-specific Z
+                        // (Water tool returns max(0, waterHeight -
+                        // landHeight) so the sprite sits on the water
+                        // surface, not the bed beneath it). Default
+                        // tools return 0, so the projection collapses
+                        // to the legacy land-Z behaviour.
+                        int32_t extraZ = 0;
+                        if (auto* tool = dynamic_cast<ToolContext*>(&strategy); tool != nullptr)
+                            extraZ = tool->cursorParkZExtra(rectCentreInput);
+                        syncTo = ViewportInteractionMapToScreen(rectCentreInput, cursorZOffset + extraZ);
                     }
                     else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
                         syncTo = ViewportInteractionMapToScreen(edge->getPosition().ToCoordsXY(), cursorZOffset);
