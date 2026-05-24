@@ -98,7 +98,38 @@ namespace OpenRCT2::Ui::Windows
                 OskMode::numpad);
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24):
+        // mirror FootpathWindow's mode-button engagement pattern. When
+        // the user clicks a mode toggle (mountain / paint) AND focus
+        // mode is active (selector visible, cursor hidden), engage the
+        // grid cursor so the next input drives tile placement instead
+        // of stepping widgets. Cursor-mode users (selector hidden) keep
+        // the traditional mouse-driven flow.
+        //
+        // The Land window doesn't change the tool widget when toggling
+        // mode (unlike Footpath which has separate widgets per mode),
+        // so the tool remains armed at WIDX_BACKGROUND throughout. We
+        // re-arm it defensively in case a previous interaction
+        // ToolCancel'd. Guard with isToolActive to avoid ToolSet's
+        // toggle-off behaviour (Window.cpp:773-778).
+        void EngageGridCursorIfFocusMode()
+        {
+            if (GetInputManager().getSelectorMode() != InputManager::SelectorMode::active)
+                return;
+            if (!isToolActive(WindowClass::land, WIDX_BACKGROUND))
+                ToolSet(*this, WIDX_BACKGROUND, Tool::digDown);
+            GetInputManager().setToolFocusSelected(
+                true, InputManager::SelectorTransitionSource::virtualUserInput);
+        }
+
     public:
+        // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24):
+        // mode getters exposed to the gamepad tool context via the
+        // WindowLandIsMountainMode / WindowLandIsPaintMode free-function
+        // bridges below. Same pattern as FootpathWindow::GetInputModePublic.
+        bool isMountainMode() const { return _landToolMountainMode; }
+        bool isPaintMode() const { return _landToolPaintMode; }
+
         void onOpen() override
         {
             setWidgets(window_land_widgets);
@@ -134,11 +165,13 @@ namespace OpenRCT2::Ui::Windows
                     _landToolMountainMode ^= 1;
                     _landToolPaintMode = false;
                     invalidate();
+                    EngageGridCursorIfFocusMode();
                     break;
                 case WIDX_PAINTMODE:
                     _landToolMountainMode = false;
                     _landToolPaintMode ^= 1;
                     invalidate();
+                    EngageGridCursorIfFocusMode();
                     break;
                 case WIDX_PREVIEW:
                     InputSize();
@@ -918,14 +951,45 @@ namespace OpenRCT2::Ui::Windows
     // Centre coord = (A + B) / 2 + 16, matching the mouse helpers. For a
     // single-tile selection A == B == tile world coords, so centre =
     // tile + 16 (mid-tile point).
+    //
+    // §11.2 follow-up (2026-05-24, mode buttons): when mountain mode is
+    // pressed, swap LandRaiseAction → LandSmoothAction (with isLowering
+    // false/true to pick the smooth direction). Mirrors the mouse path's
+    // _landToolMountainMode branch in SelectionRaiseLand / LowerLand.
+    static LandWindow* findLandWindow()
+    {
+        auto* wm = GetWindowManager();
+        if (wm == nullptr)
+            return nullptr;
+        return static_cast<LandWindow*>(wm->FindByClass(WindowClass::land));
+    }
+
+    bool WindowLandIsMountainMode()
+    {
+        auto* w = findLandWindow();
+        return w != nullptr && w->isMountainMode();
+    }
+
+    bool WindowLandIsPaintMode()
+    {
+        auto* w = findLandWindow();
+        return w != nullptr && w->isPaintMode();
+    }
+
     void WindowLandRaiseAtCursor()
     {
         const int32_t centreX = (gMapSelectPositionA.x + gMapSelectPositionB.x) / 2 + 16;
         const int32_t centreY = (gMapSelectPositionA.y + gMapSelectPositionB.y) / 2 + 16;
-        auto action = GameActions::LandRaiseAction(
-            { centreX, centreY },
-            { gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y },
-            gMapSelectType);
+        const auto range = MapRange{ gMapSelectPositionA.x, gMapSelectPositionA.y,
+                                     gMapSelectPositionB.x, gMapSelectPositionB.y };
+        if (WindowLandIsMountainMode())
+        {
+            auto action = GameActions::LandSmoothAction(
+                { centreX, centreY }, range, gMapSelectType, false);
+            GameActions::Execute(&action, getGameState());
+            return;
+        }
+        auto action = GameActions::LandRaiseAction({ centreX, centreY }, range, gMapSelectType);
         GameActions::Execute(&action, getGameState());
     }
 
@@ -933,10 +997,31 @@ namespace OpenRCT2::Ui::Windows
     {
         const int32_t centreX = (gMapSelectPositionA.x + gMapSelectPositionB.x) / 2 + 16;
         const int32_t centreY = (gMapSelectPositionA.y + gMapSelectPositionB.y) / 2 + 16;
-        auto action = GameActions::LandLowerAction(
-            { centreX, centreY },
+        const auto range = MapRange{ gMapSelectPositionA.x, gMapSelectPositionA.y,
+                                     gMapSelectPositionB.x, gMapSelectPositionB.y };
+        if (WindowLandIsMountainMode())
+        {
+            auto action = GameActions::LandSmoothAction(
+                { centreX, centreY }, range, gMapSelectType, true);
+            GameActions::Execute(&action, getGameState());
+            return;
+        }
+        auto action = GameActions::LandLowerAction({ centreX, centreY }, range, gMapSelectType);
+        GameActions::Execute(&action, getGameState());
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24): paint
+    // mode dispatch. Mirrors LandWindow::onToolDown's paint-mode path
+    // — dispatches SurfaceSetStyleAction over the current map
+    // selection. Caller (TerrainContextImpl::onPlace) is responsible
+    // for ensuring gMapSelectType is `full` and the selection range
+    // is set (the grid cursor's WriteGridCursorSelection writes a
+    // single-tile A==B range, which the paint action accepts).
+    void WindowLandPaintAtCursor()
+    {
+        auto action = GameActions::SurfaceSetStyleAction(
             { gMapSelectPositionA.x, gMapSelectPositionA.y, gMapSelectPositionB.x, gMapSelectPositionB.y },
-            gMapSelectType);
+            gLandToolTerrainSurface, gLandToolTerrainEdge);
         GameActions::Execute(&action, getGameState());
     }
 } // namespace OpenRCT2::Ui::Windows

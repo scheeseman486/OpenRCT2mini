@@ -294,8 +294,22 @@ namespace OpenRCT2::Ui::Windows
     // Land tool. Reads gMapSelectPositionA/B and gMapSelectType (set by
     // the grid cursor's WriteGridCursorSelection); dispatches the
     // canonical LandRaise/LandLower game action.
+    //
+    // §11.2 follow-up (2026-05-24, Land tool modes): when the user has
+    // pressed the mountain-mode button, raise/lower swap to LandSmooth
+    // (mirrors the mouse path's _landToolMountainMode branch). The
+    // helpers read the LandWindow state via the IsMountainMode getter.
     void WindowLandRaiseAtCursor();
     void WindowLandLowerAtCursor();
+    // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24): Land
+    // tool paint mode. When the user has pressed the paint-landscape
+    // button, cursor.click dispatches SurfaceSetStyleAction over the
+    // current map selection instead of LandRaise.
+    void WindowLandPaintAtCursor();
+    // Mode getters for TerrainContextImpl to branch verb dispatch on.
+    // Both return false when the Land window isn't open.
+    bool WindowLandIsMountainMode();
+    bool WindowLandIsPaintMode();
 
     // LandRights
     WindowBase* LandRightsOpen();

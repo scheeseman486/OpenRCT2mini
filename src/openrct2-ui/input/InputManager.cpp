@@ -1820,9 +1820,31 @@ namespace
         // Default orientation (GridCursorModel ctor) is
         // MapSelectType::full — whole-tile, matching the mouse path's
         // small-size default.
+        //
+        // §11.2 follow-up (2026-05-24, paint mode): when the user has
+        // toggled the paint-landscape mode button on, the mouse path
+        // forces MapSelectType::full and ignores corner/edge selection
+        // (Land.cpp ToolUpdateLandPaint:475-478). Mirror that: report
+        // precisionSubset = none so the precision picker no-ops,
+        // keeping the cursor in whole-tile mode where paint expects it.
         SubsetType precisionSubset() const override
         {
-            return SubsetType::corners;
+            return Windows::WindowLandIsPaintMode() ? SubsetType::none : SubsetType::corners;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.2 follow-up (2026-05-24):
+        // paint mode. When the user has the paint-landscape button
+        // pressed, cursor.click dispatches SurfaceSetStyleAction over
+        // the cursor's tile (mirrors mouse onToolDown's
+        // !_landToolBlocked + gMapSelectFlags::enable branch). Outside
+        // paint mode the default ToolContext::onPlace returns Consumed
+        // — no-op for raise/lower mode (which uses the cursor.click-
+        // held + D-pad gesture instead).
+        Disposition onPlace() override
+        {
+            if (Windows::WindowLandIsPaintMode())
+                Windows::WindowLandPaintAtCursor();
+            return Disposition::Consumed;
         }
 
         // OPENRCT2MINI grid-cursor-plan §11.2 (2026-05-24): onRaise /
@@ -1839,6 +1861,11 @@ namespace
         // existing mouse Land tool's logic (LandWindow::SelectionRaise/
         // LowerLand) takes the same path; we just bypass the LandWindow
         // instance method by calling Windows::WindowLandRaiseAtCursor.
+        //
+        // §11.2 follow-up (2026-05-24, mountain mode): the WindowLand*
+        // helpers themselves branch on WindowLandIsMountainMode and
+        // swap to LandSmoothAction when mountain mode is engaged — the
+        // gamepad path doesn't need a per-mode override here.
         Disposition onRaise() override
         {
             Windows::WindowLandRaiseAtCursor();
