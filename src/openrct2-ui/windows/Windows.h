@@ -311,6 +311,14 @@ namespace OpenRCT2::Ui::Windows
     void WindowRideConstructionSetInitialPlaceAt(TileCoordsXY tile, int32_t z);
     void WindowRideConstructionCycleInitialDirection();
     void WindowRideConstructionSetInitialDirection(uint8_t dir);
+    // Spawn the ghost piece + directional arrow at the gamepad cursor tile —
+    // mirrors RideConstructionToolupdateConstruct's effect for the mouse path.
+    // Called from RideConstructionContextImpl::onStep in initialPlace state so
+    // the ghost follows the cursor in real time. Sets MapSelectFlag::enable-
+    // Construct + enableArrow + gMapSelectArrowPosition / gMapSelectArrow-
+    // Direction + selectedTiles, then dispatches PlaceProvisionalTrackPiece
+    // with Z trial-and-error.
+    void WindowRideConstructionShowGhostAtTile(TileCoordsXY tile);
     void WindowRideConstructionPlaceInitialAtTile(TileCoordsXY tile);
     // Phase 3 (entrance / exit): PAD Y cycles gRideEntranceExitPlaceDirection,
     // PAD A dispatches RideEntranceExitPlaceAction at the cursor tile,

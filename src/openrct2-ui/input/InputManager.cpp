@@ -2444,12 +2444,16 @@ namespace
             }
             if (mode == Windows::RideInputMode::initialPlace)
             {
-                // Step the grid cursor, then sync _currentTrackBegin so the
-                // provisional ghost piece previews at the new cursor tile
-                // (Plan §6.1). Camera-edge follow handled by base step.
+                // Step the grid cursor, then spawn the ghost piece +
+                // directional arrow at the new cursor tile via the mouse-
+                // path-mirror helper. The previous SetInitialPlaceAt only
+                // wrote _currentTrackBegin and refreshed widgets — it
+                // didn't set the enableConstruct/enableArrow MapSelect
+                // flags or call PlaceProvisionalTrackPiece, so the user
+                // got the regular tile highlight with no piece preview.
                 const auto result = ToolContext::onStep(dpad);
-                Windows::WindowRideConstructionSetInitialPlaceAt(
-                    gridCursor().getPosition(), gridCursor().getZ());
+                Windows::WindowRideConstructionShowGhostAtTile(
+                    gridCursor().getPosition());
                 return result;
             }
             if (mode == Windows::RideInputMode::entranceExit)
@@ -2466,6 +2470,15 @@ namespace
             ToolContext::onActivate();
             if (getHeadTile().has_value())
                 syncGridCursorToHead();
+            // For initialPlace, immediately spawn the ghost piece + arrow at
+            // the engaged cursor tile so the user sees the placement preview
+            // without having to step first (mirrors the mouse path's first-
+            // hover behaviour).
+            if (Windows::WindowRideConstructionGetInputMode()
+                == Windows::RideInputMode::initialPlace)
+            {
+                Windows::WindowRideConstructionShowGhostAtTile(gridCursor().getPosition());
+            }
         }
 
         void onDeactivate() override

@@ -5237,6 +5237,123 @@ namespace OpenRCT2::Ui::Windows
         WindowRideConstructionUpdateActiveElements();
     }
 
+    // OPENRCT2MINI ride-construction-grid-cursor-plan (post-Phase 2 user
+    // feedback, 2026-05-25): mirror of RideConstructionToolupdateConstruct
+    // (the mouse per-frame tool update at line 3355) for the gamepad path.
+    // The mouse path sets MapSelectFlag::enableConstruct + enableArrow,
+    // populates the multi-tile selectedTiles via window->selectMapTiles,
+    // and runs the Z trial-and-error PlaceProvisionalTrackPiece loop so the
+    // ghost piece + directional arrow render at the hover position. Without
+    // this the gamepad cursor shows the regular tile highlight with no piece
+    // preview and no direction indicator. Called from onStep in initialPlace
+    // state so the preview follows the cursor in real time.
+    void WindowRideConstructionShowGhostAtTile(TileCoordsXY tile)
+    {
+        if (_rideConstructionState != RideConstructionState::Place)
+            return;
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return;
+        auto* w = static_cast<RideConstructionWindow*>(
+            windowMgr->FindByClass(WindowClass::rideConstruction));
+        if (w == nullptr)
+            return;
+        auto ride = GetRide(_currentRideIndex);
+        if (ride == nullptr)
+            return;
+
+        const CoordsXY mapPos = tile.ToCoordsXY();
+        int32_t z = _trackPlaceZ;
+        if (z == 0)
+            z = MapGetHighestZ(mapPos);
+
+        gMapSelectFlags.unset(MapSelectFlag::enable);
+        gMapSelectFlags.unset(MapSelectFlag::enableConstruct);
+        gMapSelectFlags.unset(MapSelectFlag::enableArrow);
+        gMapSelectFlags.set(MapSelectFlag::enableConstruct);
+        gMapSelectFlags.set(MapSelectFlag::enableArrow);
+        gMapSelectFlags.unset(MapSelectFlag::green);
+        gMapSelectArrowPosition = CoordsXYZ{ mapPos, z };
+        gMapSelectArrowDirection = _currentTrackPieceDirection;
+        MapSelection::clearSelectedTiles();
+        MapSelection::addSelectedTile(mapPos);
+
+        // Resolve the staged track type from the curve/slope/bank state.
+        RideId rideIndex;
+        TrackElemType trackType;
+        int32_t trackDirection;
+        SelectedLiftAndInverted liftHillAndAlternativeState{};
+        if (WindowRideConstructionUpdateState(
+                &trackType, &trackDirection, &rideIndex, &liftHillAndAlternativeState, nullptr, nullptr))
+        {
+            RideConstructionInvalidateCurrentTrack();
+            return;
+        }
+        _currentTrackPieceType = trackType;
+
+        // Populate selected tiles for multi-tile pieces (long curves etc.).
+        // Maze rides skip the multi-tile preview — out of v1 scope anyway.
+        const auto& rtd = ride->getRideTypeDescriptor();
+        if (rtd.specialType != RtdSpecialType::maze)
+            w->selectMapTiles(trackType, trackDirection, mapPos);
+
+        gMapSelectArrowPosition.z = z;
+
+        // Raise Z above slopes/water using the selected-tile footprint.
+        if (_trackPlaceZ == 0 && gMapSelectFlags.has(MapSelectFlag::enableConstruct))
+        {
+            for (const auto& selectedTile : MapSelection::getSelectedTiles())
+            {
+                if (MapIsLocationValid(selectedTile))
+                {
+                    const int32_t tileZ = MapGetHighestZ(selectedTile);
+                    if (tileZ > z)
+                        z = tileZ;
+                }
+            }
+        }
+        const auto& ted = GetTrackElementDescriptor(trackType);
+        int32_t bx = 0;
+        for (uint8_t i = 0; i < ted.sequenceData.numSequences; i++)
+            bx = std::min<int32_t>(bx, ted.sequenceData.sequences[i].clearance.z);
+        z -= bx;
+        gMapSelectArrowPosition.z = z;
+
+        _currentTrackBegin.x = mapPos.x;
+        _currentTrackBegin.y = mapPos.y;
+        _currentTrackBegin.z = z;
+
+        // Skip re-placing the ghost if it's already at this exact position
+        // (mirrors the mouse path's _previousTrackPiece guard at :3446).
+        if (_currentTrackSelectionFlags.has(TrackSelectionFlag::track)
+            && _currentTrackBegin == _previousTrackPiece)
+        {
+            return;
+        }
+        _previousTrackPiece = _currentTrackBegin;
+
+        // Z trial-and-error to find a Z where the ghost can render. Maze
+        // path is excluded (handled separately upstream; out of v1 scope).
+        if (rtd.specialType == RtdSpecialType::maze)
+            return;
+
+        const int numAttempts = (z <= kMaximumTrackHeight ? ((kMaximumTrackHeight - z) / kCoordsZStep + 1) : 2);
+        for (int zAttempts = 0; zAttempts < numAttempts; ++zAttempts)
+        {
+            CoordsXYZ trackPos{};
+            WindowRideConstructionUpdateState(
+                &trackType, &trackDirection, &rideIndex, &liftHillAndAlternativeState, &trackPos, nullptr);
+            _currentTrackPrice = PlaceProvisionalTrackPiece(
+                rideIndex, trackType, trackDirection, liftHillAndAlternativeState, trackPos);
+            if (_currentTrackPrice != kMoney64Undefined)
+                break;
+            _currentTrackBegin.z -= 8;
+            if (_currentTrackBegin.z < 0)
+                break;
+            _currentTrackBegin.z += 16;
+        }
+    }
+
     // OPENRCT2MINI ride-construction-grid-cursor-plan §6.3 fix (post-Phase 2,
     // 2026-05-25): the original SetInitialPlaceAt + BuildCurrent path didn't
     // work because BuildCurrent bails when WIDX_CONSTRUCT is disabled, and
@@ -5412,7 +5529,10 @@ namespace OpenRCT2::Ui::Windows
                 }
                 // Re-arm WIDX_CONSTRUCT so the user can extend in Front state
                 // via the gamepad onStep verbs. The auto-Entrance trigger
-                // would otherwise have armed WIDX_ENTRANCE; this overrides it.
+                // would otherwise have armed WIDX_ENTRANCE; explicitly cancel
+                // the stale tool first so the new ToolSet activates cleanly
+                // (otherwise ToolSet may detect the existing arm and no-op).
+                ToolCancel();
                 w = windowMgr->FindByClass(WindowClass::rideConstruction);
                 if (w != nullptr)
                     ToolSet(*w, WIDX_CONSTRUCT, Tool::crosshair);
@@ -5448,6 +5568,12 @@ namespace OpenRCT2::Ui::Windows
             return;
         _currentTrackPieceDirection = dir & 3;
         WindowRideConstructionUpdateActiveElements();
+        // Refresh the ghost so the arrow / piece preview re-renders with
+        // the new direction at the current cursor tile. The tile is read
+        // from _currentTrackBegin (last set by the per-step ShowGhostAtTile
+        // call); if we haven't stepped yet, this is a no-op gracefully.
+        if (_currentTrackBegin.x != 0 || _currentTrackBegin.y != 0)
+            WindowRideConstructionShowGhostAtTile(TileCoordsXY{ _currentTrackBegin });
     }
 
     // OPENRCT2MINI ride-construction-grid-cursor-plan §7 (Phase 3, 2026-05-25):
