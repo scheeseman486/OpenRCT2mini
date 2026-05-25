@@ -780,11 +780,24 @@ namespace
             // construction-window button via focus mode, which can cancel the
             // tool), pressing Start re-arms the tool widget so the next frame
             // resolveActiveContext can route to RideConstructionContextImpl.
+            //
+            // 2026-05-25 post-Phase-2 follow-up: dropped the !toolArmed gate so
+            // the engage fires even when the tool is already armed. The user
+            // reported "pressing Start in Focus Mode on Ride window doesn't
+            // engage gamepad track building" — this happens because after
+            // initial-placement my fix re-arms WIDX_CONSTRUCT (toolArmed=true).
+            // The focusedOnTool branch *should* catch this via
+            // `getFocusedWindowClass() == gCurrentToolWidget.windowClassification`,
+            // but that gate can miss if gCurrentToolWidget got cleared between
+            // my ToolSet and the user's Start press (or the focused class
+            // drifted to a set-member class). The rideInMode-only gate (state
+            // live, focused on ride window) is a more direct check and the
+            // ReArm dispatch is idempotent if the tool is already armed.
             const bool rideInMode
                 = (Windows::WindowRideConstructionGetInputMode() != Windows::RideInputMode::none);
             const bool focusedOnRide
                 = (mgr.getFocusedWindowClass() == WindowClass::rideConstruction);
-            const bool rideInModeEngage = !toolArmed && rideInMode && focusedOnRide;
+            const bool rideInModeEngage = rideInMode && focusedOnRide;
             if (id == ShortcutId::kInterfaceConfirm && (focusedOnTool || footpathInModeEngage || rideInModeEngage))
             {
                 // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
