@@ -2280,13 +2280,18 @@ namespace
                     syncGridCursorToHead();
                     return Disposition::Consumed;
                 case Windows::RideInputMode::initialPlace:
-                    // Seed _currentTrackBegin from the cursor, then commit.
-                    // Plan §6.3. Post-build the callback transitions Place
-                    // → Front, and the next frame's head poll syncs the
-                    // cursor to the new head automatically.
-                    Windows::WindowRideConstructionSetInitialPlaceAt(
-                        gridCursor().getPosition(), gridCursor().getZ());
-                    Windows::WindowRideConstructionKeyboardShortcutBuildCurrent();
+                    // Place → Front state flip + WIDX_CONSTRUCT click + Z
+                    // trial-and-error. The original SetInitialPlaceAt +
+                    // BuildCurrent path didn't work — BuildCurrent bails when
+                    // WIDX_CONSTRUCT is disabled, which IS the case in Place
+                    // state (WIDX_CONSTRUCT only enables after we flip to
+                    // Front). The mouse path's RideConstructionTooldown-
+                    // Construct does the flip first; we mirror that via the
+                    // new PlaceInitialAtTile helper. Post-commit the state is
+                    // Front and the per-frame head poll syncs the cursor to
+                    // the new head.
+                    Windows::WindowRideConstructionPlaceInitialAtTile(
+                        gridCursor().getPosition());
                     return Disposition::Consumed;
                 case Windows::RideInputMode::entranceExit:
                     // Plan §7.3. Dispatch RideEntranceExitPlaceAction at the

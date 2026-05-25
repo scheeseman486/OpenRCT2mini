@@ -5237,6 +5237,139 @@ namespace OpenRCT2::Ui::Windows
         WindowRideConstructionUpdateActiveElements();
     }
 
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §6.3 fix (post-Phase 2,
+    // 2026-05-25): the original SetInitialPlaceAt + BuildCurrent path didn't
+    // work because BuildCurrent bails when WIDX_CONSTRUCT is disabled, and
+    // WIDX_CONSTRUCT IS disabled in Place state. The mouse path solves this
+    // via RideConstructionTooldownConstruct (at line ~3609) which flips the
+    // state Place → Front, sets _currentTrackBegin, THEN clicks WIDX_CONSTRUCT
+    // (now enabled), with a Z trial-and-error loop on failure. This helper
+    // mirrors that flow for the gamepad path. Maze handling deferred per
+    // plan non-goals §11.
+    void WindowRideConstructionPlaceInitialAtTile(TileCoordsXY tile)
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return;
+        WindowBase* w = windowMgr->FindByClass(WindowClass::rideConstruction);
+        if (w == nullptr || _rideConstructionState != RideConstructionState::Place)
+            return;
+        auto ride = GetRide(_currentRideIndex);
+        if (ride == nullptr)
+            return;
+        // Maze is a different beast — out of v1 scope per plan §11.
+        if (ride->getRideTypeDescriptor().specialType == RtdSpecialType::maze)
+            return;
+
+        // Compute the track type from current shape selection (writes
+        // _currentTrackPieceType as a side effect). Bail if invalid.
+        TrackElemType trackType;
+        if (WindowRideConstructionUpdateState(&trackType, nullptr, nullptr, nullptr, nullptr, nullptr))
+            return;
+        _currentTrackPieceType = trackType;
+
+        RideConstructionInvalidateCurrentTrack();
+        gMapSelectFlags.unset(MapSelectFlag::enable);
+        gMapSelectFlags.unset(MapSelectFlag::enableConstruct);
+        gMapSelectFlags.unset(MapSelectFlag::enableArrow);
+
+        const CoordsXY mapPos = tile.ToCoordsXY();
+        int32_t z = _trackPlaceZ;
+        if (z == 0)
+            z = MapGetHighestZ(mapPos);
+
+        ToolCancel();
+
+        if (_trackPlaceZ == 0)
+        {
+            const auto& ted = GetTrackElementDescriptor(_currentTrackPieceType);
+            int32_t bx = 0;
+            for (uint8_t i = 0; i < ted.sequenceData.numSequences; i++)
+                bx = std::min<int32_t>(bx, ted.sequenceData.sequences[i].clearance.z);
+            z -= bx;
+            if (!getGameState().cheats.disableClearanceChecks && z > kMinimumLandZ)
+                z -= kLandHeightStep;
+        }
+        else
+        {
+            z = _trackPlaceZ;
+        }
+
+        // Z trial-and-error placement loop (mirror of RideConstructionTooldown-
+        // Construct at line :3757). Each iteration flips state to Front, writes
+        // _currentTrackBegin, and clicks WIDX_CONSTRUCT (now enabled in Front);
+        // on failure, retries at Z+8.
+        const int numAttempts = (z <= kMaximumTrackHeight ? ((kMaximumTrackHeight - z) / kCoordsZStep + 1) : 2);
+        for (int32_t zAttempts = 0; zAttempts < numAttempts; ++zAttempts)
+        {
+            _rideConstructionState = RideConstructionState::Front;
+            _currentTrackBegin.x = mapPos.x;
+            _currentTrackBegin.y = mapPos.y;
+            _currentTrackBegin.z = z;
+            _currentTrackSelectionFlags.clearAll();
+            WindowRideConstructionUpdateActiveElements();
+
+            w = windowMgr->FindByClass(WindowClass::rideConstruction);
+            if (w == nullptr)
+                break;
+
+            gDisableErrorWindowSound = true;
+            w->onMouseDown(WIDX_CONSTRUCT);
+            gDisableErrorWindowSound = false;
+
+            if (_trackPlaceCost == kMoney64Undefined)
+            {
+                StringId errorText = _trackPlaceErrorMessage;
+                z -= 8;
+                if (errorText == STR_NOT_ENOUGH_CASH_REQUIRES || errorText == STR_CAN_ONLY_BUILD_THIS_UNDERWATER
+                    || errorText == STR_CAN_ONLY_BUILD_THIS_ON_WATER || errorText == STR_CAN_ONLY_BUILD_THIS_ABOVE_GROUND
+                    || errorText == STR_TOO_HIGH_FOR_SUPPORTS || errorText == STR_TOO_HIGH
+                    || errorText == STR_LOCAL_AUTHORITY_WONT_ALLOW_CONSTRUCTION_ABOVE_TREE_HEIGHT
+                    || zAttempts == (numAttempts - 1) || z < 0)
+                {
+                    // Hard failure: restore Place state + save/restore shape
+                    // settings so the user can try again. Mirrors mouse path's
+                    // save-restore + RideInitialiseConstructionWindow at :3785.
+                    const auto saveTrackDirection = _currentTrackPieceDirection;
+                    const auto saveCurrentTrackCurve = _currentlySelectedTrack;
+                    const auto savePreviousTrackPitchEnd = _previousTrackPitchEnd;
+                    const auto saveCurrentTrackPitchEnd = _currentTrackPitchEnd;
+                    const auto savePreviousTrackRollEnd = _previousTrackRollEnd;
+                    const auto saveCurrentTrackRollEnd = _currentTrackRollEnd;
+                    const auto savedCurrentTrackAlternative = _currentTrackAlternative;
+                    const auto savedCurrentTrackLiftHill = _currentTrackHasLiftHill;
+
+                    RideInitialiseConstructionWindow(*ride);
+
+                    _currentTrackPieceDirection = saveTrackDirection;
+                    _currentlySelectedTrack = saveCurrentTrackCurve;
+                    _previousTrackPitchEnd = savePreviousTrackPitchEnd;
+                    _currentTrackPitchEnd = saveCurrentTrackPitchEnd;
+                    _previousTrackRollEnd = savePreviousTrackRollEnd;
+                    _currentTrackRollEnd = saveCurrentTrackRollEnd;
+                    _currentTrackAlternative = savedCurrentTrackAlternative;
+                    _currentTrackHasLiftHill = savedCurrentTrackLiftHill;
+
+                    // Skip error audio (mouse path uses state->position.x from
+                    // ContextGetCursorState which is screen-pointer relative;
+                    // for gamepad we don't have a meaningful screen pos).
+                    break;
+                }
+                z += 16;
+            }
+            else
+            {
+                // Success — re-arm the tool widget so the user can extend in
+                // Front state via the gamepad onStep verbs.
+                w = windowMgr->FindByClass(WindowClass::rideConstruction);
+                if (w != nullptr)
+                    ToolSet(*w, WIDX_CONSTRUCT, Tool::crosshair);
+                gInputFlags.set(InputFlag::toolActive);
+                break;
+            }
+        }
+    }
+
     // OPENRCT2MINI ride-construction-grid-cursor-plan §6.2 (Phase 2,
     // 2026-05-25): rotate the initial-piece direction in Place state via
     // PAD Y. Cycles 0 → 1 → 2 → 3. No-op outside Place state — in

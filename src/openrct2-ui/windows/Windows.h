@@ -304,10 +304,13 @@ namespace OpenRCT2::Ui::Windows
     bool WindowRideConstructionIsInBuildState();
     void WindowRideConstructionReArmForCurrentMode();
     // Phase 2 (initial placement): write the cursor's tile + Z into
-    // _currentTrackBegin before BuildCurrent in Place state, and cycle
-    // _currentTrackPieceDirection on PAD Y.
+    // _currentTrackBegin for the provisional ghost preview, cycle the initial
+    // direction via PAD Y, and commit the first piece (which involves a state
+    // flip Place → Front + Z trial-and-error loop, because WIDX_CONSTRUCT is
+    // disabled in Place state and only enabled once we flip).
     void WindowRideConstructionSetInitialPlaceAt(TileCoordsXY tile, int32_t z);
     void WindowRideConstructionCycleInitialDirection();
+    void WindowRideConstructionPlaceInitialAtTile(TileCoordsXY tile);
     // Phase 3 (entrance / exit): PAD Y cycles gRideEntranceExitPlaceDirection,
     // PAD A dispatches RideEntranceExitPlaceAction at the cursor tile,
     // PAD B restores the previous construction state.
