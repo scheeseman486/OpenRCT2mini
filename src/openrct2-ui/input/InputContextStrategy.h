@@ -30,6 +30,7 @@
 #include <SDL_timer.h>  // SDL_GetTicks for §8.5 DirectionalRepeat notePress
 
 #include <cstdint>
+#include <optional>  // std::optional for ToolContext head-follow (Phase R 2026-05-25)
 #include <string_view>
 #include <utility>  // std::pair for GridCursorModel::computeBrushRange
 
@@ -715,6 +716,20 @@ namespace OpenRCT2::Ui
         // press; onActivate / onDeactivate reset to avoid carry-over.
         DirectionalRepeat _repeat{};
 
+        // OPENRCT2MINI ride-construction-grid-cursor-plan §4 (Phase R,
+        // 2026-05-25): head-follow tracking. Subclasses override
+        // getHeadTile() to return the "next piece goes here" coord
+        // when their tool is in a head-follow state (Footpath bridge-
+        // Build; RideConstruction Front/Back/Place/EntranceExit).
+        // processFrame polls every frame; when the head differs from
+        // the last synced value, syncGridCursorToHead() runs and
+        // onHeadTileChanged() fires for subclass-specific bookkeeping.
+        // The action-callback ordering problem (place/demolish callback
+        // updates the head AFTER the verb's post-sync call returns)
+        // motivates the per-frame poll instead of trusting in-line
+        // syncs alone.
+        std::optional<TileCoordsXY> _lastHead;
+
     public:
         // Verbs — override as needed. Default returns Consumed so the
         // tool context swallows the shortcut even if the verb hasn't
@@ -855,6 +870,44 @@ namespace OpenRCT2::Ui
         // rect centre for multi-cell brushes); the override is
         // responsible for sampling whatever tile it cares about.
         virtual int32_t cursorParkZExtra(CoordsXY /*worldCoord*/) const { return 0; }
+
+        // OPENRCT2MINI ride-construction-grid-cursor-plan §4 (Phase R,
+        // 2026-05-25): head-follow hooks. Subclasses override these to
+        // opt into the head-follow pattern (cursor chases a tool-window
+        // position, e.g. Footpath bridge head / RideConstruction next-
+        // piece head). Base default = no head-follow (returns nullopt;
+        // processFrame poll is a no-op for tools that don't override).
+        //
+        // getHeadTile() returns the current head position, or nullopt
+        // when the tool isn't in a head-follow state. Polled every
+        // frame; when it changes, syncGridCursorToHead() runs and
+        // onHeadTileChanged() fires.
+        //
+        // headFollowPreservesArrow() = true keeps MapSelectFlag::
+        // enableArrow set across the sync (Footpath bridgeBuild + Ride-
+        // Construction both render a direction-arrow at the head; the
+        // standard WriteGridCursorSelection helper unsets this flag, so
+        // we sync via a head-specific code path that keeps it set).
+        //
+        // onHeadTileChanged() is a hook for subclasses to invalidate
+        // their side-panel or refresh their preview when the head moves;
+        // base default no-op.
+        virtual std::optional<TileCoordsXY> getHeadTile() const { return std::nullopt; }
+        virtual bool headFollowPreservesArrow() const { return false; }
+        virtual void onHeadTileChanged(TileCoordsXY /*newHead*/) {}
+
+        // Sync the GridCursorModel position + MapSelect globals + camera
+        // to the head returned by getHeadTile(). No-op if getHeadTile()
+        // is nullopt. Idempotent — safe to call multiple times per frame
+        // (the existing setMapSelectRange / MapInvalidateTileFull /
+        // ScrollMainWindowIfCursorNearEdge calls all handle redundancy).
+        // Inline-similar to WriteGridCursorSelection but routes through
+        // the head-follow flag semantics (preserves the arrow flag per
+        // headFollowPreservesArrow()) and adds the camera nudge in one
+        // place. Defined out-of-line in InputContextStrategy.cpp.
+    protected:
+        void syncGridCursorToHead();
+    public:
 
         // OPENRCT2MINI grid-cursor-plan §5 / Phase 3.F.0 step 1
         // (2026-05-24): D-pad direction while the precision modifier

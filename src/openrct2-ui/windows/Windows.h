@@ -279,6 +279,50 @@ namespace OpenRCT2::Ui::Windows
     // isn't open or the mode is `none`.
     void WindowFootpathReArmForCurrentMode();
 
+    // OPENRCT2MINI ride-construction-grid-cursor-plan (2026-05-25):
+    // RideConstruction window hooks for the gamepad-driven track
+    // designer. Mirror the Footpath bridge/tunnel pattern (above)
+    // — head accessor, input-mode discriminator, re-arm — plus the
+    // free-function shortcut bodies the gamepad context dispatches.
+    //
+    // Discriminator: what kind of input the gamepad context should
+    // dispatch in the current RideConstructionState. `none` means the
+    // context falls through (window closed, or in a maze state which
+    // is out of v1 scope).
+    enum class RideInputMode : uint8_t
+    {
+        none,
+        initialPlace,     // _rideConstructionState == Place: free cursor stepping
+        buildForward,     // Front: head-follow + shape-modifier chord
+        buildBackward,    // Back: same
+        selected,         // a placed section is selected (debug / inspection)
+        entranceExit,     // EntranceExit: place entrance / exit at tile edge
+    };
+
+    RideInputMode WindowRideConstructionGetInputMode();
+    std::optional<TileCoordsXY> WindowRideConstructionGetHeadTile();
+    bool WindowRideConstructionIsInBuildState();
+    void WindowRideConstructionReArmForCurrentMode();
+    // Phase 2 (initial placement): write the cursor's tile + Z into
+    // _currentTrackBegin before BuildCurrent in Place state, and cycle
+    // _currentTrackPieceDirection on PAD Y.
+    void WindowRideConstructionSetInitialPlaceAt(TileCoordsXY tile, int32_t z);
+    void WindowRideConstructionCycleInitialDirection();
+    // Phase 3 (entrance / exit): PAD Y cycles gRideEntranceExitPlaceDirection,
+    // PAD A dispatches RideEntranceExitPlaceAction at the cursor tile,
+    // PAD B restores the previous construction state.
+    void WindowRideConstructionCycleEntranceExitDirection();
+    void WindowRideConstructionPlaceEntranceExit(TileCoordsXY tile, int32_t z);
+    void WindowRideConstructionCancelEntranceExitMode();
+
+    // Most shortcut action bodies (TurnLeft / TurnRight / SlopeUp / SlopeDown /
+    // BankLeft / BankRight / ChainLiftToggle / UseTrackDefault / Previous /
+    // Next / BuildCurrent / DemolishCurrent) already exist as upstream free
+    // functions declared further down in this file — the gamepad context
+    // routes through those. The only addition we need is the special-track
+    // cycle helper, which has no widget-click analogue.
+    void WindowRideConstructionKeyboardShortcutCycleSpecialNext();
+
     // GameBottomToolbar
     extern uint8_t gToolbarDirtyFlags;
     WindowBase* GameBottomToolbarOpen();

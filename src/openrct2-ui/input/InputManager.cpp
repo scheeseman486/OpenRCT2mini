@@ -773,7 +773,19 @@ namespace
             const bool focusedOnFootpath
                 = (mgr.getFocusedWindowClass() == WindowClass::footpath);
             const bool footpathInModeEngage = !toolArmed && footpathInMode && focusedOnFootpath;
-            if (id == ShortcutId::kInterfaceConfirm && (focusedOnTool || footpathInModeEngage))
+            // OPENRCT2MINI ride-construction-grid-cursor-plan §9 (Phase 1, 2026-05-25):
+            // mirror the Footpath in-mode engage for RideConstruction. When the
+            // user is focused on the construction window with live build state
+            // but the WIDX_CONSTRUCT tool widget has dropped (e.g. clicked a
+            // construction-window button via focus mode, which can cancel the
+            // tool), pressing Start re-arms the tool widget so the next frame
+            // resolveActiveContext can route to RideConstructionContextImpl.
+            const bool rideInMode
+                = (Windows::WindowRideConstructionGetInputMode() != Windows::RideInputMode::none);
+            const bool focusedOnRide
+                = (mgr.getFocusedWindowClass() == WindowClass::rideConstruction);
+            const bool rideInModeEngage = !toolArmed && rideInMode && focusedOnRide;
+            if (id == ShortcutId::kInterfaceConfirm && (focusedOnTool || footpathInModeEngage || rideInModeEngage))
             {
                 // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
                 // 2026-05-17 #6 — off-by-one frame fix engage
@@ -807,6 +819,8 @@ namespace
                 // strategy.
                 if (footpathInModeEngage)
                     Windows::WindowFootpathReArmForCurrentMode();
+                if (rideInModeEngage)
+                    Windows::WindowRideConstructionReArmForCurrentMode();
                 mgr.setToolFocusSelected(
                     true, OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
                 return Disposition::Consumed;
@@ -1222,6 +1236,24 @@ namespace
             return InputContext::toolFootpath;
         }
 
+        // OPENRCT2MINI ride-construction-grid-cursor-plan §4 (Phase R,
+        // 2026-05-25): head-follow integration. bridgeBuild mode owns
+        // a head tile (`_footpathConstructFromPosition`); the rest of
+        // the modes don't. Returning the head from getHeadTile() lets
+        // ToolContext's per-frame poll catch async updates from Footpath-
+        // PlaceAction callbacks and chase the cursor to it (replacing
+        // the bespoke _lastBridgeHead poll that used to live in this
+        // class's processFrame). headFollowPreservesArrow=true keeps the
+        // MapSelectFlag::enableArrow flag set across the sync so the
+        // bridge-direction arrow renders at the head.
+        std::optional<TileCoordsXY> getHeadTile() const override
+        {
+            if (Windows::WindowFootpathGetInputMode() != Windows::FootpathInputMode::bridgeBuild)
+                return std::nullopt;
+            return Windows::WindowFootpathGetBridgeHeadTile();
+        }
+        bool headFollowPreservesArrow() const override { return true; }
+
         // OPENRCT2MINI grid-cursor-plan §16: top-level verbs branch
         // on the Footpath window's current PathConstructionMode. Each
         // mode has its own *OnLand / *DragArea / *BridgePick /
@@ -1341,7 +1373,12 @@ namespace
                 // bridge places the highlight at the head, not at the
                 // stale grid-cursor position the base onActivate just
                 // wrote.
-                syncGridCursorToBridgeHead();
+                //
+                // OPENRCT2MINI ride-construction-grid-cursor-plan §4
+                // (Phase R, 2026-05-25): syncGridCursorToBridgeHead was
+                // hoisted to ToolContext::syncGridCursorToHead which
+                // reads via the overridden getHeadTile().
+                syncGridCursorToHead();
             }
         }
 
@@ -1583,7 +1620,9 @@ namespace
             // #4a: BuildCurrent advanced the bridge head; chase the
             // grid cursor up to it so the highlight is at the new
             // head rather than the old anchor.
-            syncGridCursorToBridgeHead();
+            // (Phase R 2026-05-25: routes through ToolContext::sync-
+            // GridCursorToHead via the overridden getHeadTile().)
+            syncGridCursorToHead();
             return Disposition::Consumed;
         }
 
@@ -1592,9 +1631,9 @@ namespace
             Windows::WindowFootpathKeyboardShortcutDemolishCurrent();
             // Demolish retracts the bridge head; same sync as above.
             // Note: if Demolish drops out of bridgeOrTunnel entirely
-            // (e.g. removing the anchor), GetBridgeHeadTile returns
-            // nullopt and the helper leaves the cursor where it was.
-            syncGridCursorToBridgeHead();
+            // (e.g. removing the anchor), getHeadTile returns nullopt
+            // and the helper leaves the cursor where it was.
+            syncGridCursorToHead();
             return Disposition::Consumed;
         }
 
@@ -1626,41 +1665,19 @@ namespace
             }
             // Slope changes the head Z; turns don't move XY but keep
             // the cursor pinned at the head for consistency.
-            syncGridCursorToBridgeHead();
+            // (Phase R 2026-05-25: routes through ToolContext::sync-
+            // GridCursorToHead via the overridden getHeadTile().)
+            syncGridCursorToHead();
             return Disposition::Consumed;
         }
 
-        // OPENRCT2MINI grid-cursor-plan §16 follow-up 2026-05-21 #4a:
-        // pull the bridge head's tile coords from the Footpath
-        // window, snap the grid cursor model to it, and re-emit the
-        // selection so the highlight follows the bridge head as it
-        // extends / retracts. Inline-replicates Write­GridCursor­Selection
-        // (InputContextStrategy.cpp:104) MINUS the
-        // `MapSelectFlag::enableArrow` unset — bridgeOrTunnel uses
-        // the arrow to render the direction indicator at the head,
-        // and we need to keep it set.
-        //
-        // OPENRCT2MINI follow-up 2026-05-21 #5a: also call
-        // ScrollMainWindowIfCursorNearEdge so the camera tracks the
-        // bridge head as it advances off-screen (matches the OnLand
-        // mode behaviour in ToolContext::onStep which the
-        // bridgeBuild's overridden onStep does NOT inherit).
-        void syncGridCursorToBridgeHead()
-        {
-            const auto head = Windows::WindowFootpathGetBridgeHeadTile();
-            if (!head.has_value())
-                return; // window closed or no longer in bridgeOrTunnel
-            if (auto* grid = dynamic_cast<GridCursorModel*>(getCursorModel()); grid != nullptr)
-                grid->setPosition(*head);
-            const auto world = head->ToCoordsXY();
-            gMapSelectFlags.set(MapSelectFlag::enable);
-            gMapSelectFlags.set(MapSelectFlag::gridCursor);
-            gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
-            gMapSelectType = MapSelectType::full;
-            setMapSelectRange(world);
-            OpenRCT2::MapInvalidateTileFull(world);
-            ScrollMainWindowIfCursorNearEdge(*head);
-        }
+        // OPENRCT2MINI ride-construction-grid-cursor-plan §4 (Phase R,
+        // 2026-05-25): the bespoke syncGridCursorToBridgeHead helper
+        // and its _lastBridgeHead per-frame poll were hoisted to
+        // ToolContext::syncGridCursorToHead + the head-change poll in
+        // ToolContext::processFrame. This class now opts in via
+        // getHeadTile() (above) + headFollowPreservesArrow() = true.
+        // Same behaviour, shared between Footpath and RideConstruction.
 
         // OPENRCT2MINI follow-up 2026-05-21 #5b: per-frame poll of
         // the bridge head. FootpathPlaceAction's callback updates
@@ -1668,11 +1685,17 @@ namespace
         // Build's post-Build sync runs (the callback fires inside
         // GameActions::Execute but the timing isn't guaranteed
         // synchronous with our call), so syncing right after the
-        // verb sees the stale head. Polling per frame in the active
-        // bridgeBuild context catches the new head whenever it
-        // lands, without relying on action-callback ordering.
-        // _lastBridgeHead tracks the last position we synced to;
-        // when the window's head differs, we re-sync and update.
+        // verb sees the stale head. Polling per frame catches the
+        // new head whenever it lands without relying on action-
+        // callback ordering.
+        //
+        // OPENRCT2MINI ride-construction-grid-cursor-plan §4 (Phase R,
+        // 2026-05-25): the poll was hoisted to ToolContext::process-
+        // Frame, which reads via the overridden getHeadTile(). This
+        // override now only owns the Footpath-specific Z-hold gesture
+        // (which IS Footpath-specific — bridgeBuild's Z comes from
+        // SlopeUp/SlopeDown, while onLand/bridgePick/dragArea use
+        // gridCursor().getZ() and need the snapshot-reset semantics).
         void processFrame(uint32_t nowMs) override
         {
             ToolContext::processFrame(nowMs);
@@ -1753,26 +1776,19 @@ namespace
                 _zLockWasHeld = zLockNow;
             }
 
-            if (Windows::WindowFootpathGetInputMode() != Windows::FootpathInputMode::bridgeBuild)
-            {
-                _lastBridgeHead.reset();
-                return;
-            }
-            const auto head = Windows::WindowFootpathGetBridgeHeadTile();
-            if (!head.has_value())
-                return;
-            if (_lastBridgeHead.has_value() && *_lastBridgeHead == *head)
-                return;
-            _lastBridgeHead = *head;
-            syncGridCursorToBridgeHead();
+            // OPENRCT2MINI ride-construction-grid-cursor-plan §4
+            // (Phase R, 2026-05-25): the bridge-head change poll was
+            // hoisted to ToolContext::processFrame (above ToolContext::
+            // processFrame's base call already ran via the explicit
+            // ToolContext::processFrame() at the top of this function).
+            // The base poll reads getHeadTile() — which this class
+            // overrides to return WindowFootpathGetBridgeHeadTile in
+            // bridgeBuild mode — so the head-chase still happens; it
+            // just lives in the base now and is shared with
+            // RideConstruction.
         }
 
     private:
-        // Tracked across processFrame ticks so we only re-sync when
-        // the head actually moved (avoids redundant work + redundant
-        // ScrollMainWindowIfCursorNearEdge nudges every frame).
-        std::optional<TileCoordsXY> _lastBridgeHead;
-
         // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): zLock
         // hold-Z gesture state machine. _zLockWasHeld is the prev-
         // frame value used for edge detection; _zSnapshot is the
@@ -2217,6 +2233,19 @@ namespace
         // next element" affordances.
     };
 
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §5 (Phase 1, 2026-05-25):
+    // gamepad-driven track design. Mirrors FootpathContextImpl's pattern:
+    // mode-branching verbs (RideInputMode discriminator); shift-modifier
+    // chord scheme (unmodified D-pad = curve/slope, held = bank/chain/special,
+    // tap-alone-modifier = full reset to plain straight); head-follow via
+    // base ToolContext::getHeadTile() machinery; per-frame snapshot-reset
+    // edge detection mirroring FootpathContextImpl's Z-hold gesture.
+    //
+    // The verb bodies dispatch to existing upstream free functions
+    // (WindowRideConstructionKeyboardShortcut*) which handle the per-ride-
+    // type validity gating already (slope availability, banking support,
+    // chain-lift compatibility, etc.) — no new gate logic needed in this
+    // class.
     class RideConstructionContextImpl final : public ToolContext
     {
     public:
@@ -2224,13 +2253,278 @@ namespace
         {
             return InputContext::toolRideConstruction;
         }
-        // Most complex tool. Track placement is constrained by the
-        // previous segment's exit direction; the verb set is bigger
-        // than for footpath (forward-step / back-step through the
-        // segment-type catalog, banking left / right, slope up / down,
-        // station / brake placement). Open question Q4 in input-plan.md
-        // §9: pick the gamepad gesture set during the verb-wiring
-        // follow-up.
+
+        // Head-follow integration with ToolContext::processFrame's poll.
+        // Returns the next-piece head tile (_currentTrackBegin) when the
+        // window is in Front/Back/Place/EntranceExit. Arrow flag is
+        // preserved so the bridge-direction-style arrow at the head
+        // continues to render.
+        std::optional<TileCoordsXY> getHeadTile() const override
+        {
+            return Windows::WindowRideConstructionGetHeadTile();
+        }
+        bool headFollowPreservesArrow() const override { return true; }
+
+        Disposition onPlace() override
+        {
+            const auto mode = Windows::WindowRideConstructionGetInputMode();
+            switch (mode)
+            {
+                case Windows::RideInputMode::buildForward:
+                case Windows::RideInputMode::buildBackward:
+                    Windows::WindowRideConstructionKeyboardShortcutBuildCurrent();
+                    // Post-build the head advances; chase to it. The per-
+                    // frame head poll in ToolContext::processFrame catches
+                    // the async-callback head update too, but the immediate
+                    // sync here keeps the highlight feeling responsive.
+                    syncGridCursorToHead();
+                    return Disposition::Consumed;
+                case Windows::RideInputMode::initialPlace:
+                    // Seed _currentTrackBegin from the cursor, then commit.
+                    // Plan §6.3. Post-build the callback transitions Place
+                    // → Front, and the next frame's head poll syncs the
+                    // cursor to the new head automatically.
+                    Windows::WindowRideConstructionSetInitialPlaceAt(
+                        gridCursor().getPosition(), gridCursor().getZ());
+                    Windows::WindowRideConstructionKeyboardShortcutBuildCurrent();
+                    return Disposition::Consumed;
+                case Windows::RideInputMode::entranceExit:
+                    // Plan §7.3. Dispatch RideEntranceExitPlaceAction at the
+                    // cursor tile with the current gRideEntranceExitPlaceDirection
+                    // (the user cycled via PAD Y, or defaults to 0 on first
+                    // press). The callback handles ToolCancel + state cleanup
+                    // when all entrances/exits are placed.
+                    Windows::WindowRideConstructionPlaceEntranceExit(
+                        gridCursor().getPosition(), gridCursor().getZ());
+                    return Disposition::Consumed;
+                case Windows::RideInputMode::selected:
+                case Windows::RideInputMode::none:
+                default:
+                    return Disposition::Passthrough;
+            }
+        }
+
+        Disposition onCancel() override
+        {
+            switch (Windows::WindowRideConstructionGetInputMode())
+            {
+                case Windows::RideInputMode::buildForward:
+                case Windows::RideInputMode::buildBackward:
+                    Windows::WindowRideConstructionKeyboardShortcutDemolishCurrent();
+                    syncGridCursorToHead();
+                    return Disposition::Consumed;
+                case Windows::RideInputMode::entranceExit:
+                    // Plan §7. PAD B in entranceExit state cancels back to
+                    // the previous construction state (Front/Back/Selected),
+                    // it does NOT do the base right-click-remove. Mirrors
+                    // the mouse path's behaviour at RideConstruction.cpp:1069.
+                    Windows::WindowRideConstructionCancelEntranceExitMode();
+                    return Disposition::Consumed;
+                default:
+                    return ToolContext::onCancel();
+            }
+        }
+
+        // Finish in grid mode closes the construction window outright.
+        Disposition onFinishTool() override
+        {
+            auto* windowMgr = GetWindowManager();
+            if (windowMgr != nullptr)
+                windowMgr->CloseByClass(WindowClass::rideConstruction);
+            return Disposition::Consumed;
+        }
+
+        // PAD Y in build state → TurnRight (clockwise piece). In initialPlace,
+        // PAD Y cycles the initial direction (Plan §6.2).
+        Disposition onRotate() override
+        {
+            const auto mode = Windows::WindowRideConstructionGetInputMode();
+            if (mode == Windows::RideInputMode::buildForward
+                || mode == Windows::RideInputMode::buildBackward)
+            {
+                Windows::WindowRideConstructionKeyboardShortcutTurnRight();
+                syncGridCursorToHead();
+                return Disposition::Consumed;
+            }
+            if (mode == Windows::RideInputMode::initialPlace)
+            {
+                Windows::WindowRideConstructionCycleInitialDirection();
+                return Disposition::Consumed;
+            }
+            if (mode == Windows::RideInputMode::entranceExit)
+            {
+                // Plan §7. PAD Y in entranceExit cycles the staged edge
+                // direction 0→1→2→3 (no edge picker for v1; precision-modifier
+                // chord is a polish item).
+                Windows::WindowRideConstructionCycleEntranceExitDirection();
+                return Disposition::Consumed;
+            }
+            return Disposition::Consumed;
+        }
+
+        // onRaise/onLower in build state dispatch the SlopeUp/SlopeDown
+        // verbs (matching bridgeBuild). In initial-placement / entrance-exit
+        // state the grid cursor's Z affects placement height; step it and
+        // let the per-frame provisional refresh pick up the change. (Phase 2
+        // will wire a per-state provisional refresh — for v1 the Z-step
+        // affects the next BuildCurrent's _currentTrackBegin.z indirectly
+        // via the placement helpers.)
+        Disposition onRaise() override
+        {
+            if (Windows::WindowRideConstructionIsInBuildState())
+            {
+                Windows::WindowRideConstructionKeyboardShortcutSlopeUp();
+                syncGridCursorToHead();
+                return Disposition::Consumed;
+            }
+            gridCursor().raiseZ(OpenRCT2::kPathHeightStep);
+            return Disposition::Consumed;
+        }
+        Disposition onLower() override
+        {
+            if (Windows::WindowRideConstructionIsInBuildState())
+            {
+                Windows::WindowRideConstructionKeyboardShortcutSlopeDown();
+                syncGridCursorToHead();
+                return Disposition::Consumed;
+            }
+            gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
+            return Disposition::Consumed;
+        }
+
+        // D-pad in build state: unmodified = curve/slope shape configuration,
+        // shape-modifier held = banking/chain/special-track cycling. In
+        // initialPlace, fall through to base grid-cursor stepping so the user
+        // can pick a tile for the first piece. EntranceExit also uses base
+        // stepping (Phase 3 will add the precision-modifier edge picker).
+        Disposition onStep(::Direction dpad) override
+        {
+            const auto mode = Windows::WindowRideConstructionGetInputMode();
+            if (mode == Windows::RideInputMode::buildForward
+                || mode == Windows::RideInputMode::buildBackward)
+            {
+                return onStepBuild(dpad);
+            }
+            if (mode == Windows::RideInputMode::initialPlace)
+            {
+                // Step the grid cursor, then sync _currentTrackBegin so the
+                // provisional ghost piece previews at the new cursor tile
+                // (Plan §6.1). Camera-edge follow handled by base step.
+                const auto result = ToolContext::onStep(dpad);
+                Windows::WindowRideConstructionSetInitialPlaceAt(
+                    gridCursor().getPosition(), gridCursor().getZ());
+                return result;
+            }
+            if (mode == Windows::RideInputMode::entranceExit)
+            {
+                // Phase 3 will add the precision-modifier edge picker. For
+                // now, plain grid cursor stepping (base step + camera follow).
+                return ToolContext::onStep(dpad);
+            }
+            return Disposition::Passthrough;
+        }
+
+        void onActivate() override
+        {
+            ToolContext::onActivate();
+            if (getHeadTile().has_value())
+                syncGridCursorToHead();
+        }
+
+        void onDeactivate() override
+        {
+            ToolContext::onDeactivate();
+        }
+
+        // Shape-modifier snapshot-reset (mirrors FootpathContextImpl's Z-hold
+        // gesture at InputManager.cpp:1710-ish). Press edge arms the
+        // "no chord pressed yet" flag; release edge with the flag still
+        // false fires UseTrackDefault — tapping the shift modifier alone
+        // (no D-pad during the hold) resets the staged piece to plain
+        // straight. Per-ride-type gating happens inside the free function.
+        void processFrame(uint32_t nowMs) override
+        {
+            ToolContext::processFrame(nowMs); // base does head-follow poll + DirectionalRepeat
+            if (!Windows::WindowRideConstructionIsInBuildState())
+            {
+                _shapeModWasHeld = false;
+                _shapeModUsedThisHold = false;
+                return;
+            }
+            const bool shapeModNow = OpenRCT2::Ui::isShiftModifierHeldInTool();
+            if (shapeModNow != _shapeModWasHeld)
+            {
+                if (shapeModNow)
+                {
+                    _shapeModUsedThisHold = false;
+                }
+                else
+                {
+                    if (!_shapeModUsedThisHold)
+                    {
+                        Windows::WindowRideConstructionKeyboardShortcutUseTrackDefault();
+                        syncGridCursorToHead();
+                    }
+                }
+                _shapeModWasHeld = shapeModNow;
+            }
+        }
+
+    private:
+        // Build-state D-pad mapping per ride-construction-grid-cursor-plan
+        // §5.4. Unmodified = curve/slope; shape modifier held = bank/chain/
+        // special. Direction values match the ToolContext::onShortcut
+        // mapping at InputContextStrategy.h: 0=up, 1=right, 2=down, 3=left.
+        Disposition onStepBuild(::Direction dpad)
+        {
+            const bool shapeModHeld = OpenRCT2::Ui::isShiftModifierHeldInTool();
+            if (shapeModHeld)
+            {
+                _shapeModUsedThisHold = true;
+                switch (static_cast<int>(dpad))
+                {
+                    case 0: // up — toggle chain lift
+                        Windows::WindowRideConstructionKeyboardShortcutChainLiftToggle();
+                        break;
+                    case 1: // right — bank right
+                        Windows::WindowRideConstructionKeyboardShortcutBankRight();
+                        break;
+                    case 2: // down — cycle special-track piece
+                        Windows::WindowRideConstructionKeyboardShortcutCycleSpecialNext();
+                        break;
+                    case 3: // left — bank left
+                        Windows::WindowRideConstructionKeyboardShortcutBankLeft();
+                        break;
+                    default:
+                        return Disposition::Passthrough;
+                }
+            }
+            else
+            {
+                switch (static_cast<int>(dpad))
+                {
+                    case 0: // up — slope up
+                        Windows::WindowRideConstructionKeyboardShortcutSlopeUp();
+                        break;
+                    case 1: // right — turn right
+                        Windows::WindowRideConstructionKeyboardShortcutTurnRight();
+                        break;
+                    case 2: // down — slope down
+                        Windows::WindowRideConstructionKeyboardShortcutSlopeDown();
+                        break;
+                    case 3: // left — turn left
+                        Windows::WindowRideConstructionKeyboardShortcutTurnLeft();
+                        break;
+                    default:
+                        return Disposition::Passthrough;
+                }
+            }
+            syncGridCursorToHead();
+            return Disposition::Consumed;
+        }
+
+        bool _shapeModWasHeld = false;        // prev-frame state for edge detection
+        bool _shapeModUsedThisHold = false;   // any chord pressed during the current hold?
     };
 } // namespace
 
@@ -3202,11 +3496,21 @@ bool InputManager::enterFocusModeOnTopmost()
     //      head sync runs as expected.
     const bool footpathInMode
         = (Windows::WindowFootpathGetInputMode() != Windows::FootpathInputMode::none);
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §9 (Phase 1, 2026-05-25):
+    // mirror the Footpath in-mode re-arm for RideConstruction. Same scenario:
+    // the user opens the Ride window via mouse, places a piece, the underlying
+    // ToolCancel drops toolActive (or never armed it), but the window's
+    // construction state is live — Start should engage grid cursor on the
+    // track head.
+    const bool rideInMode
+        = (Windows::WindowRideConstructionGetInputMode() != Windows::RideInputMode::none);
     if (_selectorMode == SelectorMode::hidden
-        && (gInputFlags.has(InputFlag::toolActive) || footpathInMode))
+        && (gInputFlags.has(InputFlag::toolActive) || footpathInMode || rideInMode))
     {
         if (footpathInMode && !gInputFlags.has(InputFlag::toolActive))
             Windows::WindowFootpathReArmForCurrentMode();
+        if (rideInMode && !gInputFlags.has(InputFlag::toolActive))
+            Windows::WindowRideConstructionReArmForCurrentMode();
         clearFocus();
         setToolFocusSelected(true, SelectorTransitionSource::enterFocusModeRequested);
         requestFocusMode();

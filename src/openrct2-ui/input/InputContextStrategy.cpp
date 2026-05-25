@@ -1294,6 +1294,35 @@ namespace OpenRCT2::Ui
         return Disposition::Consumed;
     }
 
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §4 (Phase R, 2026-05-25):
+    // head-follow sync. Snaps the GridCursorModel + MapSelect globals + camera
+    // to the tile returned by getHeadTile(). Idempotent — safe to call multiple
+    // times per frame.
+    //
+    // Replaces FootpathContextImpl's bespoke syncGridCursorToBridgeHead (was at
+    // InputManager.cpp:1648-1663). The same flag setup used by WriteGridCursor-
+    // Selection (§7.1), except headFollowPreservesArrow() determines whether
+    // MapSelectFlag::enableArrow is left intact — bridgeBuild + RideConstruction
+    // both render a direction-arrow at the head and need this set.
+    void ToolContext::syncGridCursorToHead()
+    {
+        const auto head = getHeadTile();
+        if (!head.has_value())
+            return;
+        if (auto* grid = dynamic_cast<GridCursorModel*>(getCursorModel()); grid != nullptr)
+            grid->setPosition(*head);
+        const auto world = head->ToCoordsXY();
+        if (!headFollowPreservesArrow())
+            gMapSelectFlags.unset(MapSelectFlag::enableArrow);
+        gMapSelectFlags.set(MapSelectFlag::enable);
+        gMapSelectFlags.set(MapSelectFlag::gridCursor);
+        gMapSelectFlags.unset(MapSelectFlag::gridCursorParked);
+        gMapSelectType = MapSelectType::full;
+        setMapSelectRange(world);
+        MapInvalidateTileFull(world);
+        ScrollMainWindowIfCursorNearEdge(*head);
+    }
+
     void ToolContext::processFrame(uint32_t nowMs)
     {
         // OPENRCT2MINI grid-cursor-plan §18.4.e (2026-05-24): per-frame
@@ -1426,6 +1455,32 @@ namespace OpenRCT2::Ui
             // Shift held — clear repeat state so a fresh shift-release
             // followed by direction press starts a clean repeat clock.
             _repeat.reset();
+        }
+
+        // OPENRCT2MINI ride-construction-grid-cursor-plan §4 (Phase R,
+        // 2026-05-25): head-follow poll. When a subclass overrides
+        // getHeadTile() to return a head-following coord (Footpath
+        // bridgeBuild → bridge head; RideConstruction Front/Back/Place/
+        // EntranceExit → _currentTrackBegin), chase any changes since
+        // last frame and fire onHeadTileChanged for subclass hooks
+        // (refresh side-panel, etc.). The per-frame poll is necessary
+        // because game-action callbacks (TrackPlaceAction, Footpath-
+        // PlaceAction) update the head AFTER the verb's post-sync ran
+        // — in-line syncs alone miss the async-callback timing. No-op
+        // for tools that don't override getHeadTile() (base default
+        // returns nullopt; _lastHead gets reset and we return).
+        if (const auto head = getHeadTile(); head.has_value())
+        {
+            if (!_lastHead.has_value() || *_lastHead != *head)
+            {
+                _lastHead = *head;
+                syncGridCursorToHead();
+                onHeadTileChanged(*head);
+            }
+        }
+        else
+        {
+            _lastHead.reset();
         }
 
         // §10.1 blink pump. The viewport repaints only invalidated

@@ -5177,4 +5177,236 @@ namespace OpenRCT2::Ui::Windows
             }
         }
     }
+
+    // OPENRCT2MINI ride-construction-grid-cursor-plan (2026-05-25) Phase 1:
+    // window-side hooks for the gamepad-driven RideConstructionContextImpl.
+    // Map RideConstructionState → RideInputMode discriminator (Maze states
+    // collapse to `none` — out of v1 scope per plan §11).
+    RideInputMode WindowRideConstructionGetInputMode()
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr || windowMgr->FindByClass(WindowClass::rideConstruction) == nullptr)
+            return RideInputMode::none;
+        switch (_rideConstructionState)
+        {
+            case RideConstructionState::Place:
+                return RideInputMode::initialPlace;
+            case RideConstructionState::Front:
+                return RideInputMode::buildForward;
+            case RideConstructionState::Back:
+                return RideInputMode::buildBackward;
+            case RideConstructionState::Selected:
+                return RideInputMode::selected;
+            case RideConstructionState::EntranceExit:
+                return RideInputMode::entranceExit;
+            case RideConstructionState::State0:
+            case RideConstructionState::MazeBuild:
+            case RideConstructionState::MazeMove:
+            case RideConstructionState::MazeFill:
+            default:
+                return RideInputMode::none;
+        }
+    }
+
+    // Head-tile accessor — returns _currentTrackBegin only in build states
+    // (Front/Back) where the cursor chases the next-piece head. Place and
+    // EntranceExit return nullopt so the cursor moves freely under D-pad;
+    // the placement-position write goes the OTHER direction (cursor →
+    // _currentTrackBegin) and lives in WindowRideConstructionSetInitialPlaceAt.
+    std::optional<TileCoordsXY> WindowRideConstructionGetHeadTile()
+    {
+        if (!WindowRideConstructionIsInBuildState())
+            return std::nullopt;
+        return TileCoordsXY{ _currentTrackBegin };
+    }
+
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §6.3 (Phase 2,
+    // 2026-05-25): write the cursor's tile + Z into _currentTrackBegin
+    // before the user commits the first piece in Place state. The
+    // Construct() path that BuildCurrent dispatches reads _currentTrackBegin
+    // for the action's origin, so seeding it from the grid cursor here is
+    // what makes "PAD A places at where I'm pointing" work.
+    void WindowRideConstructionSetInitialPlaceAt(TileCoordsXY tile, int32_t z)
+    {
+        if (_rideConstructionState != RideConstructionState::Place)
+            return;
+        _currentTrackBegin = CoordsXYZ{ tile.ToCoordsXY(), z };
+        // Refresh the active elements so the provisional ghost piece
+        // re-renders at the new origin (PlaceProvisionalTrackPiece reads
+        // _currentTrackBegin).
+        WindowRideConstructionUpdateActiveElements();
+    }
+
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §6.2 (Phase 2,
+    // 2026-05-25): rotate the initial-piece direction in Place state via
+    // PAD Y. Cycles 0 → 1 → 2 → 3. No-op outside Place state — in
+    // Front/Back the direction is constrained by the previous piece's
+    // exit, and TurnRight is the rotation verb (onRotate maps there).
+    void WindowRideConstructionCycleInitialDirection()
+    {
+        if (_rideConstructionState != RideConstructionState::Place)
+            return;
+        _currentTrackPieceDirection = (_currentTrackPieceDirection + 1) & 3;
+        WindowRideConstructionUpdateActiveElements();
+    }
+
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §7 (Phase 3, 2026-05-25):
+    // entrance / exit placement helpers for the gamepad path. Mouse path
+    // derives both tile and direction from the screen click (RideGetEntrance-
+    // OrExitPositionFromScreenPosition); we split those: cursor tile from
+    // the grid cursor, direction from gRideEntranceExitPlaceDirection
+    // (which the user cycles via PAD Y in entranceExit state).
+    void WindowRideConstructionCycleEntranceExitDirection()
+    {
+        if (_rideConstructionState != RideConstructionState::EntranceExit)
+            return;
+        // Default to direction 0 on the first cycle if the field is still
+        // kInvalidDirection (no mouse hover has happened yet).
+        if (gRideEntranceExitPlaceDirection == kInvalidDirection)
+            gRideEntranceExitPlaceDirection = 0;
+        else
+            gRideEntranceExitPlaceDirection = (gRideEntranceExitPlaceDirection + 1) & 3;
+        // Invalidate the window so the user sees the staged direction update
+        // (the panel preview reflects gRideEntranceExitPlaceDirection).
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr != nullptr)
+            windowMgr->InvalidateByClass(WindowClass::rideConstruction);
+    }
+
+    void WindowRideConstructionPlaceEntranceExit(TileCoordsXY tile, int32_t z)
+    {
+        if (_rideConstructionState != RideConstructionState::EntranceExit)
+            return;
+        // Initialise the direction to 0 if the user hasn't cycled yet — the
+        // mouse path requires a hover-set direction before commit, but for
+        // gamepad we want PAD A to "just work" with a sensible default.
+        if (gRideEntranceExitPlaceDirection == kInvalidDirection)
+            gRideEntranceExitPlaceDirection = 0;
+
+        const CoordsXYZD entranceCoords{
+            tile.ToCoordsXY(), z, static_cast<uint8_t>(0)
+        };
+        auto action = GameActions::RideEntranceExitPlaceAction(
+            entranceCoords, DirectionReverse(gRideEntranceExitPlaceDirection),
+            gRideEntranceExitPlaceRideIndex, gRideEntranceExitPlaceStationIndex,
+            gRideEntranceExitPlaceType == ENTRANCE_TYPE_RIDE_EXIT);
+
+        action.SetCallback([](const GameActions::GameAction*, const GameActions::Result* result) {
+            if (result->error != GameActions::Status::ok)
+                return;
+            Audio::Play3D(Audio::SoundId::placeItem, result->position);
+            auto* windowMgr = GetWindowManager();
+            auto currentRide = GetRide(gRideEntranceExitPlaceRideIndex);
+            if (currentRide != nullptr && RideAreAllPossibleEntrancesAndExitsBuilt(*currentRide).Successful)
+            {
+                ToolCancel();
+                if (!currentRide->getRideTypeDescriptor().flags.has(RtdFlag::hasTrack))
+                {
+                    windowMgr->CloseByClass(WindowClass::rideConstruction);
+                }
+            }
+            else
+            {
+                // Flip to placing the other (entrance→exit or exit→entrance)
+                // — mirrors the mouse path's behaviour at :2692.
+                gRideEntranceExitPlaceType = gRideEntranceExitPlaceType ^ 1;
+                if (windowMgr != nullptr)
+                    windowMgr->InvalidateByClass(WindowClass::rideConstruction);
+            }
+        });
+        GameActions::Execute(&action, getGameState());
+    }
+
+    void WindowRideConstructionCancelEntranceExitMode()
+    {
+        if (_rideConstructionState != RideConstructionState::EntranceExit)
+            return;
+        // Restore the construction state to whatever was active before the
+        // user clicked Entrance/Exit. Mirrors the mouse path's behaviour at
+        // RideConstruction.cpp:1069.
+        _rideConstructionState = gRideEntranceExitPlacePreviousRideConstructionState;
+        gRideEntranceExitPlaceDirection = kInvalidDirection;
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr != nullptr)
+            windowMgr->InvalidateByClass(WindowClass::rideConstruction);
+    }
+
+    bool WindowRideConstructionIsInBuildState()
+    {
+        return _rideConstructionState == RideConstructionState::Front
+            || _rideConstructionState == RideConstructionState::Back;
+    }
+
+    // Re-arm the WIDX_CONSTRUCT tool when entering focus / cursor mode and the
+    // window has live build state but the tool widget has dropped (e.g. after
+    // a focus-mode roundtrip). Mirrors WindowFootpathReArmForCurrentMode.
+    // Guarded against toggle-cancel: only re-issue ToolSet when not already
+    // active for our window.
+    void WindowRideConstructionReArmForCurrentMode()
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return;
+        WindowBase* w = windowMgr->FindByClass(WindowClass::rideConstruction);
+        if (w == nullptr)
+            return;
+        if (WindowRideConstructionGetInputMode() == RideInputMode::none)
+            return;
+        if (isToolActive(*w, WIDX_CONSTRUCT))
+            return;
+        ToolSet(*w, WIDX_CONSTRUCT, Tool::crosshair);
+        gInputFlags.set(InputFlag::toolActive);
+    }
+
+    // Cycle to the next valid special-track piece for the current ride /
+    // direction / pitch / roll context. Filtered via BuildSpecialElementsList
+    // (the same helper the dropdown picker uses). Wraps to the first entry
+    // past the end. No-op silently if the list is empty (rare — most ride
+    // types have at least one special piece, even if just a station).
+    void WindowRideConstructionKeyboardShortcutCycleSpecialNext()
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr || windowMgr->FindByClass(WindowClass::rideConstruction) == nullptr)
+            return;
+        const auto ride = GetRide(_currentRideIndex);
+        if (ride == nullptr)
+            return;
+
+        const auto list = BuildSpecialElementsList(
+            *ride, _currentTrackPieceDirection, _currentTrackPitchEnd, _currentTrackRollEnd, _rideConstructionState);
+        if (!list.HasActiveElements || list.Elements.empty())
+            return;
+
+        // Find current pick (if it matches an entry) and step to the next
+        // enabled one with wrap. If current isn't in the list (we're on a
+        // plain curve, not a special), start from the beginning.
+        const auto& current = _currentlySelectedTrack;
+        size_t startIdx = 0;
+        if (current.isTrackType)
+        {
+            const auto currentType = current.trackType;
+            for (size_t i = 0; i < list.Elements.size(); ++i)
+            {
+                if (list.Elements[i].TrackType == currentType)
+                {
+                    startIdx = i + 1; // start search past current
+                    break;
+                }
+            }
+        }
+        for (size_t step = 0; step < list.Elements.size(); ++step)
+        {
+            const size_t idx = (startIdx + step) % list.Elements.size();
+            if (list.Elements[idx].Disabled)
+                continue;
+            const TrackElemType picked = list.Elements[idx].TrackType;
+            RideConstructionInvalidateCurrentTrack();
+            // Mirror the dropdown picker's side-effects (RideConstruction.cpp
+            // :1546-1577): set the track + clear cached price + refresh.
+            _currentlySelectedTrack = picked;
+            _currentTrackPrice = kMoney64Undefined;
+            WindowRideConstructionUpdateActiveElements();
+            return;
+        }
+    }
 } // namespace OpenRCT2::Ui::Windows
