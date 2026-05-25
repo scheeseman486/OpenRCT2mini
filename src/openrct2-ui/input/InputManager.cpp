@@ -2414,12 +2414,18 @@ namespace
         }
 
         // onRaise/onLower in build state dispatch the SlopeUp/SlopeDown
-        // verbs (matching bridgeBuild). In initial-placement / entrance-exit
-        // state the grid cursor's Z affects placement height; step it and
-        // let the per-frame provisional refresh pick up the change. (Phase 2
-        // will wire a per-state provisional refresh — for v1 the Z-step
-        // affects the next BuildCurrent's _currentTrackBegin.z indirectly
-        // via the placement helpers.)
+        // verbs (matching bridgeBuild). In initialPlace state we also
+        // adjust _trackPlaceZ so the ride piece ghost preview moves with
+        // the grid cursor — without this, the cursor's blue square visually
+        // moves but the ghost piece stays at ground level (user-reported
+        // bug, 2026-05-26 in plan §16).
+        //
+        // §16 lesson: gridCursor().raiseZ/lowerZ only moves the cursor
+        // visual; the ride piece reads _trackPlaceZ (RideConstruction.cpp
+        // :5286), so the placement Z has its own state separate from the
+        // cursor Z. We update both: cursor Z for the floor highlight visual
+        // and _trackPlaceZ for the ride ghost via WindowRideConstruction-
+        // AdjustPlaceZ, which also refreshes the provisional piece preview.
         Disposition onRaise() override
         {
             if (Windows::WindowRideConstructionIsInBuildState())
@@ -2428,7 +2434,13 @@ namespace
                 syncGridCursorToHead();
                 return Disposition::Consumed;
             }
-            gridCursor().raiseZ(OpenRCT2::kPathHeightStep);
+            gridCursor().raiseZ(::kCoordsZStep);
+            if (Windows::WindowRideConstructionGetInputMode()
+                == Windows::RideInputMode::initialPlace)
+            {
+                Windows::WindowRideConstructionAdjustPlaceZ(
+                    gridCursor().getPosition(), ::kCoordsZStep);
+            }
             return Disposition::Consumed;
         }
         Disposition onLower() override
@@ -2439,7 +2451,13 @@ namespace
                 syncGridCursorToHead();
                 return Disposition::Consumed;
             }
-            gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
+            gridCursor().lowerZ(::kCoordsZStep);
+            if (Windows::WindowRideConstructionGetInputMode()
+                == Windows::RideInputMode::initialPlace)
+            {
+                Windows::WindowRideConstructionAdjustPlaceZ(
+                    gridCursor().getPosition(), -::kCoordsZStep);
+            }
             return Disposition::Consumed;
         }
 

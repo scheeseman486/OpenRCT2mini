@@ -5587,6 +5587,46 @@ namespace OpenRCT2::Ui::Windows
         }
     }
 
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §16 (post-Phase 2,
+    // 2026-05-26): adjust the placement Z (_trackPlaceZ) for the gamepad
+    // path. The mouse path drives _trackPlaceZ via shift+drag-Y at line
+    // 3120 (mapZ += _trackPlaceShiftZ); the gamepad has no continuous Y
+    // axis so we step by kCoordsZStep on each shift+D-pad-up/down press.
+    //
+    // _trackPlaceZ == 0 is a sentinel that ShowGhostAtTile treats as
+    // "follow ground" (line 5286-5288), so the first step out of 0 has
+    // to seed from MapGetHighestZ(cursor) to produce a visible change.
+    // We then clamp to [kCoordsZStep, kMaximumTrackHeight] so the sentinel
+    // is never re-entered accidentally — the user can still hit ground by
+    // continuing to lower until they hit kCoordsZStep, which renders at
+    // ground level for most surface heights anyway.
+    //
+    // ShowGhostAtTile re-runs PlaceProvisionalTrackPiece with the new Z
+    // (and its own trial-and-error loop) so the ghost preview moves to
+    // match the user's adjustment.
+    void WindowRideConstructionAdjustPlaceZ(TileCoordsXY tile, int32_t delta)
+    {
+        if (_rideConstructionState != RideConstructionState::Place)
+            return;
+        const CoordsXY mapPos = tile.ToCoordsXY();
+        if (!MapIsLocationValid(mapPos))
+            return;
+        if (_trackPlaceZ == 0)
+        {
+            // Seed from ground level so the first nudge produces a visible
+            // step. Without this, _trackPlaceZ stays 0 after a +8 nudge and
+            // ShowGhostAtTile re-falls-back to ground.
+            _trackPlaceZ = MapGetHighestZ(mapPos);
+        }
+        _trackPlaceZ = std::min<int32_t>(
+            std::max<int32_t>(_trackPlaceZ + delta, kCoordsZStep),
+            kMaximumTrackHeight);
+        // Refresh the ghost at the new Z so the user sees the piece move.
+        // ShowGhostAtTile reads _trackPlaceZ at line 5286 and writes
+        // _currentTrackBegin.z accordingly.
+        WindowRideConstructionShowGhostAtTile(tile);
+    }
+
     // OPENRCT2MINI ride-construction-grid-cursor-plan §6.2 (Phase 2,
     // 2026-05-25): rotate the initial-piece direction in Place state via
     // PAD Y. Cycles 0 → 1 → 2 → 3. No-op outside Place state — in

@@ -320,6 +320,14 @@ namespace OpenRCT2::Ui::Windows
     // with Z trial-and-error.
     void WindowRideConstructionShowGhostAtTile(TileCoordsXY tile);
     void WindowRideConstructionPlaceInitialAtTile(TileCoordsXY tile);
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §16 (post-Phase 2,
+    // 2026-05-26): adjust the placement Z (_trackPlaceZ) for the gamepad
+    // path. The mouse path drives _trackPlaceZ via shift+drag-Y; gamepad
+    // has no continuous Y axis so we step by kCoordsZStep on each
+    // shift+D-pad-up/down press. Refreshes the ghost piece at the new Z.
+    // Only applies in Place state — Build state uses slope buttons for
+    // elevation instead.
+    void WindowRideConstructionAdjustPlaceZ(TileCoordsXY tile, int32_t delta);
     // Phase 3 (entrance / exit): PAD Y cycles gRideEntranceExitPlaceDirection,
     // PAD A dispatches RideEntranceExitPlaceAction at the cursor tile,
     // PAD B restores the previous construction state.
