@@ -649,7 +649,15 @@ namespace OpenRCT2::Ui::Windows
                 return row * cols + col;
         };
 
-        int32_t curCol, curRow;
+        // OPENRCT2MINI CI fix (2026-05-25): explicitly initialise at
+        // declaration so GCC 8.3 (Miyoo toolchain) and the AppImage
+        // compiler don't fire -Werror=maybe-uninitialized on the switch
+        // below — neither has a default: case and older GCC can't prove
+        // the enum is exhaustively covered. Host GCC's flow analysis was
+        // smarter and accepted the original code, but cross-builds reject
+        // it. Initial values are overwritten in every path below; they
+        // only exist to silence the warning.
+        int32_t curCol = 0, curRow = 0;
         if (gDropdown.highlightedIndex < 0 || gDropdown.highlightedIndex >= n)
         {
             // First press in this dropdown — pick a starting cell based
