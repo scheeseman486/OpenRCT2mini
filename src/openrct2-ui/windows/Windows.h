@@ -310,6 +310,7 @@ namespace OpenRCT2::Ui::Windows
     // disabled in Place state and only enabled once we flip).
     void WindowRideConstructionSetInitialPlaceAt(TileCoordsXY tile, int32_t z);
     void WindowRideConstructionCycleInitialDirection();
+    void WindowRideConstructionSetInitialDirection(uint8_t dir);
     void WindowRideConstructionPlaceInitialAtTile(TileCoordsXY tile);
     // Phase 3 (entrance / exit): PAD Y cycles gRideEntranceExitPlaceDirection,
     // PAD A dispatches RideEntranceExitPlaceAction at the cursor tile,

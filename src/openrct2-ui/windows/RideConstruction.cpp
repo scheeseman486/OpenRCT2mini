@@ -5359,8 +5359,60 @@ namespace OpenRCT2::Ui::Windows
             }
             else
             {
-                // Success — re-arm the tool widget so the user can extend in
-                // Front state via the gamepad onStep verbs.
+                // Success. Now the tricky part: the upstream forward callback
+                // (RideConstructPlacedForwardGameActionCallback at :2957) has
+                // already fired synchronously and progressed the state machine.
+                // Possible post-callback states:
+                //   - Selected: next-piece lookup found a track block (the
+                //     placed piece). RideSelectNextSection inside the callback
+                //     then either advances within Selected or flips to Front
+                //     at end-of-track.
+                //   - Front: end-of-track reached cleanly. Best case.
+                //   - State0: lookup failed (common for single station-style
+                //     first pieces). Then CloseConstructWindowOnCompletion
+                //     (:2914) sees State0 + entrances-not-built → auto-clicks
+                //     WIDX_ENTRANCE → state flips to EntranceExit and the
+                //     WIDX_ENTRANCE tool gets armed. THIS is the auto-Entrance
+                //     trap the user reported.
+                //
+                // For the gamepad path we want to land in Front so the user
+                // can immediately extend via D-pad shape + PAD A. Undo any
+                // auto-EntranceExit flip, then force state to Front + re-arm
+                // WIDX_CONSTRUCT.
+                if (_rideConstructionState == RideConstructionState::EntranceExit)
+                {
+                    // Undo the auto-flip from CloseConstructWindowOnCompletion.
+                    // The previous state stored in gRideEntranceExitPlace-
+                    // PreviousRideConstructionState was State0.
+                    _rideConstructionState = gRideEntranceExitPlacePreviousRideConstructionState;
+                    gRideEntranceExitPlaceDirection = kInvalidDirection;
+                }
+                if (_rideConstructionState == RideConstructionState::Selected)
+                {
+                    // Advance through the placed piece(s) until we hit Front
+                    // (end-of-track). RideSelectNextSection in Selected state
+                    // will either stay in Selected (more track ahead) or flip
+                    // to Front (end-of-track). Bound the loop defensively.
+                    for (int i = 0; i < 64 && _rideConstructionState == RideConstructionState::Selected; i++)
+                        RideSelectNextSection();
+                }
+                if (_rideConstructionState != RideConstructionState::Front
+                    && _rideConstructionState != RideConstructionState::Back)
+                {
+                    // State0 (or anything else): manually flip to Front and
+                    // let RideConstructionSetDefaultNextPiece set up curve/
+                    // slope/bank defaults. _currentTrackBegin / direction
+                    // stay at the placed piece's position — best the gamepad
+                    // path can do without re-deriving the piece's exit
+                    // geometry (the user gets an "overlap" error if they try
+                    // to extend without moving the cursor, which is honest).
+                    _rideConstructionState = RideConstructionState::Front;
+                    RideConstructionSetDefaultNextPiece();
+                    WindowRideConstructionUpdateActiveElements();
+                }
+                // Re-arm WIDX_CONSTRUCT so the user can extend in Front state
+                // via the gamepad onStep verbs. The auto-Entrance trigger
+                // would otherwise have armed WIDX_ENTRANCE; this overrides it.
                 w = windowMgr->FindByClass(WindowClass::rideConstruction);
                 if (w != nullptr)
                     ToolSet(*w, WIDX_CONSTRUCT, Tool::crosshair);
@@ -5380,6 +5432,21 @@ namespace OpenRCT2::Ui::Windows
         if (_rideConstructionState != RideConstructionState::Place)
             return;
         _currentTrackPieceDirection = (_currentTrackPieceDirection + 1) & 3;
+        WindowRideConstructionUpdateActiveElements();
+    }
+
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §6.2 follow-up
+    // (post-Phase 2 user request, 2026-05-25): the precision-modifier +
+    // cardinal D-pad gesture sets the initial-piece direction directly
+    // (mirrors the Land tool's corner picker). PAD Y cycling stays as a
+    // secondary path. dir is a world direction 0-3 (N/E/S/W per
+    // TileDirectionDelta) computed in InputManager by the context impl
+    // from the dpad + camera rotation.
+    void WindowRideConstructionSetInitialDirection(uint8_t dir)
+    {
+        if (_rideConstructionState != RideConstructionState::Place)
+            return;
+        _currentTrackPieceDirection = dir & 3;
         WindowRideConstructionUpdateActiveElements();
     }
 

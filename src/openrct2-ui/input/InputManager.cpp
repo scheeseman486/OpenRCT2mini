@@ -2339,6 +2339,38 @@ namespace
             return Disposition::Consumed;
         }
 
+        // Precision modifier + cardinal D-pad in initialPlace state → set
+        // initial direction directly (post-Phase 2 user request, 2026-05-25).
+        // Mirrors the Land tool's corner picker pattern but maps the D-pad
+        // direction to a world compass direction (via stepForDirection's
+        // camera-rotated table) rather than a sub-tile corner. PAD Y cycling
+        // remains as a secondary path.
+        Disposition onPrecisionDpad(::Direction dpad) override
+        {
+            if (Windows::WindowRideConstructionGetInputMode()
+                == Windows::RideInputMode::initialPlace)
+            {
+                // Reuse stepForDirection (compass mode) to translate the
+                // screen-relative dpad direction to a world TileCoordsXY
+                // delta, then read off the world cardinal. The (-1,0)/(0,1)/
+                // (1,0)/(0,-1) deltas correspond to N/E/S/W = directions
+                // 0/1/2/3 per Map.cpp:88's TileDirectionDelta convention.
+                const uint8_t rot = OpenRCT2::GetCurrentRotation();
+                const auto delta = OpenRCT2::Ui::stepForDirection(
+                    OpenRCT2::Ui::GridCursorMode::compass, rot, dpad);
+                uint8_t worldDir = 0; // default N
+                if (delta.x == 0 && delta.y == 1) worldDir = 1;      // E
+                else if (delta.x == 1 && delta.y == 0) worldDir = 2; // S
+                else if (delta.x == 0 && delta.y == -1) worldDir = 3; // W
+                Windows::WindowRideConstructionSetInitialDirection(worldDir);
+                // Note: don't touch _precisionDpadPressed (private on base).
+                // The base's tap-alone reset only matters for the cursor
+                // orientation flow which we override entirely here.
+                return Disposition::Consumed;
+            }
+            return ToolContext::onPrecisionDpad(dpad);
+        }
+
         // PAD Y in build state → TurnRight (clockwise piece). In initialPlace,
         // PAD Y cycles the initial direction (Plan §6.2).
         Disposition onRotate() override
