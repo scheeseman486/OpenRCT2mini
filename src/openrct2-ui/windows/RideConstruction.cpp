@@ -5537,6 +5537,33 @@ namespace OpenRCT2::Ui::Windows
                 if (w != nullptr)
                     ToolSet(*w, WIDX_CONSTRUCT, Tool::crosshair);
                 gInputFlags.set(InputFlag::toolActive);
+                // CRITICAL: explicitly preserve cursor mode + selector state
+                // across the placement. The auto-Entrance trigger + ToolCancel
+                // round-trip can clear _toolFocusSelected (the latch that
+                // resolveActiveContext gates on) — without it set, the next
+                // frame falls back to widgetFocus context and the user sees
+                // focus mode instead of the gamepad track-build context. Same
+                // story for SelectorMode: keep it `active` so the gamepad
+                // cursor stays driving and the OS pointer stays hidden.
+                {
+                    auto& inputMgr = OpenRCT2::Ui::GetInputManager();
+                    inputMgr.setToolFocusSelected(
+                        true,
+                        OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
+                    inputMgr.setSelectorMode(
+                        OpenRCT2::Ui::InputManager::SelectorMode::active);
+                }
+                // Also focus the RideConstruction window so the focusedOnTool
+                // check in the focus-context engage gesture lines up against
+                // gCurrentToolWidget.windowClassification (set by ToolSet
+                // above to rideConstruction). Without an explicit focus, the
+                // last-focused class may still be whichever widget the user
+                // was on before Start engaged cursor mode for placement.
+                if (w != nullptr)
+                {
+                    auto& inputMgr = OpenRCT2::Ui::GetInputManager();
+                    inputMgr.setFocus(WindowClass::rideConstruction, WIDX_CONSTRUCT);
+                }
                 break;
             }
         }
