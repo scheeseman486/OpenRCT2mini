@@ -775,29 +775,30 @@ namespace
             const bool footpathInModeEngage = !toolArmed && footpathInMode && focusedOnFootpath;
             // OPENRCT2MINI ride-construction-grid-cursor-plan §9 (Phase 1, 2026-05-25):
             // mirror the Footpath in-mode engage for RideConstruction. When the
-            // user is focused on the construction window with live build state
-            // but the WIDX_CONSTRUCT tool widget has dropped (e.g. clicked a
-            // construction-window button via focus mode, which can cancel the
-            // tool), pressing Start re-arms the tool widget so the next frame
-            // resolveActiveContext can route to RideConstructionContextImpl.
+            // user is focused on the construction window pressing Start re-arms
+            // WIDX_CONSTRUCT so the next frame resolveActiveContext routes to
+            // RideConstructionContextImpl.
             //
-            // 2026-05-25 post-Phase-2 follow-up: dropped the !toolArmed gate so
-            // the engage fires even when the tool is already armed. The user
-            // reported "pressing Start in Focus Mode on Ride window doesn't
-            // engage gamepad track building" — this happens because after
-            // initial-placement my fix re-arms WIDX_CONSTRUCT (toolArmed=true).
-            // The focusedOnTool branch *should* catch this via
-            // `getFocusedWindowClass() == gCurrentToolWidget.windowClassification`,
-            // but that gate can miss if gCurrentToolWidget got cleared between
-            // my ToolSet and the user's Start press (or the focused class
-            // drifted to a set-member class). The rideInMode-only gate (state
-            // live, focused on ride window) is a more direct check and the
-            // ReArm dispatch is idempotent if the tool is already armed.
-            const bool rideInMode
-                = (Windows::WindowRideConstructionGetInputMode() != Windows::RideInputMode::none);
+            // §16 follow-up (2026-05-25): the predicate is broader than Footpath's
+            // for two reasons:
+            //   (a) State0 (the idle "between pieces" state where the user picks
+            //       the next piece shape) returns RideInputMode::none. We still
+            //       want to engage there so the user can D-pad around and place.
+            //       Use "window exists" instead of a state-based check.
+            //   (b) WindowClass::ride is included defensively. The sibling ride
+            //       info window (stats/vehicle/appearance) usually isn't open
+            //       during construction, but if it is and focus drifts to it,
+            //       Start should still engage. ReArm always targets the
+            //       rideConstruction window's WIDX_CONSTRUCT regardless.
+            // Bridge case has a simpler predicate because Footpath has ONE window
+            // and a single mode-state enum that's always non-none mid-build.
+            auto* _rideWindowMgr = GetWindowManager();
+            const bool rideWindowExists = (_rideWindowMgr != nullptr
+                && _rideWindowMgr->FindByClass(WindowClass::rideConstruction) != nullptr);
+            const auto _focusedCls = mgr.getFocusedWindowClass();
             const bool focusedOnRide
-                = (mgr.getFocusedWindowClass() == WindowClass::rideConstruction);
-            const bool rideInModeEngage = rideInMode && focusedOnRide;
+                = (_focusedCls == WindowClass::rideConstruction || _focusedCls == WindowClass::ride);
+            const bool rideInModeEngage = rideWindowExists && focusedOnRide;
             if (id == ShortcutId::kInterfaceConfirm && (focusedOnTool || footpathInModeEngage || rideInModeEngage))
             {
                 // OPENRCT2MINI grid-cursor-plan §12.1 (amendment
@@ -2440,6 +2441,42 @@ namespace
             }
             gridCursor().lowerZ(OpenRCT2::kPathHeightStep);
             return Disposition::Consumed;
+        }
+
+        // OPENRCT2MINI ride-construction-grid-cursor-plan §16.10 (2026-05-25):
+        // intercept the shift modifier + D-pad chord BEFORE the base class's
+        // onShortcut runs. The base ToolContext::onShortcut at line ~1169 of
+        // InputContextStrategy.h handles shift+D-pad-up/down as Z-raise/lower
+        // (the Footpath bridge gesture) and silently Consumes shift+D-pad-
+        // left/right. For Ride, the shift modifier means "configure piece
+        // bank/chain/special" — completely different semantic. Without this
+        // override the chord dispatch in onStepBuild was unreachable.
+        //
+        // Only applies in build state (Front/Back); other states fall through
+        // to the base for normal grid cursor stepping.
+        Disposition onShortcut(std::string_view id, const InputEvent& e) override
+        {
+            if (OpenRCT2::Ui::isShiftModifierHeldInTool()
+                && Windows::WindowRideConstructionIsInBuildState())
+            {
+                ::Direction d{};
+                bool isDpad = true;
+                if (id == ShortcutId::kFocusUp)
+                    d = static_cast<::Direction>(0);
+                else if (id == ShortcutId::kFocusRight)
+                    d = static_cast<::Direction>(1);
+                else if (id == ShortcutId::kFocusDown)
+                    d = static_cast<::Direction>(2);
+                else if (id == ShortcutId::kFocusLeft)
+                    d = static_cast<::Direction>(3);
+                else
+                    isDpad = false;
+                if (isDpad)
+                {
+                    return onStepBuild(d);
+                }
+            }
+            return ToolContext::onShortcut(id, e);
         }
 
         // D-pad in build state: unmodified = curve/slope shape configuration,

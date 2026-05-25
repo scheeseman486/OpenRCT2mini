@@ -1078,7 +1078,27 @@ namespace OpenRCT2::Ui::Windows
                 case RideConstructionState::Selected:
                     if (isToolActive(WindowClass::rideConstruction))
                     {
-                        ToolCancel();
+                        // OPENRCT2MINI ride-construction-grid-cursor-plan
+                        // §9 follow-up (2026-05-25): upstream cancels the
+                        // construct tool every frame in Front/Back/Selected
+                        // because the mouse path doesn't need the map tool
+                        // armed in those states (user extends track via the
+                        // WIDX_CONSTRUCT button click, not via map clicks).
+                        // For the gamepad path we DO need the tool armed so
+                        // resolveActiveContext can route to toolRideConstruction
+                        // for grid-cursor mode. Gate the cancel on selector
+                        // mode: only cancel when the user is mouse-driving
+                        // (selector hidden); skip when in Focus / grid cursor
+                        // mode (selector active) so the gamepad engage
+                        // sticks. Diagnostic from user 2026-05-25 confirmed
+                        // engage block fires correctly but this onUpdate
+                        // cancel immediately undoes it, leaving the user
+                        // stuck in widgetFocus.
+                        if (OpenRCT2::Ui::GetInputManager().getSelectorMode()
+                            == OpenRCT2::Ui::InputManager::SelectorMode::hidden)
+                        {
+                            ToolCancel();
+                        }
                     }
                     break;
                 default:
@@ -5537,14 +5557,18 @@ namespace OpenRCT2::Ui::Windows
                 if (w != nullptr)
                     ToolSet(*w, WIDX_CONSTRUCT, Tool::crosshair);
                 gInputFlags.set(InputFlag::toolActive);
-                // CRITICAL: explicitly preserve cursor mode + selector state
-                // across the placement. The auto-Entrance trigger + ToolCancel
-                // round-trip can clear _toolFocusSelected (the latch that
-                // resolveActiveContext gates on) — without it set, the next
-                // frame falls back to widgetFocus context and the user sees
-                // focus mode instead of the gamepad track-build context. Same
-                // story for SelectorMode: keep it `active` so the gamepad
-                // cursor stays driving and the OS pointer stays hidden.
+                // Defensive: re-assert grid cursor mode invariants post-placement.
+                // The auto-Entrance trigger + ToolCancel round-trip can leave
+                // these in inconsistent states; setting them explicitly here
+                // means the user lands cleanly in toolRideConstruction context
+                // on the next frame regardless of what intermediate paths ran.
+                //
+                // toolFocusSelected + selectorMode::active: required gates for
+                // resolveActiveContext to route to the tool context.
+                //
+                // setFocus: aligns _focusedWindowClass with rideConstruction so
+                // the §16 in-mode engage gate (focusedOnRide check) still
+                // matches if the user later exits and re-engages grid mode.
                 {
                     auto& inputMgr = OpenRCT2::Ui::GetInputManager();
                     inputMgr.setToolFocusSelected(
@@ -5553,12 +5577,6 @@ namespace OpenRCT2::Ui::Windows
                     inputMgr.setSelectorMode(
                         OpenRCT2::Ui::InputManager::SelectorMode::active);
                 }
-                // Also focus the RideConstruction window so the focusedOnTool
-                // check in the focus-context engage gesture lines up against
-                // gCurrentToolWidget.windowClassification (set by ToolSet
-                // above to rideConstruction). Without an explicit focus, the
-                // last-focused class may still be whichever widget the user
-                // was on before Start engaged cursor mode for placement.
                 if (w != nullptr)
                 {
                     auto& inputMgr = OpenRCT2::Ui::GetInputManager();
@@ -5703,8 +5721,12 @@ namespace OpenRCT2::Ui::Windows
         WindowBase* w = windowMgr->FindByClass(WindowClass::rideConstruction);
         if (w == nullptr)
             return;
-        if (WindowRideConstructionGetInputMode() == RideInputMode::none)
-            return;
+        // OPENRCT2MINI 2026-05-25 follow-up #2: removed the GetInputMode()==none
+        // guard. State0 (the idle "between pieces" state) returns none too,
+        // but we still want to arm WIDX_CONSTRUCT so the user can engage grid
+        // cursor mode and start D-padding to extend / place pieces. Maze
+        // construction uses a different window class entirely (mazeConstruction)
+        // so we don't hit it here.
         if (isToolActive(*w, WIDX_CONSTRUCT))
             return;
         ToolSet(*w, WIDX_CONSTRUCT, Tool::crosshair);
@@ -5716,6 +5738,20 @@ namespace OpenRCT2::Ui::Windows
     // (the same helper the dropdown picker uses). Wraps to the first entry
     // past the end. No-op silently if the list is empty (rare — most ride
     // types have at least one special piece, even if just a station).
+    //
+    // OPENRCT2MINI §16.11 fix (2026-05-25): the list returned by
+    // BuildSpecialElementsList ALSO contains separator entries
+    // (TrackElemType::none = kSeparator at Construction.cpp:31) — visual
+    // dividers between piece groups in the dropdown UI. Separators can
+    // have Disabled=false in the data (their pitchStart/End default to
+    // zero and match the build slope when it's TrackPitch::none), so the
+    // original implementation that only skipped Disabled entries would
+    // land on a separator and the user saw "nothing" rendered. Worse, the
+    // separator's TrackType is TrackElemType::none which is also the
+    // "no curve selected" sentinel — picking it scrambled
+    // _currentlySelectedTrack and the next cycle restarted from index 0,
+    // looping between the first two real specials and the separator.
+    // Fix: skip both Disabled AND TrackElemType::none entries.
     void WindowRideConstructionKeyboardShortcutCycleSpecialNext()
     {
         auto* windowMgr = GetWindowManager();
@@ -5730,9 +5766,17 @@ namespace OpenRCT2::Ui::Windows
         if (!list.HasActiveElements || list.Elements.empty())
             return;
 
-        // Find current pick (if it matches an entry) and step to the next
-        // enabled one with wrap. If current isn't in the list (we're on a
-        // plain curve, not a special), start from the beginning.
+        // Predicate: an entry is selectable iff it's not disabled AND it's
+        // not a separator placeholder. Kept inline so the find-current and
+        // step-next loops use the exact same filter.
+        const auto isSelectable = [](const auto& entry) {
+            return !entry.Disabled && entry.TrackType != TrackElemType::none;
+        };
+
+        // Find current pick (if it matches a selectable entry) and step to
+        // the next selectable one with wrap. If current isn't in the list
+        // (we're on a plain curve, not a special, OR we're on a stale entry
+        // that got filtered out by a state change), start from the beginning.
         const auto& current = _currentlySelectedTrack;
         size_t startIdx = 0;
         if (current.isTrackType)
@@ -5740,7 +5784,7 @@ namespace OpenRCT2::Ui::Windows
             const auto currentType = current.trackType;
             for (size_t i = 0; i < list.Elements.size(); ++i)
             {
-                if (list.Elements[i].TrackType == currentType)
+                if (list.Elements[i].TrackType == currentType && isSelectable(list.Elements[i]))
                 {
                     startIdx = i + 1; // start search past current
                     break;
@@ -5750,7 +5794,7 @@ namespace OpenRCT2::Ui::Windows
         for (size_t step = 0; step < list.Elements.size(); ++step)
         {
             const size_t idx = (startIdx + step) % list.Elements.size();
-            if (list.Elements[idx].Disabled)
+            if (!isSelectable(list.Elements[idx]))
                 continue;
             const TrackElemType picked = list.Elements[idx].TrackType;
             RideConstructionInvalidateCurrentTrack();
