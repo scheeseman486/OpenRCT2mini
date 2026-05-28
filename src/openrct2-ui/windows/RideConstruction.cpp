@@ -6001,6 +6001,17 @@ namespace OpenRCT2::Ui::Windows
     {
         if (_rideConstructionState != RideConstructionState::EntranceExit)
             return;
+        // OPENRCT2MINI ride-construction-grid-cursor-plan §16 (2026-05-28):
+        // clear the entrance/exit ghost BEFORE swapping state away from
+        // EntranceExit. RideConstructionInvalidateCurrentTrack switches on
+        // _rideConstructionState — the EntranceExit branch hits
+        // RideConstructionRemoveGhosts which removes the ghost tile element
+        // and clears _currentTrackSelectionFlags::entranceOrExit. Flipping
+        // state first routes through the Front/Back branch which doesn't
+        // know about the entrance ghost, leaving it stuck in the world
+        // (user-reported: PAD B + PAD Start + close window = persistent
+        // ghost entrance).
+        RideConstructionInvalidateCurrentTrack();
         // Restore the construction state to whatever was active before the
         // user clicked Entrance/Exit. Mirrors the mouse path's behaviour at
         // RideConstruction.cpp:1069.
