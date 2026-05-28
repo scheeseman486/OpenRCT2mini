@@ -2340,6 +2340,20 @@ namespace
                     // the mouse path's behaviour at RideConstruction.cpp:1069.
                     Windows::WindowRideConstructionCancelEntranceExitMode();
                     return Disposition::Consumed;
+                case Windows::RideInputMode::selected:
+                    // OPENRCT2MINI ride-construction-grid-cursor-plan §16
+                    // (2026-05-28): PAD B is context-sensitive. The first
+                    // PAD B on a placed ride goes through ToolContext::on-
+                    // Cancel → ViewportInteractionRightClickAtGridCursor
+                    // which picks up the hovered piece (state becomes
+                    // Selected, the piece flashes as a ghost). A second
+                    // PAD B in that selected state should commit the
+                    // delete — without this branch it falls through to
+                    // the base right-click which doesn't demolish the
+                    // already-selected piece. Mirrors the gesture
+                    // contract: PAD B → Select → PAD B → Delete.
+                    Windows::WindowRideConstructionKeyboardShortcutDemolishCurrent();
+                    return Disposition::Consumed;
                 default:
                     return ToolContext::onCancel();
             }
