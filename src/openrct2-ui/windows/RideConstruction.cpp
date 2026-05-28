@@ -5283,7 +5283,17 @@ namespace OpenRCT2::Ui::Windows
     // _currentTrackBegin) and lives in WindowRideConstructionSetInitialPlaceAt.
     std::optional<TileCoordsXY> WindowRideConstructionGetHeadTile()
     {
-        if (!WindowRideConstructionIsInBuildState())
+        // OPENRCT2MINI ride-construction-grid-cursor-plan §16
+        // (2026-05-29): also expose the head in Selected state so the
+        // ToolContext::processFrame poll snaps the grid cursor to the
+        // currently-selected piece as the user navigates via PAD Y+B
+        // (chord-to-Selected) and the D-pad left/right section nav.
+        // RideSelectPreviousSection / RideSelectNextSection update
+        // _currentTrackBegin atomically, so reading it here gives the
+        // freshly-selected piece's tile.
+        if (_rideConstructionState != RideConstructionState::Front
+            && _rideConstructionState != RideConstructionState::Back
+            && _rideConstructionState != RideConstructionState::Selected)
             return std::nullopt;
         return TileCoordsXY{ _currentTrackBegin };
     }

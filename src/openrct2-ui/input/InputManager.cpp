@@ -2610,13 +2610,21 @@ namespace
                 // navigation verbs). Direction encoding matches the
                 // shape-modifier chord at :2526-2533 (Up=0, Right=1,
                 // Down=2, Left=3).
+                //
+                // After the verb runs, sync the grid cursor to the new
+                // head (now exposed for Selected via WindowRideCon-
+                // structionGetHeadTile). The per-frame poll in process-
+                // Frame catches it too, but the immediate call here
+                // keeps the highlight feeling responsive.
                 switch (static_cast<int>(dpad))
                 {
                     case 3: // left
                         Windows::WindowRideConstructionKeyboardShortcutPreviousTrack();
+                        syncGridCursorToHead();
                         return Disposition::Consumed;
                     case 1: // right
                         Windows::WindowRideConstructionKeyboardShortcutNextTrack();
+                        syncGridCursorToHead();
                         return Disposition::Consumed;
                     default: // up / down
                         return Disposition::Consumed;
