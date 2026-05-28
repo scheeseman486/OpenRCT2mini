@@ -2542,6 +2542,25 @@ namespace OpenRCT2::Ui::Windows
                     _rideConstructionState = RideConstructionState::EntranceExit;
                 }
                 WindowRideConstructionUpdateActiveElements();
+                // OPENRCT2MINI ride-construction-grid-cursor-plan §16
+                // (2026-05-28): when the user clicks Entrance from focus
+                // mode (or any non-tool context), engage the grid cursor
+                // so the same gamepad placement UX kicks in as after the
+                // auto-flip from the last track piece. Without this, the
+                // user has to manually press Start after clicking the
+                // button. setToolFocusSelected + setSelectorMode flip the
+                // resolveActiveContext gates so the next frame routes to
+                // RideConstructionContextImpl, whose processFrame then
+                // detects the entranceExit transition and auto-positions
+                // the cursor + spawns the ghost.
+                {
+                    auto& inputMgr = OpenRCT2::Ui::GetInputManager();
+                    inputMgr.setToolFocusSelected(
+                        true,
+                        OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
+                    inputMgr.setSelectorMode(
+                        OpenRCT2::Ui::InputManager::SelectorMode::active);
+                }
             }
         }
 
@@ -2568,6 +2587,17 @@ namespace OpenRCT2::Ui::Windows
                     _rideConstructionState = RideConstructionState::EntranceExit;
                 }
                 WindowRideConstructionUpdateActiveElements();
+                // OPENRCT2MINI ride-construction-grid-cursor-plan §16
+                // (2026-05-28): mirror EntranceClick — engage grid cursor
+                // so focus-mode click → entranceExit gamepad placement.
+                {
+                    auto& inputMgr = OpenRCT2::Ui::GetInputManager();
+                    inputMgr.setToolFocusSelected(
+                        true,
+                        OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
+                    inputMgr.setSelectorMode(
+                        OpenRCT2::Ui::InputManager::SelectorMode::active);
+                }
             }
         }
 
