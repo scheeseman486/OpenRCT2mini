@@ -1532,35 +1532,31 @@ private:
                     // tap-to-delete behaviour as the default
                     // mouse setup.
                     //
-                    // §7.6 gate: only synthesise when the active
-                    // context is a tool context. Modal text
-                    // contexts (OSK, loadSave, textInput, etc.)
-                    // interpret kCursorCancel as backspace /
-                    // dismiss / etc., and a mouse right-click
-                    // over a tool window's modal text-entry
-                    // should NOT eat that as a backspace.
+                    // §7.6 gate (inverted 2026-05-28 per user report):
+                    // the original allowlist (tool contexts + widget-
+                    // Focus-with-tool-armed) was too narrow — upstream
+                    // mouse RMB short-press dispatches ViewportInteraction-
+                    // RightClick on the viewport unconditionally, which is
+                    // how things like "RMB a placed ride track piece to
+                    // open construction window and select that piece" used
+                    // to work (RideModify path via ViewportInteractionDis-
+                    // patchRightClick case ride). That works regardless of
+                    // whether the user already has a tool armed. Switching
+                    // to a blocklist (skip ONLY modal text contexts where
+                    // kCursorCancel has alternative meaning like backspace
+                    // or dismiss) restores that behaviour AND keeps the
+                    // tool / focus cases that were already working. World
+                    // context and widgetFocus-without-tool now both fire.
                     auto& im = GetInputManager();
                     const auto ctx = im.getActiveContext();
-                    const bool isToolCtx
-                        = ctx == InputContext::toolFootpath
-                        || ctx == InputContext::toolTerrain
-                        || ctx == InputContext::toolWater
-                        || ctx == InputContext::toolScenery
-                        || ctx == InputContext::toolLandRights
-                        || ctx == InputContext::toolTileInspector
-                        || ctx == InputContext::toolRideConstruction;
-                    // Active context is `widgetFocus` whenever the
-                    // user has not explicitly cycled INTO the tool
-                    // viewport entry — including the common case of
-                    // the tool window itself being focused. A tool
-                    // can still be armed in that state
-                    // (gInputFlags.toolActive). RMB on a destroyable
-                    // element in land tool mode is exactly that
-                    // path, so include it here too.
-                    const bool armedToolInFocus
-                        = ctx == InputContext::widgetFocus
-                        && gInputFlags.has(InputFlag::toolActive);
-                    if (isToolCtx || armedToolInFocus)
+                    const bool isTextModal
+                        = ctx == InputContext::osk
+                        || ctx == InputContext::textInput
+                        || ctx == InputContext::loadSave
+                        || ctx == InputContext::loadSaveOverwritePrompt
+                        || ctx == InputContext::widgetTextBox
+                        || ctx == InputContext::console;
+                    if (!isTextModal)
                     {
                         InputEvent ev{};
                         ev.deviceKind = InputDeviceKind::mouse;
