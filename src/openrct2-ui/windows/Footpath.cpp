@@ -375,6 +375,22 @@ namespace OpenRCT2::Ui::Windows
                     WindowFootpathMousedownSlope(SlopePitch::upwards);
                     break;
                 case WIDX_CONSTRUCT:
+                    // OPENRCT2MINI grid-cursor-plan §16 (2026-05-28): if
+                    // the user activated the large construct preview from
+                    // focus mode, engage grid cursor instead of building.
+                    // Mirrors the ride-construction equivalent. Mouse /
+                    // virtual cursor click still calls WindowFootpathConstruct.
+                    if (OpenRCT2::Ui::GetInputManager().getActiveContext()
+                        == OpenRCT2::Ui::InputContext::widgetFocus)
+                    {
+                        auto& inputMgr = OpenRCT2::Ui::GetInputManager();
+                        inputMgr.setToolFocusSelected(
+                            true,
+                            OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
+                        inputMgr.setSelectorMode(
+                            OpenRCT2::Ui::InputManager::SelectorMode::active);
+                        break;
+                    }
                     WindowFootpathConstruct();
                     break;
                 case WIDX_REMOVE:

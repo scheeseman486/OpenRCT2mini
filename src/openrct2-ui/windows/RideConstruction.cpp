@@ -1155,6 +1155,24 @@ namespace OpenRCT2::Ui::Windows
             {
                 case WIDX_CONSTRUCT:
                 {
+                    // OPENRCT2MINI ride-construction-grid-cursor-plan §16
+                    // (2026-05-28): if the user activated the large
+                    // construct preview from focus mode, treat it as
+                    // "engage grid cursor" rather than "build the piece"
+                    // — the big preview is the user's "go to the world"
+                    // affordance. Mouse/virtual cursor click stays as
+                    // Construct() since those paths aren't in widgetFocus.
+                    if (OpenRCT2::Ui::GetInputManager().getActiveContext()
+                        == OpenRCT2::Ui::InputContext::widgetFocus)
+                    {
+                        auto& inputMgr = OpenRCT2::Ui::GetInputManager();
+                        inputMgr.setToolFocusSelected(
+                            true,
+                            OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
+                        inputMgr.setSelectorMode(
+                            OpenRCT2::Ui::InputManager::SelectorMode::active);
+                        break;
+                    }
                     Construct();
                     // Force any footpath construction to recheck the area.
                     FootpathRecheckProvisional();
