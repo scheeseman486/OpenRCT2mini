@@ -2333,20 +2333,33 @@ namespace
                     // OPENRCT2MINI ride-construction-grid-cursor-plan §16
                     // (2026-05-28): shape-modifier (PAD Y) + PAD B in
                     // build state enters Selected state by stepping
-                    // backwards into the previously-placed piece. From
-                    // there D-pad left/right navigates the section
+                    // from the head into the previously-placed piece.
+                    // From there D-pad left/right navigates the section
                     // selection (onStep handles that), and a second PAD
                     // B demolishes the highlighted piece (§16 above).
                     // Bare PAD B keeps the demolish-current-piece
                     // semantic so the user can still rapid-undo the last
                     // build without entering Selected.
+                    //
+                    // Direction selection: the verb that drops into
+                    // Selected depends on which head we're at.
+                    // RideSelectPreviousSection (RideConstruction.cpp:995)
+                    // only handles the Front state head; RideSelectNext-
+                    // Section (:937) only handles the Back state head.
+                    // Calling the wrong one from the other head is a
+                    // no-op. buildForward → Previous, buildBackward →
+                    // Next.
                     if (OpenRCT2::Ui::isShiftModifierHeldInTool())
                     {
                         // Suppress the shape-modifier tap-release
                         // UseTrackDefault fallback so the chord is
                         // exclusively the section-back gesture.
                         _shapeModUsedThisHold = true;
-                        Windows::WindowRideConstructionKeyboardShortcutPreviousTrack();
+                        if (Windows::WindowRideConstructionGetInputMode()
+                            == Windows::RideInputMode::buildBackward)
+                            Windows::WindowRideConstructionKeyboardShortcutNextTrack();
+                        else
+                            Windows::WindowRideConstructionKeyboardShortcutPreviousTrack();
                         syncGridCursorToHead();
                         return Disposition::Consumed;
                     }
