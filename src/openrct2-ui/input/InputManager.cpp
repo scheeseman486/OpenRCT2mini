@@ -2308,13 +2308,14 @@ namespace
                         gridCursor().getPosition());
                     return Disposition::Consumed;
                 case Windows::RideInputMode::entranceExit:
-                    // Plan §7.3. Dispatch RideEntranceExitPlaceAction at the
-                    // cursor tile with the current gRideEntranceExitPlaceDirection
-                    // (the user cycled via PAD Y, or defaults to 0 on first
-                    // press). The callback handles ToolCancel + state cleanup
-                    // when all entrances/exits are placed.
+                    // Plan §7.3 (revised 2026-05-28). Dispatch RideEntrance-
+                    // ExitPlaceAction at the cursor tile. Direction is auto-
+                    // determined by the adjacency search inside the helper
+                    // (re-run as defence-in-depth even though onStep keeps
+                    // it fresh). Refuses placement when the cursor isn't
+                    // adjacent to a valid station edge.
                     Windows::WindowRideConstructionPlaceEntranceExit(
-                        gridCursor().getPosition(), gridCursor().getZ());
+                        gridCursor().getPosition());
                     return Disposition::Consumed;
                 case Windows::RideInputMode::selected:
                 case Windows::RideInputMode::none:
@@ -2404,10 +2405,12 @@ namespace
             }
             if (mode == Windows::RideInputMode::entranceExit)
             {
-                // Plan §7. PAD Y in entranceExit cycles the staged edge
-                // direction 0→1→2→3 (no edge picker for v1; precision-modifier
-                // chord is a polish item).
-                Windows::WindowRideConstructionCycleEntranceExitDirection();
+                // Plan §7 (revised 2026-05-28): direction is now auto-
+                // determined by the cursor's adjacency to a station edge
+                // (mirrors mouse path). Manual PAD Y cycling is dropped —
+                // the user navigates direction by moving the cursor to a
+                // different side of the station tile. No-op here so PAD Y
+                // doesn't accidentally do something else.
                 return Disposition::Consumed;
             }
             return Disposition::Consumed;
@@ -2533,9 +2536,21 @@ namespace
             }
             if (mode == Windows::RideInputMode::entranceExit)
             {
-                // Phase 3 will add the precision-modifier edge picker. For
-                // now, plain grid cursor stepping (base step + camera follow).
-                return ToolContext::onStep(dpad);
+                // Plan §7 (revised 2026-05-28): after stepping the cursor,
+                // re-run the adjacency search to update gRideEntranceExit-
+                // PlaceDirection. This is the gamepad equivalent of the
+                // mouse path's per-hover RideGetEntranceOrExitPositionFrom-
+                // ScreenPosition call. The ride window's preview panel
+                // reads gRideEntranceExitPlaceDirection and shows it live
+                // so the user gets feedback on whether the cursor tile is
+                // valid for placement.
+                const auto result = ToolContext::onStep(dpad);
+                Windows::WindowRideConstructionUpdateEntranceExitDirection(
+                    gridCursor().getPosition());
+                // Invalidate so the direction preview updates.
+                if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
+                    windowMgr->InvalidateByClass(WindowClass::rideConstruction);
+                return result;
             }
             return Disposition::Passthrough;
         }
@@ -2549,10 +2564,21 @@ namespace
             // the engaged cursor tile so the user sees the placement preview
             // without having to step first (mirrors the mouse path's first-
             // hover behaviour).
-            if (Windows::WindowRideConstructionGetInputMode()
-                == Windows::RideInputMode::initialPlace)
+            const auto activateMode = Windows::WindowRideConstructionGetInputMode();
+            if (activateMode == Windows::RideInputMode::initialPlace)
             {
                 Windows::WindowRideConstructionShowGhostAtTile(gridCursor().getPosition());
+            }
+            // For entranceExit, run the adjacency search immediately so the
+            // direction preview is correct at entry — without this the user
+            // sees the previous (mouse-set) direction until they step the
+            // cursor.
+            else if (activateMode == Windows::RideInputMode::entranceExit)
+            {
+                Windows::WindowRideConstructionUpdateEntranceExitDirection(
+                    gridCursor().getPosition());
+                if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
+                    windowMgr->InvalidateByClass(WindowClass::rideConstruction);
             }
         }
 

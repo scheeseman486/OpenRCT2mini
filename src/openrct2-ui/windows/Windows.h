@@ -328,12 +328,25 @@ namespace OpenRCT2::Ui::Windows
     // accept). Refreshes the ghost piece at the new Z. Only applies in
     // Place state — Build state uses slope buttons for elevation instead.
     void WindowRideConstructionAdjustPlaceZ(TileCoordsXY tile, int32_t delta);
-    // Phase 3 (entrance / exit): PAD Y cycles gRideEntranceExitPlaceDirection,
-    // PAD A dispatches RideEntranceExitPlaceAction at the cursor tile,
-    // PAD B restores the previous construction state.
-    void WindowRideConstructionCycleEntranceExitDirection();
-    void WindowRideConstructionPlaceEntranceExit(TileCoordsXY tile, int32_t z);
+    // Phase 3 (entrance / exit): PAD A dispatches RideEntranceExitPlaceAction
+    // at the cursor tile, PAD B restores the previous construction state.
+    // Direction is auto-determined by the adjacency search (mirrors mouse
+    // path's RideGetEntranceOrExitPositionFromScreenPosition); manual PAD Y
+    // cycling is dropped because the cursor's tile position uniquely picks
+    // a valid edge direction.
+    void WindowRideConstructionPlaceEntranceExit(TileCoordsXY tile);
     void WindowRideConstructionCancelEntranceExitMode();
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §16 (post-Phase 3,
+    // 2026-05-28): adjacency search mirror of RideGetEntranceOrExitPosition-
+    // FromScreenPosition (Construction.cpp:370). For the cursor tile,
+    // search the 4 cardinals for a station track tile of
+    // gRideEntranceExitPlaceRideIndex at the station's base Z. On hit,
+    // writes gRideEntranceExitPlaceDirection (facing away from the track)
+    // and gRideEntranceExitPlaceStationIndex; returns true. On miss,
+    // sets direction to kInvalidDirection and returns false. Called per-
+    // step in entranceExit mode so the placement direction tracks the
+    // cursor like the mouse path does on hover.
+    bool WindowRideConstructionUpdateEntranceExitDirection(TileCoordsXY tile);
 
     // Most shortcut action bodies (TurnLeft / TurnRight / SlopeUp / SlopeDown /
     // BankLeft / BankRight / ChainLiftToggle / UseTrackDefault / Previous /

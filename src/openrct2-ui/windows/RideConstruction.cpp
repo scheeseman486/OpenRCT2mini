@@ -5675,41 +5675,112 @@ namespace OpenRCT2::Ui::Windows
             WindowRideConstructionShowGhostAtTile(TileCoordsXY{ _currentTrackBegin });
     }
 
-    // OPENRCT2MINI ride-construction-grid-cursor-plan §7 (Phase 3, 2026-05-25):
-    // entrance / exit placement helpers for the gamepad path. Mouse path
-    // derives both tile and direction from the screen click (RideGetEntrance-
-    // OrExitPositionFromScreenPosition); we split those: cursor tile from
-    // the grid cursor, direction from gRideEntranceExitPlaceDirection
-    // (which the user cycles via PAD Y in entranceExit state).
-    void WindowRideConstructionCycleEntranceExitDirection()
+    // OPENRCT2MINI ride-construction-grid-cursor-plan §7 (Phase 3, 2026-05-25,
+    // revised 2026-05-28): entrance/exit placement for the gamepad path.
+    // The mouse path derives tile + direction from one screen position via
+    // RideGetEntranceOrExitPositionFromScreenPosition (Construction.cpp:370)
+    // which searches around the screen-mapped tile for an adjacent station
+    // track. The original gamepad path split tile from direction (cursor +
+    // PAD Y cycle) — which let the user place anywhere with any direction,
+    // bypassing the adjacency constraint. Fixed here by mirroring the
+    // search: per-cursor-step, look for an adjacent station tile and set
+    // gRideEntranceExitPlaceDirection to face away from the track. If no
+    // station-edge is adjacent to the cursor, direction is kInvalidDirection
+    // and PAD A refuses to place. Manual direction cycling is gone — the
+    // cursor's tile position uniquely picks the valid edge.
+    //
+    // Searches all 4 cardinals from the cursor (no sub-tile quadrant
+    // start direction since gamepad cursor is tile-snapped). Logic
+    // otherwise identical to the mouse path's adjacency loop at lines
+    // 442-491 of Construction.cpp.
+    bool WindowRideConstructionUpdateEntranceExitDirection(TileCoordsXY tile)
     {
         if (_rideConstructionState != RideConstructionState::EntranceExit)
-            return;
-        // Default to direction 0 on the first cycle if the field is still
-        // kInvalidDirection (no mouse hover has happened yet).
-        if (gRideEntranceExitPlaceDirection == kInvalidDirection)
-            gRideEntranceExitPlaceDirection = 0;
-        else
-            gRideEntranceExitPlaceDirection = (gRideEntranceExitPlaceDirection + 1) & 3;
-        // Invalidate the window so the user sees the staged direction update
-        // (the panel preview reflects gRideEntranceExitPlaceDirection).
-        auto* windowMgr = GetWindowManager();
-        if (windowMgr != nullptr)
-            windowMgr->InvalidateByClass(WindowClass::rideConstruction);
+            return false;
+        auto ride = GetRide(gRideEntranceExitPlaceRideIndex);
+        if (ride == nullptr)
+        {
+            gRideEntranceExitPlaceDirection = kInvalidDirection;
+            return false;
+        }
+        auto stationStart = ride->getStation(gRideEntranceExitPlaceStationIndex).Start;
+        if (stationStart.IsNull())
+        {
+            gRideEntranceExitPlaceDirection = kInvalidDirection;
+            return false;
+        }
+        auto stationBaseZ = ride->getStation(gRideEntranceExitPlaceStationIndex).GetBaseZ();
+        CoordsXYZD entranceExitCoords{ tile.ToCoordsXY(), stationBaseZ, kInvalidDirection };
+
+        for (uint8_t startDirection = 0; startDirection < 4; startDirection++)
+        {
+            entranceExitCoords.direction = startDirection;
+            auto nextLocation = entranceExitCoords;
+            nextLocation += CoordsDirectionDelta[entranceExitCoords.direction];
+            if (!MapIsLocationValid(nextLocation))
+                continue;
+            auto* tileElement = MapGetFirstElementAt(nextLocation);
+            if (tileElement == nullptr)
+                continue;
+            do
+            {
+                if (tileElement->GetType() != TileElementType::Track)
+                    continue;
+                if (tileElement->GetBaseZ() != stationBaseZ)
+                    continue;
+                auto* trackElement = tileElement->AsTrack();
+                if (trackElement->GetRideIndex() != gRideEntranceExitPlaceRideIndex)
+                    continue;
+                if (trackElement->GetTrackType() == TrackElemType::maze)
+                {
+                    gRideEntranceExitPlaceStationIndex = StationIndex::FromUnderlying(0);
+                    gRideEntranceExitPlaceDirection = DirectionReverse(entranceExitCoords.direction);
+                    return true;
+                }
+                // Direction relative to the TrackElement's own orientation.
+                Direction relativeDirection
+                    = (DirectionReverse(entranceExitCoords.direction) - tileElement->GetDirection()) & 3;
+                const auto& ted = GetTrackElementDescriptor(trackElement->GetTrackType());
+                auto connectionSides
+                    = ted.sequenceData.sequences[trackElement->GetSequenceIndex()].getEntranceConnectionSides();
+                if (connectionSides & (1 << relativeDirection))
+                {
+                    gRideEntranceExitPlaceStationIndex = trackElement->GetStationIndex();
+                    gRideEntranceExitPlaceDirection = DirectionReverse(entranceExitCoords.direction);
+                    return true;
+                }
+            } while (!(tileElement++)->IsLastForTile());
+        }
+
+        gRideEntranceExitPlaceDirection = kInvalidDirection;
+        return false;
     }
 
-    void WindowRideConstructionPlaceEntranceExit(TileCoordsXY tile, int32_t z)
+    void WindowRideConstructionPlaceEntranceExit(TileCoordsXY tile)
     {
         if (_rideConstructionState != RideConstructionState::EntranceExit)
             return;
-        // Initialise the direction to 0 if the user hasn't cycled yet — the
-        // mouse path requires a hover-set direction before commit, but for
-        // gamepad we want PAD A to "just work" with a sensible default.
-        if (gRideEntranceExitPlaceDirection == kInvalidDirection)
-            gRideEntranceExitPlaceDirection = 0;
+        // Re-run the adjacency search at the current cursor (defence-in-
+        // depth — onStep should have set this already, but in case the
+        // user pressed PAD A on a non-adjacent tile we still bail rather
+        // than placing into a void).
+        if (!WindowRideConstructionUpdateEntranceExitDirection(tile))
+        {
+            // No adjacent station edge → invalid placement. Play the error
+            // sound via a no-op game action call would be cleanest, but
+            // for v1 just silently refuse. The direction preview in the
+            // ride window will show "Invalid" as user feedback.
+            return;
+        }
 
+        auto ride = GetRide(gRideEntranceExitPlaceRideIndex);
+        if (ride == nullptr)
+            return;
+        // Use the station's base Z, not the cursor's Z — entrances must
+        // be at the same height as the station they serve.
+        const auto stationBaseZ = ride->getStation(gRideEntranceExitPlaceStationIndex).GetBaseZ();
         const CoordsXYZD entranceCoords{
-            tile.ToCoordsXY(), z, static_cast<uint8_t>(0)
+            tile.ToCoordsXY(), stationBaseZ, static_cast<uint8_t>(0)
         };
         auto action = GameActions::RideEntranceExitPlaceAction(
             entranceCoords, DirectionReverse(gRideEntranceExitPlaceDirection),
