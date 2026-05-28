@@ -2485,36 +2485,50 @@ namespace
         // floor highlight stays aligned with where the piece will land.
         Disposition onRaise() override
         {
-            if (Windows::WindowRideConstructionIsInBuildState())
+            const auto mode = Windows::WindowRideConstructionGetInputMode();
+            if (mode == Windows::RideInputMode::buildForward
+                || mode == Windows::RideInputMode::buildBackward)
             {
                 Windows::WindowRideConstructionKeyboardShortcutSlopeUp();
                 syncGridCursorToHead();
                 return Disposition::Consumed;
             }
-            gridCursor().raiseZ(::kLandHeightStep);
-            if (Windows::WindowRideConstructionGetInputMode()
-                == Windows::RideInputMode::initialPlace)
+            if (mode == Windows::RideInputMode::initialPlace)
             {
+                gridCursor().raiseZ(::kLandHeightStep);
                 Windows::WindowRideConstructionAdjustPlaceZ(
                     gridCursor().getPosition(), ::kLandHeightStep);
+                return Disposition::Consumed;
             }
+            // OPENRCT2MINI ride-construction-grid-cursor-plan §16
+            // (2026-05-29): Z-shift is a Consumed no-op in entranceExit,
+            // selected, and none states. Entrance/exit Z is locked to
+            // the station base (RideConstruction.cpp's station.GetBaseZ
+            // path), selected just navigates already-placed pieces, and
+            // none has no placement at all — bumping gridCursor().raise/
+            // lowerZ in those states moved the cursor visual to a Z
+            // that didn't affect anything, so it's better to swallow the
+            // gesture entirely than to mislead the user.
             return Disposition::Consumed;
         }
         Disposition onLower() override
         {
-            if (Windows::WindowRideConstructionIsInBuildState())
+            const auto mode = Windows::WindowRideConstructionGetInputMode();
+            if (mode == Windows::RideInputMode::buildForward
+                || mode == Windows::RideInputMode::buildBackward)
             {
                 Windows::WindowRideConstructionKeyboardShortcutSlopeDown();
                 syncGridCursorToHead();
                 return Disposition::Consumed;
             }
-            gridCursor().lowerZ(::kLandHeightStep);
-            if (Windows::WindowRideConstructionGetInputMode()
-                == Windows::RideInputMode::initialPlace)
+            if (mode == Windows::RideInputMode::initialPlace)
             {
+                gridCursor().lowerZ(::kLandHeightStep);
                 Windows::WindowRideConstructionAdjustPlaceZ(
                     gridCursor().getPosition(), -::kLandHeightStep);
+                return Disposition::Consumed;
             }
+            // Mirror of onRaise: no-op in entranceExit / selected / none.
             return Disposition::Consumed;
         }
 
