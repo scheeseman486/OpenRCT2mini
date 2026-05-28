@@ -2558,6 +2558,11 @@ namespace
         void onActivate() override
         {
             ToolContext::onActivate();
+            // Reset mode tracking so the next processFrame's mode-transition
+            // edge-detect fires for whatever mode the construction window is
+            // in right now (e.g. user re-engages while window is parked in
+            // entranceExit — the auto-position should still run).
+            _lastSeenInputMode = Windows::RideInputMode::none;
             if (getHeadTile().has_value())
                 syncGridCursorToHead();
             // For initialPlace, immediately spawn the ghost piece + arrow at
@@ -2601,9 +2606,57 @@ namespace
         // false fires UseTrackDefault — tapping the shift modifier alone
         // (no D-pad during the hold) resets the staged piece to plain
         // straight. Per-ride-type gating happens inside the free function.
+        //
+        // Also detects RideInputMode transitions: when the ride construction
+        // state machine enters EntranceExit (either via the user clicking
+        // Entrance/Exit, or via the auto-flip after placing the last track
+        // piece via CloseConstructWindowOnCompletion), auto-position the
+        // grid cursor onto the nearest valid placement tile and fire the
+        // ghost preview. onActivate doesn't catch this because the InputContext
+        // doesn't change when the tool widget swaps within the same window;
+        // the state transition is internal to the construction window.
         void processFrame(uint32_t nowMs) override
         {
             ToolContext::processFrame(nowMs); // base does head-follow poll + DirectionalRepeat
+
+            // Mode-transition detection (auto-position on enter entranceExit).
+            // Cursor re-activation: the auto-flip from Front → EntranceExit
+            // goes through ToolSet (in CloseConstructWindowOnCompletion →
+            // EntranceClick), which calls ToolCancel first and that fires
+            // onDeactivate on the strategy, dropping gridCursor._active to
+            // false. The InputContext doesn't change so no onActivate fires
+            // to bring it back. Result without intervention: cursor invisible
+            // until the user mashes the D-pad and the engage gesture re-arms
+            // it. Fix: explicitly re-engage the gridCursor + selector mode
+            // here so the cursor pops up immediately on the new station-edge
+            // tile with the entrance/exit ghost.
+            const auto currentMode = Windows::WindowRideConstructionGetInputMode();
+            if (currentMode != _lastSeenInputMode)
+            {
+                if (currentMode == Windows::RideInputMode::entranceExit)
+                {
+                    if (auto best = Windows::WindowRideConstructionFindBestEntranceExitTile();
+                        best.has_value())
+                    {
+                        gridCursor().setPosition(*best);
+                    }
+                    // Force the cursor + selector active so the user sees the
+                    // auto-positioned tile without needing to engage manually.
+                    gridCursor().onActivate();
+                    auto& mgr = OpenRCT2::Ui::GetInputManager();
+                    mgr.setToolFocusSelected(
+                        true,
+                        OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
+                    mgr.setSelectorMode(
+                        OpenRCT2::Ui::InputManager::SelectorMode::active);
+                    Windows::WindowRideConstructionUpdateEntranceExitDirection(
+                        gridCursor().getPosition());
+                    if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
+                        windowMgr->InvalidateByClass(WindowClass::rideConstruction);
+                }
+                _lastSeenInputMode = currentMode;
+            }
+
             if (!Windows::WindowRideConstructionIsInBuildState())
             {
                 _shapeModWasHeld = false;
@@ -2684,6 +2737,12 @@ namespace
 
         bool _shapeModWasHeld = false;        // prev-frame state for edge detection
         bool _shapeModUsedThisHold = false;   // any chord pressed during the current hold?
+        // Tracks the previous frame's RideInputMode so processFrame can fire
+        // auto-position when the construction state machine transitions to
+        // entranceExit. Initialised to `none` so a fresh activate followed by
+        // entry into entranceExit (e.g. user opens an existing ride and clicks
+        // the Entrance button immediately) is treated as a transition.
+        Windows::RideInputMode _lastSeenInputMode = Windows::RideInputMode::none;
     };
 } // namespace
 
