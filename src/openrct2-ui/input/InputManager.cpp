@@ -2330,6 +2330,26 @@ namespace
             {
                 case Windows::RideInputMode::buildForward:
                 case Windows::RideInputMode::buildBackward:
+                    // OPENRCT2MINI ride-construction-grid-cursor-plan §16
+                    // (2026-05-28): shape-modifier (PAD Y) + PAD B in
+                    // build state enters Selected state by stepping
+                    // backwards into the previously-placed piece. From
+                    // there D-pad left/right navigates the section
+                    // selection (onStep handles that), and a second PAD
+                    // B demolishes the highlighted piece (§16 above).
+                    // Bare PAD B keeps the demolish-current-piece
+                    // semantic so the user can still rapid-undo the last
+                    // build without entering Selected.
+                    if (OpenRCT2::Ui::isShiftModifierHeldInTool())
+                    {
+                        // Suppress the shape-modifier tap-release
+                        // UseTrackDefault fallback so the chord is
+                        // exclusively the section-back gesture.
+                        _shapeModUsedThisHold = true;
+                        Windows::WindowRideConstructionKeyboardShortcutPreviousTrack();
+                        syncGridCursorToHead();
+                        return Disposition::Consumed;
+                    }
                     Windows::WindowRideConstructionKeyboardShortcutDemolishCurrent();
                     syncGridCursorToHead();
                     return Disposition::Consumed;
@@ -2565,6 +2585,29 @@ namespace
                 if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)
                     windowMgr->InvalidateByClass(WindowClass::rideConstruction);
                 return result;
+            }
+            if (mode == Windows::RideInputMode::selected)
+            {
+                // OPENRCT2MINI ride-construction-grid-cursor-plan §16
+                // (2026-05-28): D-pad navigates the section selection
+                // along the placed track. Left → previous, Right →
+                // next. Up/Down are swallowed (no grid cursor stepping
+                // in Selected state — the "cursor" is the flashing
+                // ghost on the selected piece, driven by the section
+                // navigation verbs). Direction encoding matches the
+                // shape-modifier chord at :2526-2533 (Up=0, Right=1,
+                // Down=2, Left=3).
+                switch (static_cast<int>(dpad))
+                {
+                    case 3: // left
+                        Windows::WindowRideConstructionKeyboardShortcutPreviousTrack();
+                        return Disposition::Consumed;
+                    case 1: // right
+                        Windows::WindowRideConstructionKeyboardShortcutNextTrack();
+                        return Disposition::Consumed;
+                    default: // up / down
+                        return Disposition::Consumed;
+                }
             }
             return Disposition::Passthrough;
         }
