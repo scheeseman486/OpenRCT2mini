@@ -5591,19 +5591,31 @@ namespace OpenRCT2::Ui::Windows
     // 2026-05-26): adjust the placement Z (_trackPlaceZ) for the gamepad
     // path. The mouse path drives _trackPlaceZ via shift+drag-Y at line
     // 3120 (mapZ += _trackPlaceShiftZ); the gamepad has no continuous Y
-    // axis so we step by kCoordsZStep on each shift+D-pad-up/down press.
+    // axis so we step by a fixed amount on each shift+D-pad-up/down press.
+    //
+    // Step size = kLandHeightStep (16), NOT kCoordsZStep (8). Most rides
+    // can only be placed at multiples of 16 — placing at an 8-offset Z
+    // gets corrected by ShowGhostAtTile's trial-and-error loop (lines
+    // 5360-5374), so an 8-step bump from a 16-multiple becomes a no-op
+    // visually (loop rounds back to the same 16-multiple). User-facing
+    // effect: every other tap does nothing. 16-step taps always produce
+    // a visible Z change.
+    //
+    // Seed: floor2(MapGetHighestZ, 16) matches the mouse path's alignment
+    // at line 3152 (mapZ = floor2(surfaceElement->GetBaseZ(), 16)).
     //
     // _trackPlaceZ == 0 is a sentinel that ShowGhostAtTile treats as
-    // "follow ground" (line 5286-5288), so the first step out of 0 has
-    // to seed from MapGetHighestZ(cursor) to produce a visible change.
-    // We then clamp to [kCoordsZStep, kMaximumTrackHeight] so the sentinel
-    // is never re-entered accidentally — the user can still hit ground by
-    // continuing to lower until they hit kCoordsZStep, which renders at
-    // ground level for most surface heights anyway.
+    // "follow ground" (line 5286-5288). We clamp to [kLandHeightStep,
+    // kMaximumTrackHeight] so the sentinel is never re-entered.
     //
     // ShowGhostAtTile re-runs PlaceProvisionalTrackPiece with the new Z
     // (and its own trial-and-error loop) so the ghost preview moves to
     // match the user's adjustment.
+    //
+    // Future polish (out of v1): some ride types (water coasters,
+    // submarines with half-tile pieces) accept 8-step Z. A query like
+    // "does this ride support half-tile track Z?" could refine this —
+    // but for the common case 16 is the right default.
     void WindowRideConstructionAdjustPlaceZ(TileCoordsXY tile, int32_t delta)
     {
         if (_rideConstructionState != RideConstructionState::Place)
@@ -5613,13 +5625,15 @@ namespace OpenRCT2::Ui::Windows
             return;
         if (_trackPlaceZ == 0)
         {
-            // Seed from ground level so the first nudge produces a visible
-            // step. Without this, _trackPlaceZ stays 0 after a +8 nudge and
-            // ShowGhostAtTile re-falls-back to ground.
-            _trackPlaceZ = MapGetHighestZ(mapPos);
+            // Seed from ground level (16-aligned) so the first nudge
+            // produces a visible step. Without seeding, +16 still leaves
+            // _trackPlaceZ at a small value that ShowGhostAtTile re-falls-
+            // back near ground anyway. floor2(..., 16) matches the mouse
+            // path's alignment so ride-valid placement Zs line up.
+            _trackPlaceZ = floor2(MapGetHighestZ(mapPos), kLandHeightStep);
         }
         _trackPlaceZ = std::min<int32_t>(
-            std::max<int32_t>(_trackPlaceZ + delta, kCoordsZStep),
+            std::max<int32_t>(_trackPlaceZ + delta, kLandHeightStep),
             kMaximumTrackHeight);
         // Refresh the ghost at the new Z so the user sees the piece move.
         // ShowGhostAtTile reads _trackPlaceZ at line 5286 and writes

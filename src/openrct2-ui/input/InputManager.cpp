@@ -2426,6 +2426,13 @@ namespace
         // cursor Z. We update both: cursor Z for the floor highlight visual
         // and _trackPlaceZ for the ride ghost via WindowRideConstruction-
         // AdjustPlaceZ, which also refreshes the provisional piece preview.
+        //
+        // Step size: kLandHeightStep (16), NOT kCoordsZStep (8). Most
+        // rides only place at 16-multiples; an 8-step bump would get
+        // rounded back to the same 16-multiple by the trial-and-error
+        // loop in ShowGhostAtTile, making every other tap a no-op. Both
+        // cursor visual and _trackPlaceZ step by 16 in lockstep so the
+        // floor highlight stays aligned with where the piece will land.
         Disposition onRaise() override
         {
             if (Windows::WindowRideConstructionIsInBuildState())
@@ -2434,12 +2441,12 @@ namespace
                 syncGridCursorToHead();
                 return Disposition::Consumed;
             }
-            gridCursor().raiseZ(::kCoordsZStep);
+            gridCursor().raiseZ(::kLandHeightStep);
             if (Windows::WindowRideConstructionGetInputMode()
                 == Windows::RideInputMode::initialPlace)
             {
                 Windows::WindowRideConstructionAdjustPlaceZ(
-                    gridCursor().getPosition(), ::kCoordsZStep);
+                    gridCursor().getPosition(), ::kLandHeightStep);
             }
             return Disposition::Consumed;
         }
@@ -2451,12 +2458,12 @@ namespace
                 syncGridCursorToHead();
                 return Disposition::Consumed;
             }
-            gridCursor().lowerZ(::kCoordsZStep);
+            gridCursor().lowerZ(::kLandHeightStep);
             if (Windows::WindowRideConstructionGetInputMode()
                 == Windows::RideInputMode::initialPlace)
             {
                 Windows::WindowRideConstructionAdjustPlaceZ(
-                    gridCursor().getPosition(), -::kCoordsZStep);
+                    gridCursor().getPosition(), -::kLandHeightStep);
             }
             return Disposition::Consumed;
         }
