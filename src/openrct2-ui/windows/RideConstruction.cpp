@@ -5689,29 +5689,22 @@ namespace OpenRCT2::Ui::Windows
     // and PAD A refuses to place. Manual direction cycling is gone — the
     // cursor's tile position uniquely picks the valid edge.
     //
-    // Searches all 4 cardinals from the cursor (no sub-tile quadrant
-    // start direction since gamepad cursor is tile-snapped). Logic
-    // otherwise identical to the mouse path's adjacency loop at lines
-    // 442-491 of Construction.cpp.
-    bool WindowRideConstructionUpdateEntranceExitDirection(TileCoordsXY tile)
+    // Internal predicate used by the auto-position search. Reports whether
+    // `tile` is a valid entrance/exit placement tile for the currently-
+    // staged station + ride + Z, without mutating any global state. The
+    // public function below does the same check but additionally writes
+    // gRideEntranceExitPlaceDirection / Station / etc. so the place action
+    // can use them.
+    static bool TileIsValidEntranceExitPlacement(TileCoordsXY tile)
     {
-        if (_rideConstructionState != RideConstructionState::EntranceExit)
-            return false;
         auto ride = GetRide(gRideEntranceExitPlaceRideIndex);
         if (ride == nullptr)
-        {
-            gRideEntranceExitPlaceDirection = kInvalidDirection;
             return false;
-        }
         auto stationStart = ride->getStation(gRideEntranceExitPlaceStationIndex).Start;
         if (stationStart.IsNull())
-        {
-            gRideEntranceExitPlaceDirection = kInvalidDirection;
             return false;
-        }
         auto stationBaseZ = ride->getStation(gRideEntranceExitPlaceStationIndex).GetBaseZ();
         CoordsXYZD entranceExitCoords{ tile.ToCoordsXY(), stationBaseZ, kInvalidDirection };
-
         for (uint8_t startDirection = 0; startDirection < 4; startDirection++)
         {
             entranceExitCoords.direction = startDirection;
@@ -5732,28 +5725,189 @@ namespace OpenRCT2::Ui::Windows
                 if (trackElement->GetRideIndex() != gRideEntranceExitPlaceRideIndex)
                     continue;
                 if (trackElement->GetTrackType() == TrackElemType::maze)
-                {
-                    gRideEntranceExitPlaceStationIndex = StationIndex::FromUnderlying(0);
-                    gRideEntranceExitPlaceDirection = DirectionReverse(entranceExitCoords.direction);
                     return true;
-                }
-                // Direction relative to the TrackElement's own orientation.
+                if (trackElement->GetStationIndex() != gRideEntranceExitPlaceStationIndex)
+                    continue;
                 Direction relativeDirection
                     = (DirectionReverse(entranceExitCoords.direction) - tileElement->GetDirection()) & 3;
                 const auto& ted = GetTrackElementDescriptor(trackElement->GetTrackType());
                 auto connectionSides
                     = ted.sequenceData.sequences[trackElement->GetSequenceIndex()].getEntranceConnectionSides();
                 if (connectionSides & (1 << relativeDirection))
-                {
-                    gRideEntranceExitPlaceStationIndex = trackElement->GetStationIndex();
-                    gRideEntranceExitPlaceDirection = DirectionReverse(entranceExitCoords.direction);
                     return true;
+            } while (!(tileElement++)->IsLastForTile());
+        }
+        return false;
+    }
+
+    // Searches all 4 cardinals from the cursor (no sub-tile quadrant
+    // start direction since gamepad cursor is tile-snapped). Logic
+    // otherwise identical to the mouse path's adjacency loop at lines
+    // 442-491 of Construction.cpp.
+    //
+    // Enhancement 2 (2026-05-28): when the cursor is on a valid placement
+    // tile, also fire the entrance/exit ghost preview (mirror of
+    // RideConstructionToolupdateEntranceExit at :3590) so the user sees
+    // where the entrance/exit will land. Cleared when invalid via
+    // RideConstructionInvalidateCurrentTrack.
+    bool WindowRideConstructionUpdateEntranceExitDirection(TileCoordsXY tile)
+    {
+        if (_rideConstructionState != RideConstructionState::EntranceExit)
+            return false;
+        auto ride = GetRide(gRideEntranceExitPlaceRideIndex);
+        if (ride == nullptr)
+        {
+            gRideEntranceExitPlaceDirection = kInvalidDirection;
+            return false;
+        }
+        auto stationStart = ride->getStation(gRideEntranceExitPlaceStationIndex).Start;
+        if (stationStart.IsNull())
+        {
+            gRideEntranceExitPlaceDirection = kInvalidDirection;
+            return false;
+        }
+        auto stationBaseZ = ride->getStation(gRideEntranceExitPlaceStationIndex).GetBaseZ();
+        CoordsXYZD entranceExitCoords{ tile.ToCoordsXY(), stationBaseZ, kInvalidDirection };
+
+        // Clear MapSelect flags / cancel existing ghost up-front; on hit we
+        // re-set them. On miss this leaves the ghost cleared.
+        gMapSelectFlags.unset(MapSelectFlag::enable);
+        gMapSelectFlags.unset(MapSelectFlag::enableConstruct);
+        gMapSelectFlags.unset(MapSelectFlag::enableArrow);
+
+        for (uint8_t startDirection = 0; startDirection < 4; startDirection++)
+        {
+            entranceExitCoords.direction = startDirection;
+            auto nextLocation = entranceExitCoords;
+            nextLocation += CoordsDirectionDelta[entranceExitCoords.direction];
+            if (!MapIsLocationValid(nextLocation))
+                continue;
+            auto* tileElement = MapGetFirstElementAt(nextLocation);
+            if (tileElement == nullptr)
+                continue;
+            do
+            {
+                if (tileElement->GetType() != TileElementType::Track)
+                    continue;
+                if (tileElement->GetBaseZ() != stationBaseZ)
+                    continue;
+                auto* trackElement = tileElement->AsTrack();
+                if (trackElement->GetRideIndex() != gRideEntranceExitPlaceRideIndex)
+                    continue;
+                bool isMaze = (trackElement->GetTrackType() == TrackElemType::maze);
+                if (isMaze)
+                {
+                    gRideEntranceExitPlaceStationIndex = StationIndex::FromUnderlying(0);
                 }
+                else
+                {
+                    Direction relativeDirection
+                        = (DirectionReverse(entranceExitCoords.direction) - tileElement->GetDirection()) & 3;
+                    const auto& ted = GetTrackElementDescriptor(trackElement->GetTrackType());
+                    auto connectionSides
+                        = ted.sequenceData.sequences[trackElement->GetSequenceIndex()].getEntranceConnectionSides();
+                    if (!(connectionSides & (1 << relativeDirection)))
+                        continue;
+                    gRideEntranceExitPlaceStationIndex = trackElement->GetStationIndex();
+                }
+                gRideEntranceExitPlaceDirection = DirectionReverse(entranceExitCoords.direction);
+
+                // Mirror RideConstructionToolupdateEntranceExit (:3590):
+                // light up the tile and dispatch the ghost preview action.
+                gMapSelectFlags.set(MapSelectFlag::enable);
+                gMapSelectFlags.set(MapSelectFlag::enableArrow);
+                gMapSelectType = MapSelectType::full;
+                gMapSelectPositionA = entranceExitCoords;
+                gMapSelectPositionB = entranceExitCoords;
+                gMapSelectArrowPosition = entranceExitCoords;
+                gMapSelectArrowDirection = gRideEntranceExitPlaceDirection;
+
+                // Re-dispatch the ghost only if the position/station
+                // changed (matches mouse path's guard at :3611-3612).
+                CoordsXYZD ghostCoords = entranceExitCoords;
+                ghostCoords.direction = DirectionReverse(gRideEntranceExitPlaceDirection);
+                if (!_currentTrackSelectionFlags.has(TrackSelectionFlag::entranceOrExit)
+                    || ghostCoords != gRideEntranceExitGhostPosition
+                    || gRideEntranceExitPlaceStationIndex != gRideEntranceExitGhostStationIndex)
+                {
+                    _currentTrackPrice = RideEntranceExitPlaceGhost(
+                        *ride, ghostCoords, ghostCoords.direction,
+                        gRideEntranceExitPlaceType, gRideEntranceExitPlaceStationIndex);
+                    WindowRideConstructionUpdateActiveElements();
+                    VirtualFloorSetHeight(ghostCoords.z);
+                }
+                return true;
             } while (!(tileElement++)->IsLastForTile());
         }
 
         gRideEntranceExitPlaceDirection = kInvalidDirection;
+        // No valid edge — clear any stale ghost from a prior frame.
+        RideConstructionInvalidateCurrentTrack();
         return false;
+    }
+
+    // Enhancement 1 (2026-05-28): scan a bounding box around the station
+    // for valid placement tiles, pick the one closest to the viewport
+    // centre. Called when entering entranceExit mode so the cursor lands
+    // somewhere immediately usable (don't make the user pan to find a
+    // valid edge). Bounding box radius = kMaxStationPlatformLength (32) so
+    // the search covers the entire maximum-length station + its
+    // immediately-adjacent placement tiles.
+    std::optional<TileCoordsXY> WindowRideConstructionFindBestEntranceExitTile()
+    {
+        if (_rideConstructionState != RideConstructionState::EntranceExit)
+            return std::nullopt;
+        auto ride = GetRide(gRideEntranceExitPlaceRideIndex);
+        if (ride == nullptr)
+            return std::nullopt;
+        auto stationStart = ride->getStation(gRideEntranceExitPlaceStationIndex).Start;
+        if (stationStart.IsNull())
+            return std::nullopt;
+        const TileCoordsXY centreTile{ stationStart };
+
+        // Resolve a reference point — the viewport centre projected to
+        // map XY (matches the user's intent "closest to view centre").
+        // Fall back to the station's start if the viewport isn't ready.
+        CoordsXY referencePos{ stationStart.x, stationStart.y };
+        if (auto* mainWnd = WindowGetMain(); mainWnd != nullptr && mainWnd->viewport != nullptr)
+        {
+            const auto* vp = mainWnd->viewport;
+            ScreenCoordsXY viewportCentreScreen{
+                vp->pos.x + vp->width / 2,
+                vp->pos.y + vp->height / 2,
+            };
+            // Project the viewport-centre screen pixel back to a map XY at
+            // the station's base Z so the projection accounts for camera
+            // rotation + zoom.
+            auto stationBaseZ = ride->getStation(gRideEntranceExitPlaceStationIndex).GetBaseZ();
+            if (auto projected = ScreenGetMapXYWithZ(viewportCentreScreen, stationBaseZ); projected.has_value())
+            {
+                referencePos = *projected;
+            }
+        }
+
+        std::optional<TileCoordsXY> best;
+        int64_t bestDistSq = std::numeric_limits<int64_t>::max();
+        constexpr int kSearchRadius = kMaxStationPlatformLength;
+        for (int dx = -kSearchRadius; dx <= kSearchRadius; dx++)
+        {
+            for (int dy = -kSearchRadius; dy <= kSearchRadius; dy++)
+            {
+                TileCoordsXY candidate{ centreTile.x + dx, centreTile.y + dy };
+                if (!TileIsValidEntranceExitPlacement(candidate))
+                    continue;
+                const auto candidateCoords = candidate.ToCoordsXY();
+                const int64_t ddx = candidateCoords.x - referencePos.x;
+                const int64_t ddy = candidateCoords.y - referencePos.y;
+                const int64_t distSq = ddx * ddx + ddy * ddy;
+                if (distSq < bestDistSq)
+                {
+                    bestDistSq = distSq;
+                    best = candidate;
+                }
+            }
+        }
+        return best;
     }
 
     void WindowRideConstructionPlaceEntranceExit(TileCoordsXY tile)

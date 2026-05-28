@@ -2569,12 +2569,20 @@ namespace
             {
                 Windows::WindowRideConstructionShowGhostAtTile(gridCursor().getPosition());
             }
-            // For entranceExit, run the adjacency search immediately so the
-            // direction preview is correct at entry — without this the user
-            // sees the previous (mouse-set) direction until they step the
-            // cursor.
+            // For entranceExit, auto-position the cursor onto the best
+            // valid placement tile (closest to viewport centre) so the
+            // user can commit immediately — otherwise the cursor sits on
+            // wherever they were last building (usually the head tile,
+            // which is on the track and therefore invalid). Then run the
+            // adjacency search to set the direction + spawn the ghost
+            // preview.
             else if (activateMode == Windows::RideInputMode::entranceExit)
             {
+                if (auto best = Windows::WindowRideConstructionFindBestEntranceExitTile();
+                    best.has_value())
+                {
+                    gridCursor().setPosition(*best);
+                }
                 Windows::WindowRideConstructionUpdateEntranceExitDirection(
                     gridCursor().getPosition());
                 if (auto* windowMgr = GetWindowManager(); windowMgr != nullptr)

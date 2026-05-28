@@ -342,11 +342,22 @@ namespace OpenRCT2::Ui::Windows
     // search the 4 cardinals for a station track tile of
     // gRideEntranceExitPlaceRideIndex at the station's base Z. On hit,
     // writes gRideEntranceExitPlaceDirection (facing away from the track)
-    // and gRideEntranceExitPlaceStationIndex; returns true. On miss,
-    // sets direction to kInvalidDirection and returns false. Called per-
-    // step in entranceExit mode so the placement direction tracks the
-    // cursor like the mouse path does on hover.
+    // and gRideEntranceExitPlaceStationIndex, and dispatches the
+    // entrance/exit ghost preview at the cursor tile (mirror of
+    // RideConstructionToolupdateEntranceExit). Returns true. On miss,
+    // sets direction to kInvalidDirection, cancels any stale ghost, and
+    // returns false. Called per-step in entranceExit mode so the
+    // placement direction + ghost track the cursor like the mouse path
+    // does on hover.
     bool WindowRideConstructionUpdateEntranceExitDirection(TileCoordsXY tile);
+    // Enhancement (2026-05-28): scan the station's bounding box for
+    // valid entrance/exit placement tiles and return the one closest to
+    // the viewport centre. Called when entering entranceExit mode so the
+    // grid cursor auto-positions to somewhere the user can immediately
+    // confirm, instead of wherever they were last building. Returns
+    // nullopt if no valid tiles exist (ride invalid, station empty,
+    // every neighbour already built up).
+    std::optional<TileCoordsXY> WindowRideConstructionFindBestEntranceExitTile();
 
     // Most shortcut action bodies (TurnLeft / TurnRight / SlopeUp / SlopeDown /
     // BankLeft / BankRight / ChainLiftToggle / UseTrackDefault / Previous /
