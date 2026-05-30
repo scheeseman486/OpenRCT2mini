@@ -4626,12 +4626,30 @@ InputContext InputManager::resolveActiveContext() const
     // strategy. Phase F.6 will migrate the OSK to widgetFocus and
     // (eventually) the rest of these modals to share the focus
     // ring; until then they keep their dedicated strategies.
+    //
+    // OPENRCT2MINI 2026-05-29 — loadSave + loadSaveOverwritePrompt
+    // dropped from this priority block. Both windows have a full
+    // set of focusable widgets (Save button, sort headers, file
+    // list scroll, filename textbox, folder action buttons), so
+    // their dedicated context contributed nothing useful: the
+    // strategy's onKeyEvent was the only override, and after the
+    // gamepad-plan 1.6c.7 cleanup WindowLoadSaveInputKey is a
+    // no-op. Worse, the loadSave allow-list omits kFocus*, so D-
+    // pad navigation got rejected and focus mode was effectively
+    // dead in the dialog. Letting these fall through to widget-
+    // Focus enables full focus-mode navigation; dismiss / confirm
+    // still fire through the modal-hooks stack (LoadSave.cpp:605
+    // — close-window / press WIDX_SAVE on PAD BACK / PAD START).
+    // LoadSaveContextImpl + LoadSaveOverwritePromptContextImpl
+    // remain registered as defensive dead code (never reachable
+    // through this resolver any more, but cheap to keep so
+    // nothing referencing the slot crashes).
+    //
+    // textInput is preserved for now: it's a single-textbox modal
+    // where arrow keys should drive caret nav, not widget focus
+    // walk. widgetTextBox stays for the same reason.
     if (windowMgr != nullptr)
     {
-        if (windowMgr->FindByClass(WindowClass::loadsaveOverwritePrompt) != nullptr)
-            return InputContext::loadSaveOverwritePrompt;
-        if (windowMgr->FindByClass(WindowClass::loadsave) != nullptr)
-            return InputContext::loadSave;
         if (windowMgr->FindByClass(WindowClass::textinput) != nullptr)
             return InputContext::textInput;
     }
