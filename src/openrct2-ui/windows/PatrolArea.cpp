@@ -304,4 +304,51 @@ namespace OpenRCT2::Ui::Windows
         auto current = reinterpret_cast<PatrolAreaWindow*>(windowMgr->FindByClass(WindowClass::patrolArea));
         return current != nullptr ? current->GetStaffId() : EntityId::GetNull();
     }
+
+    // OPENRCT2MINI grid-cursor-plan §11.10 (2026-05-29): Pattern B
+    // dispatcher for the gamepad path. Builds a brush rect from the
+    // current grid cursor position (gMapSelectPositionA/B, already
+    // set by ToolContext::syncGridCursorToHead or the per-frame
+    // selection writer) and dispatches StaffSetPatrolAreaAction with
+    // the caller-supplied mode. Mode is taken as int32_t to avoid
+    // pulling GameActions::StaffSetPatrolAreaMode into Windows.h;
+    // the enum is cast at the action build site below.
+    void WindowPatrolAreaAtCursor(int32_t mode)
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return;
+        auto* w = reinterpret_cast<PatrolAreaWindow*>(windowMgr->FindByClass(WindowClass::patrolArea));
+        if (w == nullptr)
+            return;
+        const auto staffId = w->GetStaffId();
+        auto staff = getGameState().entities.GetEntity<Staff>(staffId);
+        if (staff == nullptr)
+            return;
+        MapRange range(gMapSelectPositionA, gMapSelectPositionB);
+        auto action = GameActions::StaffSetPatrolAreaAction(
+            staffId, range, static_cast<GameActions::StaffSetPatrolAreaMode>(mode));
+        GameActions::Execute(&action, getGameState());
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.10 §(b): polled by the
+    // PatrolContextImpl strategy to decide what PAD A will do at
+    // the cursor tile (Set if false → "would Set", Unset if true →
+    // "would Unset"). Also used as the source-of-truth for the
+    // visual indicator that disambiguates the bimodal toggle.
+    // Returns false if the patrol window isn't open, the staff
+    // entity is gone, or the tile is outside the patrolled set.
+    bool WindowPatrolAreaIsTilePatrolled(TileCoordsXY tile)
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return false;
+        auto* w = reinterpret_cast<PatrolAreaWindow*>(windowMgr->FindByClass(WindowClass::patrolArea));
+        if (w == nullptr)
+            return false;
+        auto staff = getGameState().entities.GetEntity<Staff>(w->GetStaffId());
+        if (staff == nullptr)
+            return false;
+        return staff->IsPatrolAreaSet(tile.ToCoordsXY());
+    }
 } // namespace OpenRCT2::Ui::Windows

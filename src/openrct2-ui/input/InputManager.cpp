@@ -2247,6 +2247,68 @@ namespace
         // next element" affordances.
     };
 
+    // OPENRCT2MINI grid-cursor-plan §11.10 (2026-05-29): staff patrol-
+    // zone painting. PATTERN B per §11.10.1 — ghost-mediated per-press
+    // confirm, NOT the LandRights/ClearScenery drag-chain.
+    //
+    // Per-tile semantics:
+    //   PAD A → auto-toggle (Set if not patrolled, Unset if patrolled),
+    //           computed per-press from live tile state (no _latchedMode
+    //           member — Pattern B sidesteps the toxic re-fire problem
+    //           by not chaining on D-pad steps).
+    //   PAD B → force-unset cursor tile, regardless of current state.
+    //           Does NOT close the window (per §(k)).
+    //   D-pad → step cursor (no verb dispatch on step, unlike §11.5/§11.9).
+    //   PAD Y + D-pad up/down → Z-shift = Consumed no-op (patrol is 2D;
+    //           same precedent as Ride entranceExit/Selected per §(h)).
+    //
+    // Brush size from gLandToolSize (default 4 — see PatrolArea.cpp:68).
+    class PatrolContextImpl final : public ToolContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolPatrol;
+        }
+
+        bool usesGLandToolSize() const override { return true; }
+
+        // Pattern B: don't override consumeDirectionalsWhenCursorClick-
+        // Held — inherit the base default (true). PAD A held + D-pad
+        // diverts to onRaise/onLower, which are no-ops here (§(h)),
+        // so the diversion is invisible and the D-pad doesn't
+        // accidentally chain-fire while the user is just walking the
+        // cursor. Per-press PAD A is the only dispatch path.
+
+        Disposition onPlace() override
+        {
+            // Mode auto-toggles based on tile state at press time.
+            // 0 = Set, 1 = Unset (matches StaffSetPatrolAreaMode enum
+            // values in actions/peep/StaffSetPatrolAreaAction.h).
+            const auto tile = gridCursor().getPosition();
+            const bool alreadyPatrolled = Windows::WindowPatrolAreaIsTilePatrolled(tile);
+            Windows::WindowPatrolAreaAtCursor(alreadyPatrolled ? 1 : 0);
+            return Disposition::Consumed;
+        }
+
+        Disposition onCancel() override
+        {
+            // §(k): PAD B always force-unsets the cursor tile.
+            // Distinct from PAD A's auto-toggle. Does NOT close the
+            // patrol window — closing is left to the standard paths
+            // (close box, focus-mode cancel). Does NOT fall through
+            // to the base tile-action right-click dispatch.
+            Windows::WindowPatrolAreaAtCursor(1);
+            return Disposition::Consumed;
+        }
+
+        // §(h): Z-shift is meaningless for patrol (2D tile flags).
+        // Consume the gesture so the cursor's Z visual doesn't bump
+        // pointlessly. Same precedent as Ride entranceExit/Selected.
+        Disposition onRaise() override { return Disposition::Consumed; }
+        Disposition onLower() override { return Disposition::Consumed; }
+    };
+
     // OPENRCT2MINI ride-construction-grid-cursor-plan §5 (Phase 1, 2026-05-25):
     // gamepad-driven track design. Mirrors FootpathContextImpl's pattern:
     // mode-branching verbs (RideInputMode discriminator); shift-modifier
@@ -2876,6 +2938,7 @@ InputManager::InputManager()
     _contextRegistry[static_cast<size_t>(InputContext::toolTileInspector)] = std::make_unique<TileInspectorContextImpl>();
     _contextRegistry[static_cast<size_t>(InputContext::toolRideConstruction)] = std::make_unique<RideConstructionContextImpl>();
     _contextRegistry[static_cast<size_t>(InputContext::toolClearScenery)] = std::make_unique<ClearSceneryContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolPatrol)] = std::make_unique<PatrolContextImpl>();
 
     // OPENRCT2MINI cursor-selector-modal-plan §3.1: seed selector
     // mode from config. widgetFocusAlwaysOn defaulted true today,
@@ -3597,7 +3660,7 @@ void InputManager::cycleFocusedWindow(int direction)
         static constexpr WindowClass kToolClasses[] = {
             WindowClass::footpath,         WindowClass::land,             WindowClass::water,
             WindowClass::scenery,          WindowClass::rideConstruction, WindowClass::landRights,
-            WindowClass::tileInspector,    WindowClass::clearScenery,
+            WindowClass::tileInspector,    WindowClass::clearScenery,     WindowClass::patrolArea,
         };
         const auto isToolWindowClass = [](WindowClass c) {
             for (auto t : kToolClasses)
@@ -4712,6 +4775,11 @@ InputContext InputManager::resolveActiveContext() const
             // OPENRCT2MINI grid-cursor-plan §11.9 / §18.C (2026-05-24):
             // ClearScenery (bulldozer) is its own tool window class.
             WindowClass::clearScenery,
+            // OPENRCT2MINI grid-cursor-plan §11.10 (2026-05-29):
+            // PatrolArea (staff patrol-zone painting) is its own
+            // tool window class, spawned by the Staff window's
+            // "Set Patrol Area" button.
+            WindowClass::patrolArea,
         };
         const auto topmost = OpenRCT2::GetTopmostWindowClassInSet(
             kToolClasses, std::size(kToolClasses));
@@ -4733,6 +4801,8 @@ InputContext InputManager::resolveActiveContext() const
                 return InputContext::toolTileInspector;
             case WindowClass::clearScenery:
                 return InputContext::toolClearScenery;
+            case WindowClass::patrolArea:
+                return InputContext::toolPatrol;
             default:
                 break;
         }
@@ -4957,6 +5027,7 @@ bool InputManager::isShortcutMeaningfulInContext(std::string_view shortcutId, In
         case InputContext::toolTileInspector:
         case InputContext::toolRideConstruction:
         case InputContext::toolClearScenery:
+        case InputContext::toolPatrol:
             return true;
 
         // OPENRCT2MINI focus-mode-plan / Phase F.1: widget-focus mode.

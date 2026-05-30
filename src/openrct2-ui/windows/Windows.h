@@ -509,6 +509,17 @@ namespace OpenRCT2::Ui::Windows
     // PatrolArea
     WindowBase* PatrolAreaOpen(EntityId staffId);
     EntityId WindowPatrolAreaGetCurrentStaffId();
+    // OPENRCT2MINI grid-cursor-plan §11.10 (2026-05-29). Pattern B
+    // (Footpath-style per-press confirm) for the patrol-area
+    // gamepad path. WindowPatrolAreaAtCursor takes an explicit mode
+    // (0 = Set, 1 = Unset, matching StaffSetPatrolAreaMode) because
+    // the strategy decides Set vs Unset at press time from live tile
+    // state, not via the window's mouse-path _mode latch.
+    // WindowPatrolAreaIsTilePatrolled queries the current patrol-
+    // area window's staff to determine the indicator state shown
+    // alongside the grid cursor.
+    void WindowPatrolAreaAtCursor(int32_t mode);
+    bool WindowPatrolAreaIsTilePatrolled(TileCoordsXY tile);
 
     // RefurbishRidePrompt
     WindowBase* RideRefurbishPromptOpen(const Ride& ride);
