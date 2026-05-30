@@ -33,6 +33,7 @@ namespace OpenRCT2::Config
         int32_t defaultDisplay;
         int32_t windowWidth;
         int32_t windowHeight;
+        bool windowMaximized;
         int32_t fullscreenMode;
         int32_t fullscreenWidth;
         int32_t fullscreenHeight;

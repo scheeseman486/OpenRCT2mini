@@ -219,6 +219,10 @@ namespace OpenRCT2::Config
             model->windowHeight = reader->GetInt32("window_height", -1);
             model->windowSnapProximity = reader->GetInt32("window_snap_proximity", 5);
             model->windowWidth = reader->GetInt32("window_width", -1);
+            // OPENRCT2MINI host persistence: remember the maximised state of
+            // the window across launches. Only meaningful when fullscreen_mode
+            // == 0 (windowed); ignored otherwise.
+            model->windowMaximized = reader->GetBoolean("window_maximized", false);
             model->defaultDisplay = reader->GetInt32("default_display", 0);
             model->drawingEngine = reader->GetEnum<DrawingEngine>(
                 "drawing_engine", DrawingEngine::SoftwareWithHardwareDisplay, Enum_DrawingEngine);
@@ -395,6 +399,7 @@ namespace OpenRCT2::Config
         writer->WriteInt32("window_height", model->windowHeight);
         writer->WriteInt32("window_snap_proximity", model->windowSnapProximity);
         writer->WriteInt32("window_width", model->windowWidth);
+        writer->WriteBoolean("window_maximized", model->windowMaximized);
         writer->WriteInt32("default_display", model->defaultDisplay);
         writer->WriteEnum<DrawingEngine>("drawing_engine", model->drawingEngine, Enum_DrawingEngine);
         writer->WriteBoolean("uncap_fps", model->uncapFPS);

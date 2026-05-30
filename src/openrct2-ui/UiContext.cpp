@@ -811,6 +811,24 @@ public:
                             break;
                         }
                     }
+                    // OPENRCT2MINI host persistence: remember maximised state
+                    // across launches. MAXIMIZED / RESTORED are the SDL events
+                    // for the windowed-maximise toggle (not fullscreen — that
+                    // fires FULLSCREEN events instead). Save only when the
+                    // tracked state actually changes so we don't churn the
+                    // config file on every spurious RESTORED (e.g. after the
+                    // window returns from minimised).
+                    if (e.window.event == SDL_WINDOWEVENT_MAXIMIZED
+                        || e.window.event == SDL_WINDOWEVENT_RESTORED)
+                    {
+                        uint32_t winFlags = SDL_GetWindowFlags(_window);
+                        bool maximized = (winFlags & SDL_WINDOW_MAXIMIZED) != 0;
+                        if (maximized != Config::Get().general.windowMaximized)
+                        {
+                            Config::Get().general.windowMaximized = maximized;
+                            Config::Save();
+                        }
+                    }
 
                     if (Config::Get().sound.audioFocus)
                     {
@@ -1365,6 +1383,16 @@ private:
         UpdateFullscreenResolutions();
 
         SetFullscreenMode(static_cast<FullscreenMode>(Config::Get().general.fullscreenMode));
+        // OPENRCT2MINI host persistence: restore maximised state if the
+        // window was maximised on last shutdown. Only meaningful in
+        // windowed mode — fullscreen / fullscreenDesktop ignore the
+        // maximised flag. Done after SetFullscreenMode so the windowed-
+        // mode SDL_SetWindowSize call doesn't fight the maximise.
+        if (Config::Get().general.windowMaximized
+            && static_cast<FullscreenMode>(Config::Get().general.fullscreenMode) == FullscreenMode::windowed)
+        {
+            SDL_MaximizeWindow(_window);
+        }
         TriggerResize();
     }
 
