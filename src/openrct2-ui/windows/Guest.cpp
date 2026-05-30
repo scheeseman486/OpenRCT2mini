@@ -10,6 +10,12 @@
 #include "../interface/ViewportQuery.h"
 
 #include <array>
+// OPENRCT2MINI grid-cursor-plan §11.11 (2026-05-29 follow-up): for
+// the focus-mode auto-engage in the WIDX_PICKUP callback.
+// GetInputManager() is declared in UiContext.h; InputManager class
+// itself comes from input/InputManager.h via the focus-engage callsite.
+#include <openrct2-ui/UiContext.h>
+#include <openrct2-ui/input/InputManager.h>
 #include <openrct2-ui/interface/Dropdown.h>
 #include <openrct2-ui/interface/Viewport.h>
 #include <openrct2-ui/interface/Widget.h>
@@ -661,6 +667,27 @@ namespace OpenRCT2::Ui::Windows
                             if (wind != nullptr)
                             {
                                 ToolSet(*wind, WC_PEEP__WIDX_PICKUP, Tool::picker);
+                                // OPENRCT2MINI grid-cursor-plan §11.11
+                                // (2026-05-29 follow-up): when the user
+                                // armed pickup from focus mode, hand off
+                                // straight to the toolPeepPickup grid
+                                // cursor — without this they'd have to
+                                // press TAB again to re-enter focus mode
+                                // on the viewport. Same pattern as Land's
+                                // EngageGridCursorIfFocusMode (Land.cpp:
+                                // 123-131) and the Footpath / Ride mode-
+                                // button engage paths. Gated on selector
+                                // = active so mouse users aren't pulled
+                                // into the gamepad flow.
+                                auto& mgr = OpenRCT2::Ui::GetInputManager();
+                                if (mgr.getSelectorMode()
+                                    == OpenRCT2::Ui::InputManager::SelectorMode::active)
+                                {
+                                    mgr.setToolFocusSelected(
+                                        true,
+                                        OpenRCT2::Ui::InputManager::SelectorTransitionSource::
+                                            virtualUserInput);
+                                }
                             }
                         });
                     GameActions::Execute(&pickupAction, gameState);

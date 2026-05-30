@@ -7,6 +7,12 @@
  * OpenRCT2 is licensed under the GNU General Public License version 3.
  *****************************************************************************/
 
+// OPENRCT2MINI grid-cursor-plan §11.11 (2026-05-29 follow-up): for
+// the focus-mode auto-engage in the WIDX_PICKUP callback.
+// GetInputManager() is declared in UiContext.h; the InputManager
+// class itself comes from input/InputManager.h.
+#include <openrct2-ui/UiContext.h>
+#include <openrct2-ui/input/InputManager.h>
 #include <openrct2-ui/interface/Dropdown.h>
 #include <openrct2-ui/interface/Theme.h>
 #include <openrct2-ui/interface/Viewport.h>
@@ -397,6 +403,23 @@ namespace OpenRCT2::Ui::Windows
                             if (wind != nullptr)
                             {
                                 ToolSet(*wind, WC_STAFF__WIDX_PICKUP, Tool::picker);
+                                // OPENRCT2MINI grid-cursor-plan §11.11
+                                // (2026-05-29 follow-up): same focus-
+                                // mode auto-engage as Guest.cpp's
+                                // pickup callback. Without this, a
+                                // focus-mode user who armed pickup
+                                // from the Staff window's overview
+                                // tab would land back on the same
+                                // widget, not on the grid cursor.
+                                auto& mgr = OpenRCT2::Ui::GetInputManager();
+                                if (mgr.getSelectorMode()
+                                    == OpenRCT2::Ui::InputManager::SelectorMode::active)
+                                {
+                                    mgr.setToolFocusSelected(
+                                        true,
+                                        OpenRCT2::Ui::InputManager::SelectorTransitionSource::
+                                            virtualUserInput);
+                                }
                             }
                         });
                     GameActions::Execute(&pickupAction, gameState);
