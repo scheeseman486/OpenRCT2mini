@@ -3280,30 +3280,47 @@ void InputManager::snapFocusToTopmostFocusable()
 {
     // OPENRCT2MINI focus-mode-plan §F.15: same reverse-walk +
     // skip rules as the per-frame bootstrap, with one extra
-    // preference: pick a non-stickToFront window if any exist.
-    // Rationale: stickToFront windows are always-on-top chrome
-    // (game-bottom-toolbar, top-toolbar) that the user didn't
+    // preference: pick a non-chrome window if any exist.
+    // Rationale: bottom-of-stack chrome (top + bottom toolbars)
+    // is always-present background scaffolding the user didn't
     // explicitly summon, so a click that opens a normal modal
     // (Options, About, Save/Load, …) should focus the modal —
     // not the toolbar that happens to be drawn over it.
     //
     // Two-pass walk:
-    //   pass 1: reverse-iterate, skipping stickToFront. The
-    //           topmost qualifying NORMAL or stickToBack window
-    //           wins (e.g. the just-opened Options window, or
-    //           on the title scene, the title menu).
+    //   pass 1: reverse-iterate, skipping bottom-of-stack
+    //           WindowSet members. The topmost qualifying non-
+    //           chrome window wins (e.g. the just-opened Options
+    //           window, or on the title scene, the title menu —
+    //           the title set isn't bottom-of-stack, so its
+    //           members are valid pass-1 picks).
     //   pass 2: only runs if pass 1 found nothing. Reverse-
-    //           iterate including stickToFront, picking the
-    //           topmost focusable. This is the fallback for
-    //           scenes where the only focusable windows ARE
-    //           chrome — e.g. world view with no modals open;
-    //           focus the toolbar so the user has something
-    //           to navigate.
+    //           iterate including chrome, picking the topmost
+    //           focusable. This is the fallback for scenes
+    //           where the only focusable windows ARE chrome
+    //           (world view with no modals open) — focus the
+    //           toolbar so the user has something to navigate.
+    //
+    // OPENRCT2MINI focus-mode-plan §F.15 follow-up (2026-05-30):
+    // the "chrome" filter was originally "WindowFlag::stickToFront"
+    // (with a dropdown exception), but that caught user-summoned
+    // modals that happen to be stickToFront. LoadSave is the
+    // load-bearing case — its window flag set includes
+    // stickToFront (LoadSave.cpp:1295), so the old filter skipped
+    // it during pass 1, then pass 1 found titleMenu underneath
+    // and returned it. The bootstrap saw "topmost unchanged"
+    // (titleMenu was already focused) and never re-snapped, so
+    // focus stayed on the title screen even after LoadSave
+    // opened on top of it. Switching to "member of a bottom-of-
+    // stack WindowSet" treats the in-game toolbar set as chrome
+    // (the only set with isBottomOfStack=true) while letting
+    // every individual dialog through. The dropdown exception is
+    // no longer needed because dropdowns aren't set members.
     //
     // _lastTopmostFocusable is updated to the snapped class so
     // the next bootstrap pass doesn't treat this as a fresh
     // "topmost changed" event and re-snap to itself.
-    const auto findTopmost = [](bool includeStickToFront) -> WindowClass {
+    const auto findTopmost = [](bool includeChrome) -> WindowClass {
         for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
         {
             auto& wPtr = *it;
@@ -3318,12 +3335,12 @@ void InputManager::snapFocusToTopmostFocusable()
             // target — see WidgetFocus::isPurelyVisualWindow.
             if (WidgetFocus::isPurelyVisualWindow(wPtr->classification))
                 continue;
-            // Dropdowns are stickToFront so they draw over the
-            // modal that summoned them, but they're also the
-            // active interaction target — never skip them.
-            if (!includeStickToFront && wPtr->flags.has(WindowFlag::stickToFront)
-                && wPtr->classification != WindowClass::dropdown)
-                continue;
+            if (!includeChrome)
+            {
+                const auto* set = WidgetFocus::findSetFor(wPtr->classification);
+                if (set != nullptr && set->isBottomOfStack)
+                    continue;
+            }
             if (WidgetFocus::firstFocusable(*wPtr) == kWidgetIndexNull)
                 continue;
             return wPtr->classification;
@@ -3331,9 +3348,9 @@ void InputManager::snapFocusToTopmostFocusable()
         return WindowClass::null;
     };
 
-    WindowClass topmost = findTopmost(/*includeStickToFront=*/ false);
+    WindowClass topmost = findTopmost(/*includeChrome=*/ false);
     if (topmost == WindowClass::null)
-        topmost = findTopmost(/*includeStickToFront=*/ true);
+        topmost = findTopmost(/*includeChrome=*/ true);
 
     // OPENRCT2MINI window-set-plan §3.3: don't re-snap when the
     // new topmost is in the same set as the current focus — that's
@@ -4513,12 +4530,25 @@ void InputManager::process()
         //       (stickToBack rivals like the title menu vs. logo),
         //       and an unconditional snap-to-topmost would
         //       immediately undo the cycle.
-        // Two-pass walk: prefer non-stickToFront windows so a newly-
+        // Two-pass walk: prefer non-chrome windows so a newly-
         // opened modal beats always-on-top chrome (game bottom
         // toolbar, etc.). Mirrors snapFocusToTopmostFocusable. The
-        // fallback pass (includeStickToFront=true) handles scenes
-        // where the only focusable windows ARE chrome.
-        const auto findTopmost = [](bool includeStickToFront) -> WindowClass {
+        // fallback pass (includeChrome=true) handles scenes where
+        // the only focusable windows ARE chrome.
+        //
+        // OPENRCT2MINI focus-mode-plan §F.15 follow-up (2026-05-30):
+        // the "chrome" filter is now "member of a bottom-of-stack
+        // WindowSet" (kInGameChromeMembers has isBottomOfStack=true)
+        // rather than "WindowFlag::stickToFront". The old filter
+        // mis-classified user-summoned modals that happen to be
+        // stickToFront (LoadSave is the load-bearing case — it's
+        // stickToFront and was being skipped on title-screen open,
+        // causing focus to stay on titleMenu instead of jumping to
+        // the new dialog). The set-based check distinguishes the
+        // always-present in-game chrome (toolbars) from individual
+        // dialogs that just happen to draw on top — toolbars are
+        // explicit set members, modals aren't in any set.
+        const auto findTopmost = [](bool includeChrome) -> WindowClass {
             for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
             {
                 auto& wPtr = *it;
@@ -4533,17 +4563,21 @@ void InputManager::process()
                 // focus auto-track never tries to snap to one.
                 if (WidgetFocus::isPurelyVisualWindow(wPtr->classification))
                     continue;
-                if (!includeStickToFront && wPtr->flags.has(WindowFlag::stickToFront))
-                    continue;
+                if (!includeChrome)
+                {
+                    const auto* set = WidgetFocus::findSetFor(wPtr->classification);
+                    if (set != nullptr && set->isBottomOfStack)
+                        continue;
+                }
                 if (WidgetFocus::firstFocusable(*wPtr) == kWidgetIndexNull)
                     continue;
                 return wPtr->classification;
             }
             return WindowClass::null;
         };
-        WindowClass topmostFocusableCls = findTopmost(/*includeStickToFront=*/ false);
+        WindowClass topmostFocusableCls = findTopmost(/*includeChrome=*/ false);
         if (topmostFocusableCls == WindowClass::null)
-            topmostFocusableCls = findTopmost(/*includeStickToFront=*/ true);
+            topmostFocusableCls = findTopmost(/*includeChrome=*/ true);
         // OPENRCT2MINI window-set-plan §3.3: count set-siblings as
         // "same logical surface" — hopping from topToolbar to game-
         // BottomToolbar (both in the in-game chrome set) should NOT
