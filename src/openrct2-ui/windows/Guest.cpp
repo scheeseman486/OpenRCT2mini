@@ -2057,16 +2057,23 @@ namespace OpenRCT2::Ui::Windows
         auto* surface = MapGetSurfaceElementAt(tile);
         if (surface == nullptr)
             return;
-        // The DROP Z, not the surface Z. Peep::Place at
-        // Peep.cpp:678 sets the dropped peep's destination to
-        // `{ tile.centre, surface.GetBaseZ() + 16 }` and then
-        // calls `SetState(PeepState::falling)` — so the peep
-        // visibly falls from +16 small-Z units above ground to
-        // the surface. Anchoring the hanging sprite at the same
-        // pickedZ gives the visual continuity the user asked for:
-        // pincers held at the drop height, release = peep falls
-        // from where they were held to the ground.
-        const int32_t pickedZ = surface->GetBaseZ() + 16;
+        // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30
+        // follow-up #5): mirror mouse mode exactly. Mouse path
+        // draws the peep at the TILE CENTRE (Guest.cpp:1023:
+        // `gPickupPeepY = screenCoords.y + 16` where
+        // `screenCoords.y + 16` is the screen-Y of the tile centre,
+        // since FootpathGetCoordinatesFromPos samples there).
+        // The peep is NOT pre-positioned at the drop Z (surface+16)
+        // — Peep::Place teleports it there on release and then
+        // animates a short fall. We initially projected at drop Z
+        // to make the fall invisible, but that pulled the cursor
+        // 16 px higher than mouse mode's natural rest point and
+        // broke the grid → mouse transition (mouse tile detection
+        // would land on the wrong tile until the user re-snapped
+        // the cursor). Reverting to mouse-mode geometry: peep at
+        // surface Z, same tiny release jump as mouse mode, but
+        // the grid → mouse handoff is seamless.
+        const int32_t pickedZ = surface->GetBaseZ();
 
         auto* mainWindow = WindowGetMain();
         if (mainWindow == nullptr || mainWindow->viewport == nullptr)

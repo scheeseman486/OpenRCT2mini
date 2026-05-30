@@ -2404,39 +2404,50 @@ namespace
         }
 
         // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30
-        // follow-up #3): lift the SOFTWARE-CURSOR picker sprite —
-        // the visible "pincers" graphic — to its mouse-mode-equivalent
-        // position above the hanging peep.
+        // follow-up #5): mirror the mouse-mode invariant exactly so
+        // the grid-cursor → virtual-mouse transition is seamless.
         //
-        // Mouse mode (Guest.cpp:1022-1023 / Staff.cpp:712-713) draws
-        // the picker cursor at OS pointer (X, Y), with hotspot
-        // (15, 31) putting the pincers TIP at exactly that point.
-        // The peep is then drawn at (X - 1, Y + 16) — 16 screen
-        // pixels BELOW the pincers tip. The tile detection sampler
-        // also offsets by +16: FootpathGetCoordinatesFromPos
-        // ({screenCoords.x, screenCoords.y + 16}, ...). So the
-        // game-wide invariant for this tool: pincers tip is 16
-        // screen pixels above the peep's feet, the peep's feet
-        // are at the tile centre.
+        // Mouse mode (Guest.cpp:1022-1023 / Staff.cpp:712-713):
+        //   - OS pointer at (mouseX, mouseY)
+        //   - Picker sprite hotspot (15, 31) → pincers tip at
+        //     (mouseX, mouseY) (the OS pointer position)
+        //   - Peep drawn at (mouseX-1, mouseY + 16) → peep feet
+        //     16 screen px BELOW the pincers tip
+        //   - Tile detection samples at (mouseX, mouseY + 16) —
+        //     i.e. the peep position. So the tile under the cursor
+        //     is the tile whose CENTRE projects to mouseY + 16.
         //
-        // SyncHiddenCursorParking (UiContext.cpp:2160) projects the
-        // cursor sprite at the tile-centre world coord plus this
-        // Z extra. WindowPeepPickupRefreshHangingSprite (Guest.cpp)
-        // already projects the peep at drop Z (surface + 16, per
-        // Peep::Place's `tileElement->GetBaseZ() + 16` at
-        // Peep.cpp:678). Translate3DTo2DWithZ has +1 world Z →
-        // -1 screen Y at zoom 1:1, so to get the picker 16 screen
-        // pixels above the peep we need 16 MORE world Z above the
-        // peep, i.e. +32 total above the surface. That matches
-        // the mouse-mode visual at default zoom; at other zooms
-        // the offset scales with zoom (acceptable — the mouse +16
-        // is a fixed cursor offset, not zoom-aware either).
+        // Therefore in mouse mode: cursor reference point sits 16
+        // screen px ABOVE the tile centre, peep feet sit AT the
+        // tile centre. Pincers 16 px above peep is the natural
+        // consequence of this geometry.
         //
-        // worldCoord unused — peep pickup is always single-tile and
-        // the constant doesn't depend on the tile.
+        // For grid mode to match this layout AND have the cursor
+        // land at the mouse-mode-natural rest position (16 above
+        // the tile, so mouse tile detection picks the same tile
+        // post-transition with no virtual cursor snap):
+        //   - cursorParkZExtra = 16 → cursor at land_z + 16 world,
+        //     which projects to 16 screen px above tile centre
+        //   - Peep drawn at land_z world (tile centre in screen),
+        //     handled in WindowPeepPickupRefreshHangingSprite
+        //
+        // Earlier follow-up #3 used extraZ = 32 + peep at drop Z
+        // (surface + 16) to achieve "peep starts at drop height for
+        // a continuous fall on release". This gave the same
+        // pincers-above-peep relationship but parked the cursor
+        // 16 px higher than mouse mode's natural rest point,
+        // breaking the grid → mouse tile-detection handoff (mouse
+        // mode would sample +16 below the cursor and hit the tile
+        // above the user's intended one). Reverting to mouse-mode
+        // geometry: small visible jump on release (peep teleports
+        // from tile-centre-Z to drop-Z then falls), but the mouse
+        // mode has exactly the same release jump, so the user
+        // perception is identical to the existing tool.
+        //
+        // worldCoord unused — peep pickup is always single-tile.
         int32_t cursorParkZExtra(CoordsXY /*worldCoord*/) const override
         {
-            return 32;
+            return 16;
         }
     };
 
