@@ -564,6 +564,36 @@ namespace OpenRCT2::Ui::Windows
                 Audio::StopAll();
             }
 
+            // OPENRCT2MINI gamepad-plan 1.6c.4: dismiss closes the
+            // window; confirm clicks the Save button (which is a no-op
+            // when the load tab is showing because WIDX_SAVE is empty
+            // there — onMouseUp's switch falls through). Replaces the
+            // hardcoded SDLK_ESCAPE / SDLK_RETURN switch in
+            // WindowLoadSaveInputKey, and adds gamepad PAD BACK / PAD
+            // START routing.
+            //
+            // OPENRCT2MINI 2026-05-29: pushed BEFORE WindowTextInputRaw-
+            // Open below so the modal-hooks stack ends up
+            //   [LoadSave, TextInput, (OSK)]
+            // — TextInput / OSK at the top, LoadSave underneath. The
+            // dispatch walks from top, so PAD START in the popup fires
+            // the TextInput / OSK commit (close popup, no save), and
+            // PAD START with the popup closed falls back to LoadSave's
+            // confirm = save. If this push happened AFTER the popup
+            // open, LoadSave would land at top of stack and PAD START
+            // in the popup would save the game immediately instead of
+            // committing the filename text.
+            _modalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
+                /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                    close();
+                    return true;
+                },
+                /*confirm=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+                    onMouseUp(WIDX_SAVE);
+                    return true;
+                },
+            });
+
             if (isSave)
             {
                 widgets[WIDX_FILENAME_TEXTBOX].type = WidgetType::textBox;
@@ -588,6 +618,11 @@ namespace OpenRCT2::Ui::Windows
                 // which updates _currentFilename and lets the user
                 // press WIDX_SAVE — same handler that the legacy
                 // in-place edit used.
+                //
+                // Must run AFTER our pushModalHooks above so TextInput's
+                // (and the OSK's) hooks land on top of the stack —
+                // otherwise PAD START in the popup would fire our
+                // confirm (= save game) instead of the popup's commit.
                 WindowTextInputRawOpen(
                     this, WIDX_FILENAME_TEXTBOX, STR_FILEBROWSER_SAVE_BUTTON, STR_FILENAME_LABEL, {},
                     _currentFilename, sizeof(_currentFilename));
@@ -610,24 +645,6 @@ namespace OpenRCT2::Ui::Windows
             ComputeMaxDateWidth();
 
             WindowSetResize(*this, GetMinimumWindowSize(), kWindowSizeMax);
-
-            // OPENRCT2MINI gamepad-plan 1.6c.4: dismiss closes the
-            // window; confirm clicks the Save button (which is a no-op
-            // when the load tab is showing because WIDX_SAVE is empty
-            // there — onMouseUp's switch falls through). Replaces the
-            // hardcoded SDLK_ESCAPE / SDLK_RETURN switch in
-            // WindowLoadSaveInputKey, and adds gamepad PAD BACK / PAD
-            // START routing.
-            _modalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
-                /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
-                    close();
-                    return true;
-                },
-                /*confirm=*/ [this](const OpenRCT2::Ui::InputEvent&) {
-                    onMouseUp(WIDX_SAVE);
-                    return true;
-                },
-            });
         }
 
         void onClose() override
