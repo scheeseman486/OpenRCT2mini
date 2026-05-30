@@ -20,6 +20,10 @@
 #include <openrct2/Input.h>
 #include <openrct2/SpriteIds.h>
 #include <openrct2/actions/GameActionRunner.h>
+// OPENRCT2MINI grid-cursor-plan §11.11 (2026-05-29): for
+// MapGetSurfaceElementAt in WindowPeepPickupAtTile below.
+#include <openrct2/world/Map.h>
+#include <openrct2/world/tile_element/SurfaceElement.h>
 #include <openrct2/actions/peep/GuestSetFlagsAction.h>
 #include <openrct2/actions/peep/GuestSetNameAction.h>
 #include <openrct2/actions/peep/PeepPickupAction.h>
@@ -1928,5 +1932,55 @@ namespace OpenRCT2::Ui::Windows
         window->init(peep->Id);
 
         return window;
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.11 (2026-05-29): peep
+    // pickup grid cursor — dispatch helper.
+    //
+    // Looks up the topmost peep window (Guest OR Staff — both share
+    // WindowClass::peep and the per-window `number` field stores the
+    // peep's entity ID). Computes drop Z from the surface element at
+    // the cursor tile, mirroring the mouse path's
+    // `tileElement->GetBaseZ()` at Guest.cpp:1021 / Staff.cpp:720.
+    // The Place action's success callback fires `ToolCancel()` which
+    // triggers each window's `onToolAbort` — that's already a no-op
+    // because the Cancel action checks against the peep's current
+    // location, which is now valid post-drop.
+    //
+    // No-op (returns silently) if no peep window with pickup armed,
+    // or if the cursor tile has no surface element (off-map).
+    void WindowPeepPickupAtTile(TileCoordsXY tile)
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return;
+        auto* w = windowMgr->FindByClass(WindowClass::peep);
+        if (w == nullptr)
+            return;
+        // Guard: only fire if the peep window is the one that
+        // armed the pickup tool. gCurrentToolWidget tracks the
+        // window that called ToolSet; for pickup that's the
+        // peep window itself.
+        if (gCurrentToolWidget.windowClassification != WindowClass::peep
+            || gCurrentToolWidget.windowNumber != w->number)
+            return;
+        auto* surface = MapGetSurfaceElementAt(tile);
+        if (surface == nullptr)
+            return;
+        const auto destCoords = tile.ToCoordsXY();
+        const auto baseZ = surface->GetBaseZ();
+        GameActions::PeepPickupAction pickupAction{
+            GameActions::PeepPickupType::Place,
+            EntityId::FromUnderlying(w->number),
+            CoordsXYZ{ destCoords, baseZ },
+            Network::GetCurrentPlayerId(),
+        };
+        pickupAction.SetCallback([](const GameActions::GameAction*, const GameActions::Result* result) {
+            if (result->error != GameActions::Status::ok)
+                return;
+            ToolCancel();
+            gPickupPeepImage = ImageId();
+        });
+        GameActions::Execute(&pickupAction, getGameState());
     }
 } // namespace OpenRCT2::Ui::Windows

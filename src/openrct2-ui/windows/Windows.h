@@ -375,6 +375,13 @@ namespace OpenRCT2::Ui::Windows
     // Guest
     WindowBase* GuestOpen(Peep* peep);
 
+    // OPENRCT2MINI grid-cursor-plan §11.11 (2026-05-29). Peep
+    // pickup dispatch helper for the gamepad path. Place at the
+    // grid cursor tile; cancel + window-close already route
+    // through the existing mouse-path onToolAbort chain via
+    // OpenRCT2::ToolCancel(), no extra helper needed.
+    void WindowPeepPickupAtTile(TileCoordsXY tile);
+
     // GuestList
     WindowBase* GuestListOpen();
     WindowBase* GuestListOpenWithFilter(GuestListFilterType type, int32_t index);

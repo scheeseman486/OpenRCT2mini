@@ -2309,6 +2309,78 @@ namespace
         Disposition onLower() override { return Disposition::Consumed; }
     };
 
+    // OPENRCT2MINI grid-cursor-plan §11.11 (2026-05-29): peep pickup
+    // (admin/debug "pick up a guest/staff and drop them elsewhere"
+    // tool). Per-tile contract:
+    //   PAD A → drop the picked-up peep at the cursor tile. Z comes
+    //           from the surface element's GetBaseZ() at that tile,
+    //           matching the mouse path (Guest.cpp:1021,
+    //           Staff.cpp:720). The Place action's success callback
+    //           fires ToolCancel() which clears the tool arm.
+    //   PAD B → cancel — return peep to where they were picked up.
+    //           Implementation: call OpenRCT2::ToolCancel(), which
+    //           triggers the peep window's onToolAbort, which already
+    //           dispatches PeepPickupAction::Cancel with the stored
+    //           original X. Keeps the peep window open by design —
+    //           ToolCancel only clears the tool arm, doesn't close
+    //           the window.
+    //   PAD START → cycle focus back to the peep window with the
+    //               peep still hanging. Intercept kInterfaceConfirm
+    //               in onShortcut and call cycleFocusedWindow(-1).
+    //               Crucially does NOT fire Cancel — the peep keeps
+    //               dangling across the context swap.
+    //   Window close while hanging → handled by existing mouse-path
+    //                                 onClose → ToolCancel chain.
+    //                                 Free behaviour, no new code.
+    //   PAD Y + D-pad up/down → Consumed no-op (Z is locked to tile
+    //                            base, Z-shift meaningless).
+    class PeepPickupContextImpl final : public ToolContext
+    {
+    public:
+        InputContext getId() const override
+        {
+            return InputContext::toolPeepPickup;
+        }
+
+        Disposition onPlace() override
+        {
+            Windows::WindowPeepPickupAtTile(gridCursor().getPosition());
+            return Disposition::Consumed;
+        }
+
+        Disposition onCancel() override
+        {
+            // Route through the existing per-window onToolAbort path
+            // — both Guest and Staff windows already dispatch
+            // PeepPickupAction::Cancel with their stored
+            // _pickedPeepX / _pickedPeepOldX field, so we don't need
+            // to reach into per-window state from here.
+            OpenRCT2::ToolCancel();
+            return Disposition::Consumed;
+        }
+
+        Disposition onRaise() override { return Disposition::Consumed; }
+        Disposition onLower() override { return Disposition::Consumed; }
+
+        // PAD START: cycle focus back to the peep window WITHOUT
+        // firing Cancel. The peep keeps hanging because we don't
+        // call ToolCancel and the engine's onToolAbort only fires
+        // on actual tool cancellation, not on InputContext swaps.
+        // Per §11.11.4 open question 2: the action's success path
+        // (Place's callback) is the ONLY thing that fires
+        // ToolCancel; idle context swaps don't.
+        Disposition onShortcut(std::string_view id, const InputEvent& e) override
+        {
+            if (id == ShortcutId::kInterfaceConfirm)
+            {
+                auto& mgr = OpenRCT2::Ui::GetInputManager();
+                mgr.cycleFocusedWindow(-1);
+                return Disposition::Consumed;
+            }
+            return ToolContext::onShortcut(id, e);
+        }
+    };
+
     // OPENRCT2MINI ride-construction-grid-cursor-plan §5 (Phase 1, 2026-05-25):
     // gamepad-driven track design. Mirrors FootpathContextImpl's pattern:
     // mode-branching verbs (RideInputMode discriminator); shift-modifier
@@ -2939,6 +3011,7 @@ InputManager::InputManager()
     _contextRegistry[static_cast<size_t>(InputContext::toolRideConstruction)] = std::make_unique<RideConstructionContextImpl>();
     _contextRegistry[static_cast<size_t>(InputContext::toolClearScenery)] = std::make_unique<ClearSceneryContextImpl>();
     _contextRegistry[static_cast<size_t>(InputContext::toolPatrol)] = std::make_unique<PatrolContextImpl>();
+    _contextRegistry[static_cast<size_t>(InputContext::toolPeepPickup)] = std::make_unique<PeepPickupContextImpl>();
 
     // OPENRCT2MINI cursor-selector-modal-plan §3.1: seed selector
     // mode from config. widgetFocusAlwaysOn defaulted true today,
@@ -3661,6 +3734,7 @@ void InputManager::cycleFocusedWindow(int direction)
             WindowClass::footpath,         WindowClass::land,             WindowClass::water,
             WindowClass::scenery,          WindowClass::rideConstruction, WindowClass::landRights,
             WindowClass::tileInspector,    WindowClass::clearScenery,     WindowClass::patrolArea,
+            WindowClass::peep,
         };
         const auto isToolWindowClass = [](WindowClass c) {
             for (auto t : kToolClasses)
@@ -4780,6 +4854,14 @@ InputContext InputManager::resolveActiveContext() const
             // tool window class, spawned by the Staff window's
             // "Set Patrol Area" button.
             WindowClass::patrolArea,
+            // OPENRCT2MINI grid-cursor-plan §11.11 (2026-05-29):
+            // Peep pickup. WindowClass::peep is shared by the
+            // per-peep info panel (Guest/Staff windows) AND the
+            // pickup tool. The toolActive gate on the tool-context
+            // arm in resolveActiveContext below disambiguates —
+            // info-panel-without-pickup leaves toolActive=false
+            // and the arm falls through to widgetFocus.
+            WindowClass::peep,
         };
         const auto topmost = OpenRCT2::GetTopmostWindowClassInSet(
             kToolClasses, std::size(kToolClasses));
@@ -4803,6 +4885,8 @@ InputContext InputManager::resolveActiveContext() const
                 return InputContext::toolClearScenery;
             case WindowClass::patrolArea:
                 return InputContext::toolPatrol;
+            case WindowClass::peep:
+                return InputContext::toolPeepPickup;
             default:
                 break;
         }
@@ -5028,6 +5112,7 @@ bool InputManager::isShortcutMeaningfulInContext(std::string_view shortcutId, In
         case InputContext::toolRideConstruction:
         case InputContext::toolClearScenery:
         case InputContext::toolPatrol:
+        case InputContext::toolPeepPickup:
             return true;
 
         // OPENRCT2MINI focus-mode-plan / Phase F.1: widget-focus mode.

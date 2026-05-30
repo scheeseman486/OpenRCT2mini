@@ -157,6 +157,12 @@ namespace OpenRCT2::Ui
         // PAD B force-unsets. Pattern B (Footpath-style per-press
         // confirm), NOT the LandRights/ClearScenery drag-chain.
         toolPatrol,
+        // OPENRCT2MINI grid-cursor-plan §11.11 (2026-05-29):
+        // Peep pickup (admin/debug "pick up a guest/staff and
+        // drop them" tool). Shares WindowClass::peep with the
+        // info panel — disambiguated by gInputFlags.toolActive +
+        // gCurrentToolWidget.windowClassification == peep.
+        toolPeepPickup,
         // listScroll,     // future: cursor.* drives a focused scrollable list
     };
 
@@ -227,8 +233,9 @@ namespace OpenRCT2::Ui
         // the commented-out listScroll stub. Phase 3.G's tool entries
         // reach index 14; bump to 16 for headroom. Bumped to 17 for
         // toolClearScenery (§11.9, 2026-05-24). Bumped to 18 for
-        // toolPatrol (§11.10, 2026-05-29).
-        static constexpr size_t kInputContextCount = 18;
+        // toolPatrol (§11.10, 2026-05-29). Bumped to 19 for
+        // toolPeepPickup (§11.11, 2026-05-29).
+        static constexpr size_t kInputContextCount = 19;
         // No NSDMI brace-init `{}` here on purpose. GCC 8.3 (OnionUI
         // toolchain) instantiates `unique_ptr<IInputContext>::~unique_ptr`
         // at the NSDMI site when `{}` is present, which then requires
