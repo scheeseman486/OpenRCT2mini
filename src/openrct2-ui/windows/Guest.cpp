@@ -2057,7 +2057,16 @@ namespace OpenRCT2::Ui::Windows
         auto* surface = MapGetSurfaceElementAt(tile);
         if (surface == nullptr)
             return;
-        const int32_t surfaceZ = surface->GetBaseZ();
+        // The DROP Z, not the surface Z. Peep::Place at
+        // Peep.cpp:678 sets the dropped peep's destination to
+        // `{ tile.centre, surface.GetBaseZ() + 16 }` and then
+        // calls `SetState(PeepState::falling)` — so the peep
+        // visibly falls from +16 small-Z units above ground to
+        // the surface. Anchoring the hanging sprite at the same
+        // pickedZ gives the visual continuity the user asked for:
+        // pincers held at the drop height, release = peep falls
+        // from where they were held to the ground.
+        const int32_t pickedZ = surface->GetBaseZ() + 16;
 
         auto* mainWindow = WindowGetMain();
         if (mainWindow == nullptr || mainWindow->viewport == nullptr)
@@ -2067,7 +2076,7 @@ namespace OpenRCT2::Ui::Windows
         const auto worldCentre = CoordsXYZ{
             tile.x * kCoordsXYStep + kCoordsXYHalfTile,
             tile.y * kCoordsXYStep + kCoordsXYHalfTile,
-            surfaceZ,
+            pickedZ,
         };
         const auto vpCoords = Translate3DTo2DWithZ(vp->rotation, worldCentre);
         const int32_t screenX = vp->pos.x + vp->zoom.ApplyInversedTo(vpCoords.x - vp->viewPos.x);
@@ -2095,12 +2104,16 @@ namespace OpenRCT2::Ui::Windows
             baseImageId = pickupAnim.baseImage + static_cast<uint32_t>(frameSlot);
         }
 
-        // Anchor: mirror the mouse path's `(x - 1, y + 16)` offset
-        // so the hanging peep sprite's feet land at the highlighted
-        // tile centre with the same visual padding the mouse cursor
-        // would produce when hovering over the same tile.
+        // Anchor: feet at the projected drop-Z position. The
+        // mouse path's `+16` Y offset (Guest.cpp:1023 /
+        // Staff.cpp:713) compensates for the OS cursor pointing
+        // ~16 pixels above the tile it's hovering over; in grid
+        // cursor mode the world->screen projection already lands
+        // exactly at the drop point, so any extra screen offset
+        // would shift the peep off the held height. The -1 X
+        // matches the mouse path purely for visual continuity.
         gPickupPeepX = screenX - 1;
-        gPickupPeepY = screenY + 16;
+        gPickupPeepY = screenY;
         gPickupPeepImage = ImageId(baseImageId, peep->TshirtColour, peep->TrousersColour);
     }
 } // namespace OpenRCT2::Ui::Windows
