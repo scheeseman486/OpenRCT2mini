@@ -2376,6 +2376,19 @@ namespace OpenRCT2::Ui::Windows
             return TileCoordsXY{ _footpathConstructFromPosition };
         }
 
+        // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): companion to
+        // GetBridgeHeadTilePublic — returns the construction head's
+        // absolute world Z (not the tile-coord truncated value) so the
+        // grid cursor visual + bump-scroll can chase the bridge head
+        // up into the air when the user is building elevated paths.
+        // Mirrors the bridgeOrTunnel-only gating above.
+        std::optional<int32_t> GetBridgeHeadWorldZPublic() const
+        {
+            if (_footpathConstructionMode != PathConstructionMode::bridgeOrTunnel)
+                return std::nullopt;
+            return _footpathConstructFromPosition.z;
+        }
+
         // OPENRCT2MINI bug 2026-05-22: re-arm the tool widget that
         // corresponds to the current construction mode. Used by
         // InputManager::enterFocusModeOnTopmost so the user can
@@ -2879,6 +2892,16 @@ namespace OpenRCT2::Ui::Windows
         if (w == nullptr)
             return std::nullopt;
         return static_cast<const FootpathWindow*>(w)->GetBridgeHeadTilePublic();
+    }
+
+    // OPENRCT2MINI grid-cursor Z-follow: bridge head world Z accessor.
+    std::optional<int32_t> WindowFootpathGetBridgeHeadWorldZ()
+    {
+        auto* windowMgr = GetWindowManager();
+        WindowBase* w = windowMgr->FindByClass(WindowClass::footpath);
+        if (w == nullptr)
+            return std::nullopt;
+        return static_cast<const FootpathWindow*>(w)->GetBridgeHeadWorldZPublic();
     }
 
     // OPENRCT2MINI bug 2026-05-22: free-function bridge to

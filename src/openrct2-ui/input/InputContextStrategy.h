@@ -259,14 +259,21 @@ namespace OpenRCT2::Ui
     // across the screen. Each tool's onStep calls this after the
     // model step so edge-approaching D-pad presses recruit a pan
     // without every step glueing the cursor to viewport centre.
-    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY pos);
+    // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): optional
+    // explicit world Z. When provided, used as-is for the projection
+    // (and for WindowScrollToLocation) instead of TileElementHeight,
+    // so elevated track/bridge construction can recruit the camera
+    // when the head approaches a screen edge even while the terrain
+    // beneath is at ground level. Default nullopt = use terrain Z
+    // (existing behaviour).
+    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY pos, std::optional<int32_t> worldZ = std::nullopt);
 
     // OPENRCT2MINI grid-cursor-plan §18.4.d (2026-05-24): rect-centre
     // overload for multi-cell brushes. Projects the centre of the A/B
     // rect (instead of the anchor tile) so the camera follows the
     // brush footprint, keeping the full NxN highlight visible even
     // when the anchor sits near a viewport edge.
-    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY a, TileCoordsXY b);
+    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY a, TileCoordsXY b, std::optional<int32_t> worldZ = std::nullopt);
     // What the active strategy wants the dispatcher to do with this
     // shortcut event:
     //   - Passthrough: shortcut's action lambda fires as normal.
@@ -895,6 +902,18 @@ namespace OpenRCT2::Ui
         virtual std::optional<TileCoordsXY> getHeadTile() const { return std::nullopt; }
         virtual bool headFollowPreservesArrow() const { return false; }
         virtual void onHeadTileChanged(TileCoordsXY /*newHead*/) {}
+
+        // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): companion to
+        // getHeadTile() for tools whose head sits at an elevated world Z
+        // (ride / footpath bridge construction). When this returns a
+        // value, syncGridCursorToHead writes it to gMapSelectGridCursor-
+        // Z so the surface paint hook draws the highlight at that
+        // elevation (Paint.Surface.cpp), and also passes it to the
+        // bump-scroll projection so the camera follows the head up
+        // into the air. Default nullopt = paint at terrain Z and bump-
+        // scroll uses TileElementHeight (current behaviour for tools
+        // without an elevated head — Land, Water, Patrol, etc.).
+        virtual std::optional<int32_t> getHeadWorldZ() const { return std::nullopt; }
 
         // Sync the GridCursorModel position + MapSelect globals + camera
         // to the head returned by getHeadTile(). No-op if getHeadTile()

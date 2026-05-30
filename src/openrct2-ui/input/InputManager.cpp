@@ -1267,6 +1267,17 @@ namespace
             return Windows::WindowFootpathGetBridgeHeadTile();
         }
         bool headFollowPreservesArrow() const override { return true; }
+        // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): bridge head's
+        // world Z. Mirrors getHeadTile's bridgeBuild gating so the grid
+        // cursor highlight + bump-scroll only chase elevation while the
+        // user is actively extending a bridge — outside bridgeBuild the
+        // tool sits on terrain like a regular path tool.
+        std::optional<int32_t> getHeadWorldZ() const override
+        {
+            if (Windows::WindowFootpathGetInputMode() != Windows::FootpathInputMode::bridgeBuild)
+                return std::nullopt;
+            return Windows::WindowFootpathGetBridgeHeadWorldZ();
+        }
 
         // OPENRCT2MINI grid-cursor-plan §16: top-level verbs branch
         // on the Footpath window's current PathConstructionMode. Each
@@ -2482,6 +2493,15 @@ namespace
             return Windows::WindowRideConstructionGetHeadTile();
         }
         bool headFollowPreservesArrow() const override { return true; }
+        // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): track head's
+        // world Z (_currentTrackBegin.z), so the grid cursor visual +
+        // bump-scroll chase elevated track construction up into the
+        // air instead of staying glued to the terrain below. Returns
+        // nullopt in non-build states (matches getHeadTile's gate).
+        std::optional<int32_t> getHeadWorldZ() const override
+        {
+            return Windows::WindowRideConstructionGetHeadWorldZ();
+        }
 
         Disposition onPlace() override
         {

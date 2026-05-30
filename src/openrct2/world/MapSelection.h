@@ -76,6 +76,18 @@ extern CoordsXY gMapSelectPositionA;
 extern CoordsXY gMapSelectPositionB;
 extern CoordsXYZ gMapSelectArrowPosition;
 extern uint8_t gMapSelectArrowDirection;
+// OPENRCT2MINI grid-cursor Z-follow (2026-05-31): when set to a value
+// other than `kGridCursorZUseTerrain`, the gridCursor paint hook in
+// Paint.Surface.cpp draws the highlight as a free-standing paint struct
+// at this absolute world Z instead of attaching it to the surface tile
+// (terrain Z). Used by ride / footpath-bridge construction so the grid
+// cursor visual + bump-scroll anchor follow the construction head's
+// elevation rather than getting stuck at ground level. ToolContext::
+// syncGridCursorToHead is the canonical writer; the bottom-of-frame
+// reset in ToolContext::processFrame restores the terrain default when
+// the head-Z source is no longer providing one.
+constexpr int32_t kGridCursorZUseTerrain = INT32_MIN;
+extern int32_t gMapSelectGridCursorZ;
 
 MapRange getMapSelectRange();
 void setMapSelectRange(const MapRange& range);

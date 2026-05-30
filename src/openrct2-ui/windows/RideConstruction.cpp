@@ -5298,6 +5298,19 @@ namespace OpenRCT2::Ui::Windows
         return TileCoordsXY{ _currentTrackBegin };
     }
 
+    // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): companion accessor
+    // returning _currentTrackBegin.z so the grid cursor visual + bump-
+    // scroll chase the construction head's elevation. Same state gate
+    // as WindowRideConstructionGetHeadTile.
+    std::optional<int32_t> WindowRideConstructionGetHeadWorldZ()
+    {
+        if (_rideConstructionState != RideConstructionState::Front
+            && _rideConstructionState != RideConstructionState::Back
+            && _rideConstructionState != RideConstructionState::Selected)
+            return std::nullopt;
+        return _currentTrackBegin.z;
+    }
+
     // OPENRCT2MINI ride-construction-grid-cursor-plan §6.3 (Phase 2,
     // 2026-05-25): write the cursor's tile + Z into _currentTrackBegin
     // before the user commits the first piece in Place state. The

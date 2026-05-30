@@ -56,6 +56,7 @@
 #include <openrct2/scripting/ScriptEngine.h>
 #include <openrct2/ui/UiContext.h>
 #include <openrct2/ui/WindowManager.h>
+#include <openrct2/world/Map.h>           // OPENRCT2MINI grid-cursor Z-follow: TileElementHeight
 #include <openrct2/world/MapSelection.h>
 #include <openrct2/world/Location.hpp>
 #include <vector>
@@ -2186,7 +2187,28 @@ private:
                         int32_t extraZ = 0;
                         if (auto* tool = dynamic_cast<ToolContext*>(&strategy); tool != nullptr)
                             extraZ = tool->cursorParkZExtra(rectCentreInput);
-                        syncTo = ViewportInteractionMapToScreen(rectCentreInput, cursorZOffset + extraZ);
+                        // OPENRCT2MINI grid-cursor Z-follow (2026-05-31):
+                        // when the active context exposes an absolute
+                        // elevated head world Z (track / bridge build —
+                        // set by syncGridCursorToHead), drive the virtual
+                        // cursor sprite up to that Z so the EXISTING
+                        // single pointer naturally lands on the head
+                        // instead of dropping back to terrain. Compute
+                        // the offset relative to terrain at the tile
+                        // centre — ViewportInteractionMapToScreen adds
+                        // TileElementHeight back inside, so the offset
+                        // delta makes the projection resolve to the
+                        // absolute world Z we want. Overrides the
+                        // cursor-model Z + tool extraZ entirely — the
+                        // construction head is the source of truth.
+                        int32_t finalZOffset = cursorZOffset + extraZ;
+                        if (gMapSelectGridCursorZ != kGridCursorZUseTerrain)
+                        {
+                            const auto centre = rectCentreInput
+                                + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
+                            finalZOffset = gMapSelectGridCursorZ - TileElementHeight(centre);
+                        }
+                        syncTo = ViewportInteractionMapToScreen(rectCentreInput, finalZOffset);
                     }
                     else if (auto* edge = dynamic_cast<EdgeCursorModel*>(model); edge != nullptr)
                         syncTo = ViewportInteractionMapToScreen(edge->getPosition().ToCoordsXY(), cursorZOffset);
@@ -2224,13 +2246,28 @@ private:
                     ? CoordsXY{ (a.x + b.x) / 2, (a.y + b.y) / 2 }
                     : a;
                 const int32_t parkedExtraZ = _inputManager.getAnyRegisteredCursorParkZExtra(parkProbe);
+                // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): same
+                // elevated-head-Z override as the selectorActive branch
+                // above. The cursor sprite parks at the construction
+                // head's elevation even after the user has backed out
+                // of grid mode to widget-focus (the gMapSelect-
+                // GridCursorZ global outlives strategy switches and is
+                // refreshed each frame by syncGridCursorToHead while
+                // the construction context is alive).
+                int32_t parkedFinalZ = cursorZOffset + parkedExtraZ;
+                if (gMapSelectGridCursorZ != kGridCursorZUseTerrain)
+                {
+                    const auto centre = parkProbe
+                        + CoordsXY{ kCoordsXYHalfTile, kCoordsXYHalfTile };
+                    parkedFinalZ = gMapSelectGridCursorZ - TileElementHeight(centre);
+                }
                 if (a != b)
                 {
-                    syncTo = ViewportInteractionMapToScreen(parkProbe, cursorZOffset + parkedExtraZ);
+                    syncTo = ViewportInteractionMapToScreen(parkProbe, parkedFinalZ);
                 }
                 else
                 {
-                    syncTo = ViewportInteractionMapToScreen(a, cursorZOffset + parkedExtraZ);
+                    syncTo = ViewportInteractionMapToScreen(a, parkedFinalZ);
                 }
             }
             if (!syncTo.has_value())

@@ -265,6 +265,11 @@ namespace OpenRCT2::Ui::Windows
     // highlight in sync with the bridge head as segments are
     // extended / retracted / slope-adjusted.
     std::optional<TileCoordsXY> WindowFootpathGetBridgeHeadTile();
+    // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): companion accessor
+    // exposing the bridge head's absolute world Z, used by FootpathContext-
+    // Impl::getHeadWorldZ so the grid cursor visual + bump-scroll chase
+    // elevated bridge construction up into the air.
+    std::optional<int32_t> WindowFootpathGetBridgeHeadWorldZ();
 
     // OPENRCT2MINI bug 2026-05-22: re-arm the tool widget appropriate
     // for the Footpath window's current _footpathConstructionMode.
@@ -301,6 +306,11 @@ namespace OpenRCT2::Ui::Windows
 
     RideInputMode WindowRideConstructionGetInputMode();
     std::optional<TileCoordsXY> WindowRideConstructionGetHeadTile();
+    // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): companion accessor
+    // exposing _currentTrackBegin.z so RideConstructionContextImpl can
+    // tell the grid cursor visual + bump-scroll to chase elevated track
+    // construction.
+    std::optional<int32_t> WindowRideConstructionGetHeadWorldZ();
     bool WindowRideConstructionIsInBuildState();
     void WindowRideConstructionReArmForCurrentMode();
     // Phase 2 (initial placement): write the cursor's tile + Z into

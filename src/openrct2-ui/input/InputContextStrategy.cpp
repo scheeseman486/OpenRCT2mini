@@ -156,6 +156,11 @@ namespace OpenRCT2::Ui
         gMapSelectType = orientation;
         setMapSelectRange(world);
         MapInvalidateTileFull(world);
+        // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): non-head
+        // tools always paint the highlight on terrain. Reset the
+        // elevation override so a previous head-write from another
+        // context doesn't leak into the next write here.
+        gMapSelectGridCursorZ = kGridCursorZUseTerrain;
     }
 
     // OPENRCT2MINI grid-cursor-plan §18.4.b (2026-05-24): multi-cell
@@ -179,6 +184,10 @@ namespace OpenRCT2::Ui
         gMapSelectType = orientation;
         setMapSelectRange(MapRange{ worldA, worldB });
         MapInvalidateRegion(worldA, worldB);
+        // OPENRCT2MINI grid-cursor Z-follow: same reset as the single-
+        // tile path (multi-cell brushes are land/water/scenery/clear —
+        // all terrain-Z tools).
+        gMapSelectGridCursorZ = kGridCursorZUseTerrain;
     }
 
     // OPENRCT2MINI grid-cursor-plan §6.1: margin-aware camera anchor.
@@ -197,14 +206,19 @@ namespace OpenRCT2::Ui
     // cursor as inert. The margin gate fixes that — short steps now
     // move the highlight on screen; only edge-approaching steps
     // recruit the camera.
-    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY pos)
+    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY pos, std::optional<int32_t> worldZ)
     {
         auto* main = WindowGetMain();
         if (main == nullptr || main->viewport == nullptr)
             return;
         const auto& vp = *main->viewport;
         const auto worldXY = pos.ToCoordsXY();
-        const int32_t z = TileElementHeight(worldXY);
+        // OPENRCT2MINI grid-cursor Z-follow: prefer the caller-supplied
+        // world Z (track / bridge head) over terrain so elevated
+        // construction recruits the camera when its head nears a screen
+        // edge — otherwise the camera anchor stays glued to the surface
+        // below and high builds drift off screen.
+        const int32_t z = worldZ.value_or(TileElementHeight(worldXY));
         // Project the tile's centre to viewport-space pixel coords.
         // ContainsTile (Viewport.cpp:1103) uses the same formula —
         // tile centre + half-tile, then Translate3DTo2DWithZ. Stay
@@ -233,7 +247,7 @@ namespace OpenRCT2::Ui
     // across an NxN brush, but the centre tile's elevation is what
     // the user is targeting). Same edge-margin logic as the
     // single-tile overload; only the projected anchor differs.
-    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY a, TileCoordsXY b)
+    void ScrollMainWindowIfCursorNearEdge(TileCoordsXY a, TileCoordsXY b, std::optional<int32_t> worldZ)
     {
         auto* main = WindowGetMain();
         if (main == nullptr || main->viewport == nullptr)
@@ -246,7 +260,7 @@ namespace OpenRCT2::Ui
             ((a.x + b.x) * kCoordsXYStep) / 2 + kCoordsXYHalfTile,
             ((a.y + b.y) * kCoordsXYStep) / 2 + kCoordsXYHalfTile,
         };
-        const int32_t z = TileElementHeight(worldCentre);
+        const int32_t z = worldZ.value_or(TileElementHeight(worldCentre));
         const auto screen = Translate3DTo2DWithZ(vp.rotation, CoordsXYZ{ worldCentre, z });
         const int32_t marginVp = vp.zoom.ApplyTo(DiscreteStep::kViewportMargin);
         const int32_t left = vp.viewPos.x + marginVp;
@@ -1320,7 +1334,27 @@ namespace OpenRCT2::Ui
         gMapSelectType = MapSelectType::full;
         setMapSelectRange(world);
         MapInvalidateTileFull(world);
-        ScrollMainWindowIfCursorNearEdge(*head);
+        // OPENRCT2MINI grid-cursor Z-follow (2026-05-31): when the
+        // construction context exposes a head world Z (ride / footpath
+        // bridge build), write it to gMapSelectGridCursorZ so the
+        // surface paint hook lifts the grid cursor highlight to the
+        // head's elevation, and pass it to the bump-scroll projection
+        // so the camera follows the head when it nears a screen edge.
+        // Non-head tools (Land, Water, Patrol, etc.) return nullopt
+        // from getHeadWorldZ; the sentinel value below resets the
+        // global back to "use terrain Z" so this state doesn't leak
+        // across context switches (also invalidate the previous head
+        // tile so it repaints without the elevation marker).
+        const auto headZ = getHeadWorldZ();
+        if (headZ.has_value())
+        {
+            gMapSelectGridCursorZ = *headZ;
+        }
+        else
+        {
+            gMapSelectGridCursorZ = kGridCursorZUseTerrain;
+        }
+        ScrollMainWindowIfCursorNearEdge(*head, headZ);
     }
 
     void ToolContext::processFrame(uint32_t nowMs)

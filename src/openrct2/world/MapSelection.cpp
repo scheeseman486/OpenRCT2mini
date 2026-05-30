@@ -18,6 +18,10 @@ CoordsXY gMapSelectPositionA;
 CoordsXY gMapSelectPositionB;
 CoordsXYZ gMapSelectArrowPosition;
 uint8_t gMapSelectArrowDirection;
+// OPENRCT2MINI grid-cursor Z-follow: default = use terrain Z (existing
+// behaviour). Overridden by ToolContext::syncGridCursorToHead when a
+// construction context provides a head world Z.
+int32_t gMapSelectGridCursorZ = kGridCursorZUseTerrain;
 
 static std::vector<CoordsXY> _mapSelectionTiles;
 static bool _mapSelectionTilesInvalidate = false;
