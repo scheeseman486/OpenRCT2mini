@@ -573,8 +573,24 @@ namespace OpenRCT2::Ui::Windows
                 // Set current filename
                 String::set(_currentFilename, sizeof(_currentFilename), _defaultPath.c_str());
 
-                // Focus textbox
-                WindowStartTextbox(*this, WIDX_FILENAME_TEXTBOX, _currentFilename, sizeof(_currentFilename));
+                // OPENRCT2MINI 2026-05-29: open the standard TextInput
+                // sub-window for filename entry instead of binding the
+                // in-place caret to the bottom-edge textbox. At lower
+                // resolutions (Miyoo Mini 640×480) the OSK covers the
+                // bottom of the LoadSave window, hiding the in-place
+                // edit; routing through TextInput puts the field in a
+                // small sub-window that reliably fits above the OSK.
+                // Consistent with every other text entry in the engine
+                // (folder creation, park rename, etc.). The popup
+                // inherits LoadSave's colour palette automatically
+                // (TextInput.cpp:130-132 pulls parentWindow->colours[1]).
+                // Commit fires onTextInput(WIDX_FILENAME_TEXTBOX, text)
+                // which updates _currentFilename and lets the user
+                // press WIDX_SAVE — same handler that the legacy
+                // in-place edit used.
+                WindowTextInputRawOpen(
+                    this, WIDX_FILENAME_TEXTBOX, STR_FILEBROWSER_SAVE_BUTTON, STR_FILENAME_LABEL, {},
+                    _currentFilename, sizeof(_currentFilename));
             }
             else
             {
@@ -914,7 +930,13 @@ namespace OpenRCT2::Ui::Windows
                     break;
 
                 case WIDX_FILENAME_TEXTBOX:
-                    WindowStartTextbox(*this, widgetIndex, _currentFilename, sizeof(_currentFilename));
+                    // OPENRCT2MINI 2026-05-29: route filename entry through
+                    // the standard TextInput sub-window (matching the
+                    // on-open auto-activation path above) so it stays
+                    // visible above the OSK at low resolutions.
+                    WindowTextInputRawOpen(
+                        this, widgetIndex, STR_FILEBROWSER_SAVE_BUTTON, STR_FILENAME_LABEL, {}, _currentFilename,
+                        sizeof(_currentFilename));
                     break;
 
                 case WIDX_SAVE:
