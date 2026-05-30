@@ -2404,26 +2404,39 @@ namespace
         }
 
         // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30
-        // follow-up #2): lift the SOFTWARE-CURSOR picker sprite —
-        // the visible "pincers" graphic — to the same drop height
-        // the hanging peep sits at. SyncHiddenCursorParking
-        // (UiContext.cpp:2160) calls this hook with the cursor
-        // tile's world coord; the returned Z is added on top of
-        // the land-surface Z that ViewportInteractionMapToScreen
-        // uses by default. Peep::Place at Peep.cpp:678 sets the
-        // dropped peep's destination Z to surface.GetBaseZ() + 16
-        // (and then PeepState::falling animates the visible fall);
-        // mirror that constant here so the pincers and the peep's
-        // anchor line up on screen.
+        // follow-up #3): lift the SOFTWARE-CURSOR picker sprite —
+        // the visible "pincers" graphic — to its mouse-mode-equivalent
+        // position above the hanging peep.
         //
-        // worldCoord arg unused — peep pickup is always single-tile
-        // (no multi-cell brush, no water-vs-land sampling) so any
-        // tile-specific lookup would be redundant; the +16 is a
-        // pure relative offset from whatever land Z the projection
-        // already picked.
+        // Mouse mode (Guest.cpp:1022-1023 / Staff.cpp:712-713) draws
+        // the picker cursor at OS pointer (X, Y), with hotspot
+        // (15, 31) putting the pincers TIP at exactly that point.
+        // The peep is then drawn at (X - 1, Y + 16) — 16 screen
+        // pixels BELOW the pincers tip. The tile detection sampler
+        // also offsets by +16: FootpathGetCoordinatesFromPos
+        // ({screenCoords.x, screenCoords.y + 16}, ...). So the
+        // game-wide invariant for this tool: pincers tip is 16
+        // screen pixels above the peep's feet, the peep's feet
+        // are at the tile centre.
+        //
+        // SyncHiddenCursorParking (UiContext.cpp:2160) projects the
+        // cursor sprite at the tile-centre world coord plus this
+        // Z extra. WindowPeepPickupRefreshHangingSprite (Guest.cpp)
+        // already projects the peep at drop Z (surface + 16, per
+        // Peep::Place's `tileElement->GetBaseZ() + 16` at
+        // Peep.cpp:678). Translate3DTo2DWithZ has +1 world Z →
+        // -1 screen Y at zoom 1:1, so to get the picker 16 screen
+        // pixels above the peep we need 16 MORE world Z above the
+        // peep, i.e. +32 total above the surface. That matches
+        // the mouse-mode visual at default zoom; at other zooms
+        // the offset scales with zoom (acceptable — the mouse +16
+        // is a fixed cursor offset, not zoom-aware either).
+        //
+        // worldCoord unused — peep pickup is always single-tile and
+        // the constant doesn't depend on the tile.
         int32_t cursorParkZExtra(CoordsXY /*worldCoord*/) const override
         {
-            return 16;
+            return 32;
         }
     };
 
