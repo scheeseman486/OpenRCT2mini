@@ -382,6 +382,16 @@ namespace OpenRCT2::Ui::Windows
     // OpenRCT2::ToolCancel(), no extra helper needed.
     void WindowPeepPickupAtTile(TileCoordsXY tile);
 
+    // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30):
+    // pin the hanging-peep sprite + animation frame to the grid
+    // cursor tile. Mirror of Guest/Staff onToolUpdate's mouse-path
+    // sprite update — converts the tile's centre at surface Z to
+    // screen pixels, then sets gPickupPeepX/Y/Image so the peep
+    // dangles from the grid cursor instead of following the OS
+    // pointer. Called from PeepPickupContextImpl::processFrame.
+    // No-op when no peep window has pickup armed.
+    void WindowPeepPickupRefreshHangingSprite(TileCoordsXY tile);
+
     // GuestList
     WindowBase* GuestListOpen();
     WindowBase* GuestListOpenWithFilter(GuestListFilterType type, int32_t index);

@@ -2010,4 +2010,97 @@ namespace OpenRCT2::Ui::Windows
         });
         GameActions::Execute(&pickupAction, getGameState());
     }
+
+    // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30): pin
+    // the hanging-peep sprite + animation frame to the grid cursor
+    // tile. Mirror of the mouse path's onToolUpdateOverview sprite
+    // update (Guest.cpp:1016-1036 / Staff.cpp:706-726) — but driven
+    // every frame from PeepPickupContextImpl::processFrame instead
+    // of from SDL mouse-motion events, so the dangling peep follows
+    // the grid cursor instead of the (hidden) OS pointer.
+    //
+    // Position: tile centre at the SURFACE Z (the actual drop Z
+    // used by WindowPeepPickupAtTile), translated to screen pixels
+    // via Translate3DTo2DWithZ + viewport.pos/viewPos/zoom. We
+    // mirror the mouse path's `(screenX - 1, screenY + 16)` offset
+    // for visual continuity — that puts the peep's feet roughly at
+    // the highlighted tile centre, the same relative offset the
+    // mouse cursor would produce when hovering over the same tile.
+    //
+    // Image: walks the peep's `PeepAnimationType::hanging` clip,
+    // indexed by the window's existing `pickedPeepFrame` counter
+    // (still ticked at game-tick rate by the window's onUpdate so
+    // colours / frame timing stay byte-identical to the mouse path).
+    // Guest's onUpdate just adds `pickedPeepFrame >> 2` to the base
+    // image (assumes sequential layout) while Staff's uses
+    // `frameOffsets[]`; we discriminate via Peep::Is<Staff>() so the
+    // frame chosen on the grid-cursor path is the same one the
+    // window's own onToolUpdate would pick if the mouse were live.
+    //
+    // No-op when: no peep window is open, the open peep window
+    // isn't the one that armed pickup (gCurrentToolWidget guard),
+    // the tile has no surface, the main viewport / peep entity /
+    // animation object are unavailable. All defensively early-
+    // returned so we never write stale gPickupPeep* state.
+    void WindowPeepPickupRefreshHangingSprite(TileCoordsXY tile)
+    {
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return;
+        auto* w = windowMgr->FindByClass(WindowClass::peep);
+        if (w == nullptr)
+            return;
+        if (gCurrentToolWidget.windowClassification != WindowClass::peep
+            || gCurrentToolWidget.windowNumber != w->number)
+            return;
+
+        auto* surface = MapGetSurfaceElementAt(tile);
+        if (surface == nullptr)
+            return;
+        const int32_t surfaceZ = surface->GetBaseZ();
+
+        auto* mainWindow = WindowGetMain();
+        if (mainWindow == nullptr || mainWindow->viewport == nullptr)
+            return;
+        const auto* vp = mainWindow->viewport;
+
+        const auto worldCentre = CoordsXYZ{
+            tile.x * kCoordsXYStep + kCoordsXYHalfTile,
+            tile.y * kCoordsXYStep + kCoordsXYHalfTile,
+            surfaceZ,
+        };
+        const auto vpCoords = Translate3DTo2DWithZ(vp->rotation, worldCentre);
+        const int32_t screenX = vp->pos.x + vp->zoom.ApplyInversedTo(vpCoords.x - vp->viewPos.x);
+        const int32_t screenY = vp->pos.y + vp->zoom.ApplyInversedTo(vpCoords.y - vp->viewPos.y);
+
+        auto* peep = getGameState().entities.GetEntity<Peep>(EntityId::FromUnderlying(w->number));
+        if (peep == nullptr)
+            return;
+        auto& objManager = GetContext()->GetObjectManager();
+        auto* animObj = objManager.GetLoadedObject<PeepAnimationsObject>(peep->AnimationObjectIndex);
+        if (animObj == nullptr)
+            return;
+        const auto& pickupAnim = animObj->GetPeepAnimation(peep->AnimationGroup, PeepAnimationType::hanging);
+        const auto frameSlot = static_cast<size_t>(w->pickedPeepFrame >> 2);
+        uint32_t baseImageId;
+        if (peep->Is<Staff>())
+        {
+            const auto& offsets = pickupAnim.frameOffsets;
+            if (offsets.empty())
+                return;
+            baseImageId = pickupAnim.baseImage + offsets[frameSlot % offsets.size()];
+        }
+        else
+        {
+            baseImageId = pickupAnim.baseImage + static_cast<uint32_t>(frameSlot);
+        }
+
+        // Anchor: mirror the mouse path's `(x - 1, y + 16)` offset
+        // so the hanging peep sprite's feet land at the highlighted
+        // tile centre with the same visual padding the mouse cursor
+        // would produce when hovering over the same tile.
+        gPickupPeepX = screenX - 1;
+        gPickupPeepY = screenY + 16;
+        gPickupPeepImage = ImageId(baseImageId, peep->TshirtColour, peep->TrousersColour);
+    }
 } // namespace OpenRCT2::Ui::Windows

@@ -2379,6 +2379,29 @@ namespace
             }
             return ToolContext::onShortcut(id, e);
         }
+
+        // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30):
+        // pin the dangling-peep sprite to the grid cursor instead
+        // of the (hidden) OS pointer. The mouse path drives
+        // gPickupPeepX/Y/Image from onToolUpdate*, which only fires
+        // on SDL_MOUSEMOTION; in selectorMode::active there's no
+        // mouse motion, so without this poll the sprite freezes at
+        // the last mouse position (or never appears at all if the
+        // user armed pickup straight from focus mode).
+        //
+        // Call base processFrame first so all the ToolContext
+        // machinery (brush-size sync, precision-modifier edges,
+        // directional repeat-on-hold) still runs, then refresh the
+        // sprite from the grid cursor's current tile. The helper
+        // is the single canonical place that does the world->
+        // screen conversion at the actual drop Z (surface base Z)
+        // — same Z used by WindowPeepPickupAtTile's PeepPickupAction,
+        // so the visual matches the drop site.
+        void processFrame(uint32_t nowMs) override
+        {
+            ToolContext::processFrame(nowMs);
+            Windows::WindowPeepPickupRefreshHangingSprite(gridCursor().getPosition());
+        }
     };
 
     // OPENRCT2MINI ride-construction-grid-cursor-plan §5 (Phase 1, 2026-05-25):
