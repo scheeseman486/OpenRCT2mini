@@ -5251,6 +5251,31 @@ int32_t InputManager::getAnyRegisteredCursorZ() const
     return 0;
 }
 
+// OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30 follow-up #4):
+// parked-state companion to cursorParkZExtra. SyncHiddenCursorParking's
+// parked-path branches don't have an active ToolContext to query via
+// getActiveContextStrategy() (the active strategy in parked state is
+// widgetFocus), but the dormant ToolContext is still in the registry
+// and its cursorParkZExtra contract is a pure function of worldCoord.
+// Walk the registry, return the first non-zero result. Used to keep the
+// peep pickup pincers sprite at its +32 lift across the active→parked
+// transition.
+int32_t InputManager::getAnyRegisteredCursorParkZExtra(CoordsXY worldCoord) const
+{
+    for (const auto& slot : _contextRegistry)
+    {
+        if (slot == nullptr)
+            continue;
+        if (auto* tool = dynamic_cast<ToolContext*>(slot.get()); tool != nullptr)
+        {
+            const int32_t z = tool->cursorParkZExtra(worldCoord);
+            if (z != 0)
+                return z;
+        }
+    }
+    return 0;
+}
+
 // OPENRCT2MINI input-plan Track 3 / Phase 3.A: routing entry point.
 // Returns true if the active strategy consumed the shortcut and the
 // caller (ShortcutManager::processEvent) should suppress the action

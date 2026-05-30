@@ -2182,14 +2182,27 @@ private:
                 // selections (A == B) collapse to the existing behaviour.
                 const CoordsXY& a = gMapSelectPositionA;
                 const CoordsXY& b = gMapSelectPositionB;
+                // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30
+                // follow-up #4): parked-path mirror of the selectorActive
+                // branch's cursorParkZExtra call. Without this, the
+                // PeepPickupContextImpl's +32 pincers lift evaporates
+                // the moment the user backs out of grid mode to
+                // widgetFocus (the picker sprite snaps from drop+16 px
+                // above to drop+0). Walk the registry instead of the
+                // active strategy because the active strategy at this
+                // point is widgetFocus, not the dormant tool that
+                // owns the cursor parking.
+                const CoordsXY parkProbe = (a != b)
+                    ? CoordsXY{ (a.x + b.x) / 2, (a.y + b.y) / 2 }
+                    : a;
+                const int32_t parkedExtraZ = _inputManager.getAnyRegisteredCursorParkZExtra(parkProbe);
                 if (a != b)
                 {
-                    const CoordsXY rectCentreInput{ (a.x + b.x) / 2, (a.y + b.y) / 2 };
-                    syncTo = ViewportInteractionMapToScreen(rectCentreInput, cursorZOffset);
+                    syncTo = ViewportInteractionMapToScreen(parkProbe, cursorZOffset + parkedExtraZ);
                 }
                 else
                 {
-                    syncTo = ViewportInteractionMapToScreen(a, cursorZOffset);
+                    syncTo = ViewportInteractionMapToScreen(a, cursorZOffset + parkedExtraZ);
                 }
             }
             if (!syncTo.has_value())
@@ -2210,7 +2223,22 @@ private:
                         haveWorld = true;
                     }
                     if (haveWorld)
-                        syncTo = ViewportInteractionMapToScreen(worldXY, cursorZOffset);
+                    {
+                        // OPENRCT2MINI grid-cursor-plan §11.11 polish
+                        // (2026-05-30 follow-up #4): same registry walk
+                        // as the parked path above. This branch fires
+                        // when SelectorMode is active but neither map-
+                        // select flag is set (e.g. immediately after
+                        // activation, before the first cursor model
+                        // step has written gMapSelectPosition); we
+                        // still want the per-tool extra Z so the
+                        // initial-frame cursor parks at the lifted
+                        // height instead of dropping to ground then
+                        // jumping back up on the next frame.
+                        const int32_t fallbackExtraZ
+                            = _inputManager.getAnyRegisteredCursorParkZExtra(worldXY);
+                        syncTo = ViewportInteractionMapToScreen(worldXY, cursorZOffset + fallbackExtraZ);
+                    }
                 }
             }
             // Widget-focus fallback only when no tool is armed —
@@ -2243,6 +2271,56 @@ private:
                 _vcursorY = static_cast<float>(sy) * scale;
                 _vcursorLastIntX = sx;
                 _vcursorLastIntY = sy;
+            }
+
+            // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30
+            // follow-up #4): drive the hanging-peep sprite refresh
+            // from here too, so the peep continues to render and
+            // animate in BOTH selectorActive and parked states.
+            // PeepPickupContextImpl::processFrame already runs the
+            // helper when its strategy is the active one (selector-
+            // Active), but on park-to-widgetFocus the active strategy
+            // becomes WidgetFocusContextImpl and that hook stops
+            // firing — the peep would freeze mid-animation.
+            // SyncHiddenCursorParking runs every frame in both
+            // states and already does all the tile/Z bookkeeping
+            // we need, so this is the single canonical place that
+            // keeps the peep alive across the transition.
+            //
+            // pickedPeepFrame is still incremented every game tick
+            // by the peep window's own onUpdate (Guest.cpp:929 /
+            // Staff.cpp:677), so the animation timing matches the
+            // mouse path in both states; the helper just re-reads
+            // the current frame and writes the corresponding
+            // image + position.
+            //
+            // The helper checks gCurrentToolWidget internally and
+            // no-ops if the peep window isn't the one that armed
+            // pickup, so an unconditional call is safe — no need
+            // to gate on tool identity here.
+            if (gInputFlags.has(InputFlag::toolActive)
+                && gCurrentToolWidget.windowClassification == WindowClass::peep)
+            {
+                std::optional<TileCoordsXY> peepTile;
+                auto& strategy = _inputManager.getActiveContextStrategy();
+                if (auto* model = strategy.getCursorModel(); model != nullptr)
+                {
+                    if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                        peepTile = grid->getPosition();
+                }
+                // Parked fallback: active strategy is widgetFocus,
+                // its cursor model isn't Grid. Read from
+                // gMapSelectPositionA (CoordsXY world tile-start)
+                // which the dormant tool's grid cursor wrote on
+                // last step.
+                if (!peepTile.has_value()
+                    && gMapSelectFlags.has(MapSelectFlag::enable))
+                {
+                    const auto& a = gMapSelectPositionA;
+                    peepTile = TileCoordsXY{ a.x / kCoordsXYStep, a.y / kCoordsXYStep };
+                }
+                if (peepTile.has_value())
+                    Windows::WindowPeepPickupRefreshHangingSprite(*peepTile);
             }
         }
         _vSelectorActivePrev = selectorActive;

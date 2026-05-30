@@ -908,6 +908,28 @@ namespace OpenRCT2::Ui
         // the surface.
         int32_t getAnyRegisteredCursorZ() const;
 
+        // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30
+        // follow-up #4): walk every registered ToolContext for a
+        // non-zero cursorParkZExtra(worldCoord). Parallel to
+        // getAnyRegisteredCursorZ above but for the per-tool
+        // EXTRA Z offset (the constant that lifts e.g. the peep
+        // pickup pincers sprite above the drop height, or the
+        // water tool's cursor to the water surface). Needed
+        // because SyncHiddenCursorParking's parked-path branches
+        // (which run when the user backs out of grid mode to
+        // widgetFocus while the tool stays armed) don't have an
+        // active ToolContext to query via
+        // getActiveContextStrategy() — the active strategy at
+        // that moment is widgetFocus, not the tool. The tool is
+        // still in the registry, just dormant, but its
+        // cursorParkZExtra is a pure function of worldCoord
+        // (no per-instance state), so querying the dormant slot
+        // returns the same answer as querying it when active.
+        // Returns the FIRST non-zero value encountered; 0 when
+        // all tools return 0. Single-tool-at-a-time usage means
+        // first-non-zero is safe in practice.
+        int32_t getAnyRegisteredCursorParkZExtra(CoordsXY worldCoord) const;
+
         // OPENRCT2MINI input-plan Track 3 / Phase 3.A: routing entry.
         // Called from ShortcutManager::processEvent before firing a
         // matched binding's action lambda. The active strategy decides
