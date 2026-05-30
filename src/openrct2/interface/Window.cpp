@@ -895,17 +895,28 @@ static constexpr float kWindowScrollLocations[][2] = {
 
         auto* windowMgr = Ui::GetWindowManager();
 
+        // OPENRCT2MINI cut 29 follow-up (2026-05-30): drop the
+        // `std::max(640, width)` floor — toolbars should match the
+        // window width regardless of the user's chosen window size.
+        // The 640 floor was added back when window dims were hard-
+        // clamped to the Mini's panel; once that clamp went away,
+        // the floor became a hostile no-op that pushed toolbars
+        // OFF-SCREEN whenever the user picked a smaller window.
+        // SDL_SetWindowMinimumSize at UiContext.cpp:1356 still
+        // keeps the window itself at >= 640x480, so the toolbars
+        // are never asked to render at a width that would clip
+        // widgets.
         WindowBase* topWind = windowMgr->FindByClass(WindowClass::topToolbar);
         if (topWind != nullptr)
         {
-            topWind->width = std::max(640, width);
+            topWind->width = width;
         }
 
         WindowBase* bottomWind = windowMgr->FindByClass(WindowClass::bottomToolbar);
         if (bottomWind != nullptr)
         {
             bottomWind->windowPos.y = height - 32;
-            bottomWind->width = std::max(640, width);
+            bottomWind->width = width;
         }
     }
 

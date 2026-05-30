@@ -503,7 +503,21 @@ namespace OpenRCT2::Config
             // landing page is (none) — see noTitleSequence below — but the
             // RCT2 entry stays the per-sequence default so flipping the
             // dropdown out of (none) lands on something safe.
+            // OPENRCT2MINI host-restoration follow-up (2026-05-30): on host
+            // the upstream default sequence is "*OPENRCT2"; on Mini we
+            // keep the cut-42 "*RCT2" default so RAM-prohibitive sequences
+            // never get auto-loaded. This is only the fallback for when
+            // the embedded seed config and the user's disk config both
+            // omit the key — once either provides a value (Mini's seed
+            // ships "" → the runtime-default below; the appimage seed
+            // ships "" too currently), the seed value wins. Kept the
+            // explicit per-build defaults so a future seed change can't
+            // accidentally re-introduce the wrong default on either side.
+#ifdef OPENRCT2MINI
             model->currentTitleSequencePreset = reader->GetString("current_title_sequence", "*RCT2");
+#else
+            model->currentTitleSequencePreset = reader->GetString("current_title_sequence", "*OPENRCT2");
+#endif
             model->randomTitleSequence = reader->GetBoolean("random_title_sequence", false);
             // OPENRCT2MINI revision 67 / revision 69: default to the (none)
             // empty-park backdrop on fresh installs. Loading the RCT2 demo
@@ -1074,8 +1088,19 @@ namespace OpenRCT2::Config
 
     u8string GetDefaultPath()
     {
+        // OPENRCT2MINI host persistence follow-up (2026-05-30): route the
+        // save path through PathId::config so it matches PlatformEnvironment's
+        // load path (PlatformEnvironment.cpp:310 reads via PathId::config).
+        // The historical save path was DirBase::user + "config.ini", but on
+        // non-Android, non-Mini hosts DirBase::user and DirBase::config map
+        // to DIFFERENT platform dirs (SpecialFolder::userData vs userConfig
+        // — ~/.local/share/OpenRCT2 vs ~/.config/OpenRCT2 on Linux). The
+        // load side already used DirBase::config, so saves silently went to
+        // the wrong path and were never re-read on next launch. Mini and
+        // any caller that sets gCustomUserDataPath are unaffected because
+        // that override unifies user/config/cache to the same dir.
         auto& env = GetContext()->GetPlatformEnvironment();
-        return Path::Combine(env.GetDirectoryPath(DirBase::user), u8"config.ini");
+        return env.GetFilePath(PathId::config);
     }
 
     bool SaveToPath(u8string_view path)
