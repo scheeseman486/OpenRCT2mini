@@ -2402,6 +2402,29 @@ namespace
             ToolContext::processFrame(nowMs);
             Windows::WindowPeepPickupRefreshHangingSprite(gridCursor().getPosition());
         }
+
+        // OPENRCT2MINI grid-cursor-plan §11.11 polish (2026-05-30
+        // follow-up #2): lift the SOFTWARE-CURSOR picker sprite —
+        // the visible "pincers" graphic — to the same drop height
+        // the hanging peep sits at. SyncHiddenCursorParking
+        // (UiContext.cpp:2160) calls this hook with the cursor
+        // tile's world coord; the returned Z is added on top of
+        // the land-surface Z that ViewportInteractionMapToScreen
+        // uses by default. Peep::Place at Peep.cpp:678 sets the
+        // dropped peep's destination Z to surface.GetBaseZ() + 16
+        // (and then PeepState::falling animates the visible fall);
+        // mirror that constant here so the pincers and the peep's
+        // anchor line up on screen.
+        //
+        // worldCoord arg unused — peep pickup is always single-tile
+        // (no multi-cell brush, no water-vs-land sampling) so any
+        // tile-specific lookup would be redundant; the +16 is a
+        // pure relative offset from whatever land Z the projection
+        // already picked.
+        int32_t cursorParkZExtra(CoordsXY /*worldCoord*/) const override
+        {
+            return 16;
+        }
     };
 
     // OPENRCT2MINI ride-construction-grid-cursor-plan §5 (Phase 1, 2026-05-25):
