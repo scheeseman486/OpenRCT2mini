@@ -27,6 +27,9 @@
 # May 15 2026 evaluation pass).
 /plans/
 
+# Local agent-only notes — same pattern as /plans/. Stays out of git.
+/CLAUDE.md
+
 # Local game-data installs used for on-host testing. RCT1 / RCT2 are
 # Chris Sawyer / Atari / Infogrames property — not redistributable. The user
 # of an OpenRCT2mini build supplies their own legitimate copies (see readme.md).
