@@ -2189,10 +2189,77 @@ namespace OpenRCT2::Ui::Windows
                 return;
             }
 
-            // Steps F-H scope: PathItem now handled above; Wall /
-            // LargeScenery / Banner still to wire. Clear any stale
-            // ghost so tab-switching to those types in grid cursor
-            // mode doesn't leave a previous-type ghost stuck.
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step F (2026-06-01):
+            // Banner branch. Banners attach to one side of a footpath
+            // and need a direction (which side they face). Direction
+            // comes from gWindowSceneryRotation - GetCurrentRotation()
+            // (i.e. user's rotation selection, adjusted for viewport
+            // rotation). Z is path-derived, with a +2 step bump if the
+            // path is sloped AND the rotation isn't reverse of the
+            // slope direction (mirrors the mouse path's
+            // updatePlacementBanner at Scenery.cpp:3184-3223).
+            //
+            // Direction validity is implicit: if the user-selected
+            // rotation isn't one of the path's open sides, the place
+            // action rejects and the ghost simply doesn't appear —
+            // same UX as the mouse path. `tool.rotate` shortcut
+            // already lets the user cycle through directions.
+            if (selection.SceneryType == SCENERY_TYPE_BANNER)
+            {
+                const CoordsXY mapTile = cursorTileNw;
+
+                PathElement* pathElement = nullptr;
+                if (TileElement* el = MapGetFirstElementAt(mapTile); el != nullptr)
+                {
+                    do
+                    {
+                        pathElement = el->AsPath();
+                        if (pathElement != nullptr)
+                            break;
+                    } while (!(el++)->IsLastForTile());
+                }
+
+                gMapSelectFlags.set(MapSelectFlag::enable);
+                gMapSelectPositionA.x = mapTile.x;
+                gMapSelectPositionA.y = mapTile.y;
+                gMapSelectPositionB.x = mapTile.x;
+                gMapSelectPositionB.y = mapTile.y;
+                gMapSelectType = MapSelectType::full;
+
+                if (pathElement == nullptr)
+                {
+                    SceneryRemoveGhostToolPlacement();
+                    gSceneryPlaceCost = kMoney64Undefined;
+                    return;
+                }
+
+                uint8_t rotation = gWindowSceneryRotation;
+                rotation -= GetCurrentRotation();
+                rotation &= 0x3;
+
+                int32_t z = pathElement->GetBaseZ();
+                if (pathElement->IsSloped()
+                    && rotation != DirectionReverse(pathElement->GetSlopeDirection()))
+                {
+                    z += (2 * kCoordsZStep);
+                }
+
+                if ((gSceneryGhostType & SCENERY_GHOST_FLAG_4) && mapTile == gSceneryGhostPosition
+                    && z == gSceneryGhostPosition.z && rotation == gSceneryPlaceRotation)
+                {
+                    return;
+                }
+
+                SceneryRemoveGhostToolPlacement();
+                money64 cost = TryPlaceGhostBanner({ mapTile, z, rotation }, selection.EntryIndex);
+                gSceneryPlaceCost = cost;
+                return;
+            }
+
+            // Steps G-H scope: Wall / LargeScenery still to wire.
+            // Clear any stale ghost so tab-switching to those types in
+            // grid cursor mode doesn't leave a previous-type ghost
+            // stuck.
             if (selection.SceneryType != SCENERY_TYPE_SMALL)
             {
                 SceneryRemoveGhostToolPlacement();
@@ -3975,8 +4042,56 @@ namespace OpenRCT2::Ui::Windows
             return;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step F (2026-06-01):
+        // Banner commit dispatch. Mirrors onToolDownBanner
+        // (Scenery.cpp:3733-3756): find path under cursor, compute
+        // direction from gWindowSceneryRotation + viewport, dispatch
+        // BannerPlaceAction. The mouse callback opens the banner-
+        // naming dialog on success — we open that too. If the place
+        // action rejects (invalid direction for the path's open
+        // sides), the dispatch is a no-op (validation feedback is
+        // already visible via absent ghost from RefreshGhost).
+        if (selection.SceneryType == SCENERY_TYPE_BANNER)
+        {
+            const CoordsXY tile{ gMapSelectPositionA.x, gMapSelectPositionA.y };
+
+            PathElement* pathElement = nullptr;
+            if (TileElement* el = MapGetFirstElementAt(tile); el != nullptr)
+            {
+                do
+                {
+                    pathElement = el->AsPath();
+                    if (pathElement != nullptr)
+                        break;
+                } while (!(el++)->IsLastForTile());
+            }
+            if (pathElement == nullptr)
+                return;
+
+            uint8_t rotation = gWindowSceneryRotation;
+            rotation -= GetCurrentRotation();
+            rotation &= 0x3;
+
+            int32_t z = pathElement->GetBaseZ();
+            if (pathElement->IsSloped() && rotation != DirectionReverse(pathElement->GetSlopeDirection()))
+                z += (2 * kCoordsZStep);
+
+            CoordsXYZD loc{ tile, z, rotation };
+            auto bannerPlaceAction = GameActions::BannerPlaceAction(loc, selection.EntryIndex, _sceneryPrimaryColour);
+            bannerPlaceAction.SetCallback([](const GameActions::GameAction* ga, const GameActions::Result* result) {
+                if (result->error == GameActions::Status::ok)
+                {
+                    auto data = result->getData<GameActions::BannerPlaceActionResult>();
+                    Audio::Play3D(Audio::SoundId::placeItem, result->position);
+                    ContextOpenDetailWindow(WindowDetail::banner, data.bannerId.ToUnderlying());
+                }
+            });
+            GameActions::Execute(&bannerPlaceAction, getGameState());
+            return;
+        }
+
         if (selection.SceneryType != SCENERY_TYPE_SMALL)
-            return; // Steps F-H: Wall / LargeScenery / Banner not yet wired
+            return; // Steps G-H: Wall / LargeScenery not yet wired
 
         const auto* sceneryEntry = ObjectEntryManager::GetObjectEntry<SmallSceneryEntry>(selection.EntryIndex);
         if (sceneryEntry == nullptr)
