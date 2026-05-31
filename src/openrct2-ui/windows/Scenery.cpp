@@ -2121,11 +2121,78 @@ namespace OpenRCT2::Ui::Windows
                 return;
             }
 
-            // Step A scope: SmallScenery only. Clear any stale ghost
-            // from a previous SmallScenery selection so the user sees
-            // "nothing" (correct) rather than a sticky ghost from a
-            // previous frame when they tab away to a not-yet-wired
-            // type.
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step E (2026-06-01):
+            // PathItem branch. Path additions are full-tile, no Z
+            // gesture (Z derived from path under cursor), no rotation.
+            // Validation feedback is implicit: when there's no path
+            // under the cursor we clear the ghost and stale cost, and
+            // the user sees the grid-cursor highlight without an
+            // addition preview — same shape as the mouse path's
+            // onToolUpdatePathItem (Scenery.cpp:1896-1927).
+            if (selection.SceneryType == SCENERY_TYPE_PATH_ITEM)
+            {
+                const CoordsXY mapTile = cursorTileNw;
+
+                // Find ANY path element at this tile (any Z). Mouse
+                // path uses screen-coord raycast which picks the
+                // topmost via Z; for the grid cursor we don't have a
+                // ray, so we take the first one. Stacked-path tiles
+                // are rare in normal play; if the user wants to target
+                // a specific Z layer they can disengage grid cursor
+                // and use the mouse for that one click.
+                PathElement* pathElement = nullptr;
+                if (TileElement* el = MapGetFirstElementAt(mapTile); el != nullptr)
+                {
+                    do
+                    {
+                        pathElement = el->AsPath();
+                        if (pathElement != nullptr)
+                            break;
+                    } while (!(el++)->IsLastForTile());
+                }
+
+                // Highlight stays at the cursor tile (full-tile —
+                // overrides any quarter-tile leftover from a previous
+                // SmallScenery selection that WriteGridCursorSelection
+                // may have written).
+                gMapSelectFlags.set(MapSelectFlag::enable);
+                gMapSelectPositionA.x = mapTile.x;
+                gMapSelectPositionA.y = mapTile.y;
+                gMapSelectPositionB.x = mapTile.x;
+                gMapSelectPositionB.y = mapTile.y;
+                gMapSelectType = MapSelectType::full;
+
+                if (pathElement == nullptr)
+                {
+                    // No path here — clear any stale ghost from a
+                    // previous frame's valid placement so the user
+                    // sees "no addition preview" feedback rather than
+                    // a stuck ghost on the last valid tile.
+                    SceneryRemoveGhostToolPlacement();
+                    gSceneryPlaceCost = kMoney64Undefined;
+                    return;
+                }
+
+                const int32_t pathZ = pathElement->GetBaseZ();
+
+                // No-change shortcut — matches the mouse path's
+                // simpler check (no quadrant / rotation to compare).
+                if ((gSceneryGhostType & SCENERY_GHOST_FLAG_1) && mapTile == gSceneryGhostPosition
+                    && pathZ == gSceneryGhostPosition.z)
+                {
+                    return;
+                }
+
+                SceneryRemoveGhostToolPlacement();
+                money64 cost = TryPlaceGhostPathAddition({ mapTile, pathZ }, selection.EntryIndex);
+                gSceneryPlaceCost = cost;
+                return;
+            }
+
+            // Steps F-H scope: PathItem now handled above; Wall /
+            // LargeScenery / Banner still to wire. Clear any stale
+            // ghost so tab-switching to those types in grid cursor
+            // mode doesn't leave a previous-type ghost stuck.
             if (selection.SceneryType != SCENERY_TYPE_SMALL)
             {
                 SceneryRemoveGhostToolPlacement();
@@ -3871,8 +3938,45 @@ namespace OpenRCT2::Ui::Windows
         const auto selection = WindowSceneryGetTabSelection();
         if (selection.IsUndefined())
             return;
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step E (2026-06-01):
+        // PathItem commit dispatch. Mirrors onToolDownPathItem
+        // (Scenery.cpp:3286-3307): find the path under the cursor
+        // tile, dispatch FootpathAdditionPlaceAction at the path's
+        // Z. If there's no path under the cursor, the press is a
+        // no-op (validation feedback is already given by the absent
+        // ghost preview from RefreshGhostAtCursorPublic).
+        if (selection.SceneryType == SCENERY_TYPE_PATH_ITEM)
+        {
+            const CoordsXY tile{ gMapSelectPositionA.x, gMapSelectPositionA.y };
+
+            PathElement* pathElement = nullptr;
+            if (TileElement* el = MapGetFirstElementAt(tile); el != nullptr)
+            {
+                do
+                {
+                    pathElement = el->AsPath();
+                    if (pathElement != nullptr)
+                        break;
+                } while (!(el++)->IsLastForTile());
+            }
+            if (pathElement == nullptr)
+                return;
+
+            const int32_t pathZ = pathElement->GetBaseZ();
+            auto footpathAdditionPlaceAction = GameActions::FootpathAdditionPlaceAction(
+                { tile, pathZ }, selection.EntryIndex);
+            footpathAdditionPlaceAction.SetCallback(
+                [](const GameActions::GameAction* ga, const GameActions::Result* result) {
+                    if (result->error == GameActions::Status::ok)
+                        Audio::Play3D(Audio::SoundId::placeItem, result->position);
+                });
+            GameActions::Execute(&footpathAdditionPlaceAction, getGameState());
+            return;
+        }
+
         if (selection.SceneryType != SCENERY_TYPE_SMALL)
-            return; // Step A: SmallScenery only
+            return; // Steps F-H: Wall / LargeScenery / Banner not yet wired
 
         const auto* sceneryEntry = ObjectEntryManager::GetObjectEntry<SmallSceneryEntry>(selection.EntryIndex);
         if (sceneryEntry == nullptr)
