@@ -2238,37 +2238,12 @@ namespace OpenRCT2::Ui::Windows
                 // tool.rotate (cardinal cycle) and the precision-
                 // modifier override in SceneryContextImpl::onPrecisionDpad
                 // (held precision + D-pad direction → set rotation
-                // directly).
-                //
-                // Validity gate (2026-06-01 follow-up, user feedback):
-                // banners can only attach to a path side where the
-                // path actually extends (BannerPlaceAction validator:
-                // `pathElement->GetEdges() & (1 << worldDir)`). If
-                // the current world rotation isn't a valid side AND
-                // the path has at least one valid side, snap
-                // gWindowSceneryRotation to the first valid one.
-                // This (a) gives the user a visible default ghost on
-                // tiles where their previous rotation is invalid,
-                // and (b) keeps `tool.rotate` consumers in sync with
-                // the on-tile rotation invariant. When the path has
-                // NO valid sides (zero-edges, e.g. corrupt save data),
-                // we leave gWindowSceneryRotation alone and let the
-                // BannerPlaceAction ghost just fail silently.
-                uint8_t worldRot = (gWindowSceneryRotation - GetCurrentRotation()) & 0x3;
-                const uint8_t validEdges = pathElement->GetEdges() & 0x0F;
-                if (validEdges != 0 && !(validEdges & (1 << worldRot)))
-                {
-                    for (uint8_t d = 0; d < 4; d++)
-                    {
-                        if (validEdges & (1 << d))
-                        {
-                            worldRot = d;
-                            gWindowSceneryRotation = (d + GetCurrentRotation()) & 0x3;
-                            break;
-                        }
-                    }
-                }
-                const uint8_t rotation = worldRot;
+                // directly). Both gestures write through the single
+                // gWindowSceneryRotation global; the existing
+                // viewport-rotation subtraction stays.
+                uint8_t rotation = gWindowSceneryRotation;
+                rotation -= GetCurrentRotation();
+                rotation &= 0x3;
 
                 int32_t z = pathElement->GetBaseZ();
                 if (pathElement->IsSloped()

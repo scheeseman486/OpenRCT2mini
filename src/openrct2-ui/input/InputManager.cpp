@@ -2147,14 +2147,17 @@ namespace
                 // BannerPlaceAction uses — pressed direction must be
                 // one of the path's open sides
                 // (pathElement->GetEdges() bit). If the press would
-                // land on an invalid side, ignore it (cursor doesn't
+                // land on an invalid side, drop it (cursor doesn't
                 // move because precision suppresses cursor stepping,
-                // so a rejected press is just a no-op).
+                // so a rejected press is just a no-op). The existing
+                // gWindowSceneryRotation state is preserved.
                 //
                 // dpad is in SCREEN space (up=0=N visually). Convert
                 // to WORLD space the same way the dispatch path does:
                 // subtract GetCurrentRotation(). The validator's bit
-                // index is the WORLD direction.
+                // index is the WORLD direction. If validEdges is 0
+                // (no path or corrupt data), don't gate — let the
+                // press through and let BannerPlaceAction fail.
                 const uint8_t worldDir = (static_cast<uint8_t>(dpad) - OpenRCT2::GetCurrentRotation()) & 0x3;
                 const uint8_t validEdges = Windows::WindowSceneryBannerValidEdgesAtTile(currentCursorTileNw());
                 if (validEdges != 0 && !(validEdges & (1 << worldDir)))
