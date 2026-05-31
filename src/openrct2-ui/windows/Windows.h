@@ -668,6 +668,23 @@ namespace OpenRCT2::Ui::Windows
     // closed.
     bool WindowSceneryCurrentItemIsNonFullTileSmall();
 
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step F follow-up (2026-06-01):
+    // returns the bitmask of WORLD-SPACE directions where a banner can
+    // legally attach at the given tile. Same predicate the
+    // BannerPlaceAction validator uses: bit d set ↔ pathElement at the
+    // tile has GetEdges() bit d set (i.e. the path extends in that
+    // direction; banners hang across the path). Returns 0 when there's
+    // no path at the tile.
+    //
+    // World-space bits (camera-relative direction = world - GetCurrentRotation):
+    //   bit 0 → world N, bit 1 → world E, bit 2 → world S, bit 3 → world W.
+    //
+    // Used by SceneryContextImpl::onPrecisionDpad to reject invalid
+    // direction presses and by RefreshGhostAtCursorPublic to auto-snap
+    // gWindowSceneryRotation to a valid direction when the current one
+    // isn't legal for the path under the cursor.
+    uint8_t WindowSceneryBannerValidEdgesAtTile(CoordsXY tile);
+
     // SceneryScatter
     WindowBase* SceneryScatterOpen();
 
