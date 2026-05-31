@@ -2102,19 +2102,28 @@ namespace
         // so the user gets quadrant selection for free as part of D-pad
         // navigation — no modifier needed.
         //
-        // Returning SubsetType::none disables the precision picker
-        // entirely. Wall items (Step G) will reinstate it with
-        // SubsetType::edges since walls genuinely need a separate
-        // gesture for the side picker — there's no half-tile-cursor
-        // equivalent for "which side of the tile". Other scenery types
-        // (Path Item, Large, Banner) are full-tile and don't have a
-        // sub-tile pick.
+        // Wall items (Step G, upcoming) will use SubsetType::edges
+        // since walls genuinely need a separate gesture for the side
+        // picker — there's no half-tile-cursor equivalent for "which
+        // side of the tile".
+        //
+        // §11.4 Step F amendment (2026-06-01): Banner ALSO gets
+        // SubsetType::edges because banners attach to one side of a
+        // footpath — same shape as wall side selection. Holding
+        // precision + diagonal D-pad picks the side directly; tap-
+        // alone D-pad still steps the cursor between tiles. When the
+        // user hasn't picked a side, the banner ghost falls back to
+        // gWindowSceneryRotation (the user can still use tool.rotate
+        // for cardinal cycle if preferred).
         //
         // §18.4.e.1 (2026-05-24): subclass hook renamed
         // precisionSubsetForTool; base ToolContext::precisionSubset()
         // wraps it with the size > 1 gate.
         SubsetType precisionSubsetForTool() const override
         {
+            const auto sel = Windows::WindowSceneryGetTabSelection();
+            if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_BANNER)
+                return SubsetType::edges;
             return SubsetType::none;
         }
 
