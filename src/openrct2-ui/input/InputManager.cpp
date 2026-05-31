@@ -4180,62 +4180,70 @@ void InputManager::cycleFocusedWindow(int direction)
         WindowClass cls;
         bool isToolViewport;
     };
-    std::vector<CycleEntry> focusable;
-    focusable.reserve(gWindowList.size() + 1);
-    // OPENRCT2MINI window-set-plan §3.5: collapse set members into a
-    // single cycle stop. For each window in z-order, if it's part of
-    // a set we record the set's first member that's already been
-    // seen; otherwise we record its own class. De-duplication keeps
-    // each set / standalone window as one entry — cycle-next/prev
-    // moves between logical surfaces, not individual stickToFront /
-    // stickToBack siblings.
-    const auto alreadyInList = [&](WindowClass c) {
-        for (auto& x : focusable)
-            if (!x.isToolViewport && x.cls == c)
-                return true;
-        return false;
+
+    // OPENRCT2MINI focus-mode-plan §F.cycle (open-order stability):
+    // build the cycle list from _windowCycleOrder (a persistent open-
+    // order list of cycleable window classes) rather than walking
+    // gWindowList z-order. Each cycle call we first sync the list:
+    //   (a) remove entries whose backing window has closed,
+    //   (b) append any newly-opened focusable windows (set-deduped)
+    //       at the END.
+    // The cycle key for a window is its set's defaultClass when it
+    // belongs to a WindowSet, otherwise its own classification —
+    // matches the existing set-dedup rule so a set acts as one stop.
+    auto* windowMgrSync = GetWindowManager();
+    const auto cycleKeyFor = [](const WindowBase& w) -> WindowClass {
+        const auto* set = WidgetFocus::findSetFor(w.classification);
+        if (set != nullptr && set->defaultClass != WindowClass::null)
+            return set->defaultClass;
+        return w.classification;
+    };
+    const auto isFocusableForCycle = [](const WindowBase& w) {
+        if (w.flags.has(WindowFlag::dead))
+            return false;
+        if (w.classification == WindowClass::mainWindow)
+            return false;
+        if (WidgetFocus::isPurelyVisualWindow(w.classification))
+            return false;
+        return WidgetFocus::firstFocusable(w) != kWidgetIndexNull;
+    };
+    // (a) Prune closed/no-longer-focusable entries. Liveness is
+    // checked by FindByClass — sets resolve via the same canonical
+    // key (defaultClass) so a set's siblings closing doesn't remove
+    // the entry as long as the canonical class is still open.
+    if (windowMgrSync != nullptr)
+    {
+        _windowCycleOrder.erase(
+            std::remove_if(
+                _windowCycleOrder.begin(), _windowCycleOrder.end(),
+                [&](WindowClass cls) {
+                    auto* w = windowMgrSync->FindByClass(cls);
+                    return w == nullptr || !isFocusableForCycle(*w);
+                }),
+            _windowCycleOrder.end());
+    }
+    // (b) Append any newly-seen focusable windows in z-order — the
+    // first time we encounter a cycle key we don't yet know about,
+    // it gets the next slot in open order.
+    const auto knownInOrder = [&](WindowClass cls) {
+        return std::find(_windowCycleOrder.begin(), _windowCycleOrder.end(), cls)
+            != _windowCycleOrder.end();
     };
     for (auto& w : gWindowList)
     {
-        if (w == nullptr)
+        if (w == nullptr || !isFocusableForCycle(*w))
             continue;
-        if (w->flags.has(WindowFlag::dead))
-            continue;
-        if (w->classification == WindowClass::mainWindow)
-            continue;
-        // OPENRCT2MINI: skip purely visual windows (tooltip, map
-        // hover-identification overlay) so the window switcher
-        // never stops on them.
-        if (WidgetFocus::isPurelyVisualWindow(w->classification))
-            continue;
-        if (WidgetFocus::firstFocusable(*w) == kWidgetIndexNull)
-            continue;
-        WindowClass cycleCls = w->classification;
-        const auto* set = WidgetFocus::findSetFor(cycleCls);
-        if (set != nullptr)
-        {
-            // Skip if any earlier-seen entry is a sibling of this
-            // set — the set has already been added as a stop.
-            bool dup = false;
-            for (auto& x : focusable)
-            {
-                if (!x.isToolViewport && WidgetFocus::sameSetOrClass(x.cls, cycleCls))
-                {
-                    dup = true;
-                    break;
-                }
-            }
-            if (dup)
-                continue;
-            // Use the set's defaultClass as the canonical entry
-            // when present; the cycle-set focus picks it explicitly.
-            if (set->defaultClass != WindowClass::null)
-                cycleCls = set->defaultClass;
-        }
-        if (alreadyInList(cycleCls))
-            continue;
-        focusable.push_back({ cycleCls, false });
+        const auto key = cycleKeyFor(*w);
+        if (!knownInOrder(key))
+            _windowCycleOrder.push_back(key);
     }
+    // Build the cycle list — pure open-order, no virtual entries
+    // here (tool viewport sentinel handled below the same way as
+    // before).
+    std::vector<CycleEntry> focusable;
+    focusable.reserve(_windowCycleOrder.size() + 1);
+    for (auto cls : _windowCycleOrder)
+        focusable.push_back({ cls, false });
 
     // OPENRCT2MINI grid-cursor-plan §12.1 (amended): if a tool is
     // armed and a tool window is in the snapshot, insert the virtual

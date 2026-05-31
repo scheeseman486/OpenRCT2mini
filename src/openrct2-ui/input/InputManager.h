@@ -453,6 +453,26 @@ namespace OpenRCT2::Ui
         // a per-frame O(N) scan of the map.
         std::unordered_map<WindowClass, WidgetIndex> _focusMemory;
 
+        // OPENRCT2MINI focus-mode-plan §F.cycle (open-order stability):
+        // Persistent open-order list of cycleable window classes (set-
+        // deduped). Synced lazily by cycleFocusedWindow against the
+        // live gWindowList — entries for closed windows are removed,
+        // newly-opened focusable windows are APPENDED at the end. The
+        // index of each window stays stable as long as it remains
+        // open, regardless of z-order shuffling from BringToFront,
+        // user clicks, or any other reorder. This is what gives cycle
+        // next/prev a predictable 1→2→3→4→1 wraparound — the old code
+        // rebuilt the cycle list from gWindowList z-order on every
+        // step, which made cycle order depend on the very thing the
+        // cycle was changing.
+        //
+        // The actual cycle list presented to the user is the
+        // playfield virtual entry at slot 0, followed by every entry
+        // from _windowCycleOrder. Toolbar's set lands at slot 1
+        // naturally because it's the first window created at game
+        // start.
+        std::vector<WindowClass> _windowCycleOrder;
+
     public:
         // OPENRCT2MINI focus-mode-plan / Phase F.1: focus-mode toggle.
         // Called from the kInterfaceEnterFocusMode shortcut lambda
