@@ -2102,29 +2102,52 @@ namespace
         // so the user gets quadrant selection for free as part of D-pad
         // navigation — no modifier needed.
         //
-        // Wall items (Step G, upcoming) will use SubsetType::edges
-        // since walls genuinely need a separate gesture for the side
-        // picker — there's no half-tile-cursor equivalent for "which
-        // side of the tile".
+        // Returning SubsetType::none disables the precision picker
+        // entirely. Wall items (Step G) will reinstate it with
+        // SubsetType::edges since walls genuinely need a separate
+        // gesture for the side picker — there's no half-tile-cursor
+        // equivalent for "which side of the tile".
         //
-        // §11.4 Step F amendment (2026-06-01): Banner ALSO gets
-        // SubsetType::edges because banners attach to one side of a
-        // footpath — same shape as wall side selection. Holding
-        // precision + diagonal D-pad picks the side directly; tap-
-        // alone D-pad still steps the cursor between tiles. When the
-        // user hasn't picked a side, the banner ghost falls back to
-        // gWindowSceneryRotation (the user can still use tool.rotate
-        // for cardinal cycle if preferred).
+        // Banner uses a different precision-modifier semantic: not the
+        // sub-tile picker, but a direct rotation set via onPrecisionDpad
+        // override below. See that hook for the rationale.
         //
         // §18.4.e.1 (2026-05-24): subclass hook renamed
         // precisionSubsetForTool; base ToolContext::precisionSubset()
         // wraps it with the size > 1 gate.
         SubsetType precisionSubsetForTool() const override
         {
+            return SubsetType::none;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step F amendment
+        // (2026-06-01, user feedback): for Banner, the precision
+        // modifier sets rotation directly — held precision + D-pad
+        // cardinal maps to facing direction. Mirrors the conceptual
+        // "precision = fine-grained adjust" gesture without
+        // borrowing the sub-tile picker machinery from §11.2 Land
+        // (which would route through gMapSelectType + the diagonal-
+        // chord edge picker — overkill for banner rotation).
+        //
+        // Convention: D-pad up=0=N, right=1=E, down=2=S, left=3=W
+        // matches the dpad enum value. gWindowSceneryRotation is
+        // screen-relative (same way the Scenery window's rotate
+        // button cycles it); the existing banner branches do the
+        // `- GetCurrentRotation()` to get world-relative rotation
+        // before dispatch, so we don't need to compensate here.
+        //
+        // Other scenery types fall through to the base precision
+        // handler (no-op for SubsetType::none).
+        Disposition onPrecisionDpad(::Direction dpad) override
+        {
             const auto sel = Windows::WindowSceneryGetTabSelection();
             if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_BANNER)
-                return SubsetType::edges;
-            return SubsetType::none;
+            {
+                Windows::gWindowSceneryRotation = static_cast<uint8_t>(dpad) & 3;
+                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+                return Disposition::Consumed;
+            }
+            return ToolContext::onPrecisionDpad(dpad);
         }
 
         // OPENRCT2MINI grid-cursor-plan §11.4 Step B polish (2026-05-31):

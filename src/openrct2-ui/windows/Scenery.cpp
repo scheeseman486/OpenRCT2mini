@@ -2233,29 +2233,15 @@ namespace OpenRCT2::Ui::Windows
                     return;
                 }
 
-                // OPENRCT2MINI grid-cursor-plan §11.4 Step F amendment
-                // (2026-06-01): precision-modifier edge picker drives
-                // banner direction. The picker writes gMapSelectType
-                // as one of edge0..edge3 (via getMapSelectEdge);
-                // convert that to a direction (0..3). When the user
-                // hasn't picked (gMapSelectType isn't an edge value),
-                // fall back to gWindowSceneryRotation so the existing
-                // tool.rotate shortcut still works.
-                //
-                // Note: gMapSelectType "sticks" across cursor moves
-                // (WriteGridCursorSelection re-emits the picked
-                // orientation each frame). If users find this too
-                // sticky we can add reset logic, but for v1 it
-                // matches the wall picker pattern in §11.4.6.c.
-                uint8_t rotation;
-                if (gMapSelectType >= MapSelectType::edge0 && gMapSelectType <= MapSelectType::edge3)
-                {
-                    rotation = static_cast<uint8_t>(gMapSelectType) - static_cast<uint8_t>(MapSelectType::edge0);
-                }
-                else
-                {
-                    rotation = gWindowSceneryRotation;
-                }
+                // OPENRCT2MINI grid-cursor-plan §11.4 Step F (2026-06-01):
+                // rotation reads gWindowSceneryRotation. Driven by
+                // tool.rotate (cardinal cycle) and the precision-
+                // modifier override in SceneryContextImpl::onPrecisionDpad
+                // (held precision + D-pad direction → set rotation
+                // directly). Both gestures write through the single
+                // gWindowSceneryRotation global; the existing
+                // viewport-rotation subtraction stays.
+                uint8_t rotation = gWindowSceneryRotation;
                 rotation -= GetCurrentRotation();
                 rotation &= 0x3;
 
@@ -4090,21 +4076,12 @@ namespace OpenRCT2::Ui::Windows
             if (pathElement == nullptr)
                 return;
 
-            // OPENRCT2MINI grid-cursor-plan §11.4 Step F amendment
-            // (2026-06-01): mirror the ghost-side picker logic —
-            // precision-modifier edge pick (gMapSelectType in
-            // edge0..edge3 range) wins over gWindowSceneryRotation.
-            // Keeps commit direction in sync with the ghost preview
-            // the user just confirmed.
-            uint8_t rotation;
-            if (gMapSelectType >= MapSelectType::edge0 && gMapSelectType <= MapSelectType::edge3)
-            {
-                rotation = static_cast<uint8_t>(gMapSelectType) - static_cast<uint8_t>(MapSelectType::edge0);
-            }
-            else
-            {
-                rotation = gWindowSceneryRotation;
-            }
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step F (2026-06-01):
+            // rotation reads gWindowSceneryRotation. tool.rotate
+            // cycles cardinals; the precision-modifier override in
+            // SceneryContextImpl::onPrecisionDpad sets directly.
+            // Commit direction stays in sync with the ghost preview.
+            uint8_t rotation = gWindowSceneryRotation;
             rotation -= GetCurrentRotation();
             rotation &= 0x3;
 
