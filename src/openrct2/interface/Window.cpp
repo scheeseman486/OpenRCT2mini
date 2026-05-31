@@ -85,6 +85,9 @@ static constexpr float kWindowScrollLocations[][2] = {
     // because they're paint-time helpers too.
     static WindowBase* GetActiveWindowForEmphasis();
     static bool IsPlayfieldFocused();
+    // OPENRCT2MINI shade-ux-plan S-2: same shape — paint-time helper
+    // shared with the per-tick invalidator in WindowUpdateAll.
+    static const WindowBase* TopmostGhostBordered(const ScreenCoordsXY& cursor);
 
     std::vector<std::unique_ptr<WindowBase>>::iterator WindowGetIterator(const WindowBase* w)
     {
@@ -279,6 +282,47 @@ static constexpr float kWindowScrollLocations[][2] = {
                 GfxInvalidateScreen();
             }
             s_prevPlayfield = playfieldNow;
+
+            // OPENRCT2MINI shade-ux-plan S-2: ghost-border on-transition
+            // invalidation. Same shape as the active-window-shadow
+            // tracker above: identify the topmost shaded window whose
+            // pre-shade rect contains the cursor (matches the topmost-
+            // wins rule in DrawShadeGhostBorders), invalidate it AND
+            // the previous one whenever that selection changes.
+            // WindowBase::invalidate is extended to cover the ghost
+            // rect when shaded, so this single call cleans the old
+            // border pixels and dirties the new one. Other transitions
+            // (window drag, unshade, close) already call invalidate
+            // for their own reasons, so they piggyback for free —
+            // mirrors how the drop-shadow strips are cleaned up.
+            //
+            // Per-edge GfxSetDirtyBlocks was tried here and failed for
+            // the same reason it fails for the playfield outline (see
+            // comment block above) — narrow-strip dirty marks aren't
+            // reliable; the proven fix is to extend invalidate() and
+            // route everything through it.
+            static WindowClass s_prevGhostCls = static_cast<WindowClass>(255);
+            static int32_t s_prevGhostNum = 0;
+            const auto cursor = ContextGetCursorPositionScaled();
+            const auto* curGhost = TopmostGhostBordered(cursor);
+            const WindowClass curGhostCls = (curGhost != nullptr) ? curGhost->classification
+                                                                  : static_cast<WindowClass>(255);
+            const int32_t curGhostNum = (curGhost != nullptr) ? curGhost->number : 0;
+            if (curGhostCls != s_prevGhostCls || curGhostNum != s_prevGhostNum)
+            {
+                if (s_prevGhostCls != static_cast<WindowClass>(255))
+                {
+                    if (auto* old = windowManager->FindByNumber(s_prevGhostCls, s_prevGhostNum))
+                        old->invalidate();
+                }
+                if (curGhostCls != static_cast<WindowClass>(255))
+                {
+                    if (auto* cur = windowManager->FindByNumber(curGhostCls, curGhostNum))
+                        cur->invalidate();
+                }
+                s_prevGhostCls = curGhostCls;
+                s_prevGhostNum = curGhostNum;
+            }
         }
     }
 
@@ -1260,6 +1304,81 @@ static constexpr float kWindowScrollLocations[][2] = {
      * right (dx)
      * bottom (bp)
      */
+    // OPENRCT2MINI shade-ux-plan S-2: ghost border for shaded windows.
+    // Draws a 1-pixel halo around the pre-shade ("ghost") rect of the
+    // topmost shaded window the cursor currently overlaps. The recipe
+    // matches the playfield screen-edge highlight below — same fillInset
+    // signature, same white+outset+FillMode::none combo — because §1.7
+    // pins the visual to the active-window halo styling and the
+    // playfield outline IS that halo applied to a different rect.
+    //
+    // Topmost-wins: iterate gWindowList in reverse (back-to-front order
+    // means LAST = topmost) and break on first match. This mirrors the
+    // FindFromPoint walk used for input hit-testing, so the border
+    // lights up exactly the same window the user would expect a click
+    // on the ghost area to target (see S-3).
+    //
+    // "Any cursor" works because gCursorState.position (via
+    // ContextGetCursorPosition) is updated by SyncHiddenCursorParking
+    // for both the real OS mouse and the grid-cursor virtual sprite —
+    // a single screen-coord read covers all three sources per §1.4.
+    // OPENRCT2MINI shade-ux-plan S-2: returns the topmost shaded window
+    // whose ghost rect owns the cursor pixel — or nullptr if the cursor
+    // is over an opaque non-shaded window (which obscures any shaded
+    // window behind it), or over no window at all. Same "topmost wins"
+    // walk as FindFromPoint, but each window's effective hit rect is
+    // its ghost rect when shaded (so the body area of a shaded window
+    // still counts as belonging to it) and its current bounds when not.
+    // Used by both DrawShadeGhostBorders and the per-tick invalidator
+    // so they agree on which window (if any) is bordered.
+    //
+    // NOTE: WindowFlag::transparent is intentionally NOT a gate. See
+    // CLAUDE.md for the explanation.
+    static const WindowBase* TopmostGhostBordered(const ScreenCoordsXY& cursor)
+    {
+        for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
+        {
+            const auto& w = **it;
+            if (w.flags.has(WindowFlag::dead))
+                continue;
+            if (w.width <= 0)
+                continue;
+            // Effective hit rect: ghost rect when shaded, current
+            // bounds otherwise. Inclusive of the right/bottom edge to
+            // match getShadeGhostRect.
+            const int32_t left = w.windowPos.x;
+            const int32_t top = w.windowPos.y;
+            const int32_t right = w.windowPos.x + w.width;
+            const int32_t bottom = w.windowPos.y
+                + (w.isShaded ? w.shadeRestoreHeight : w.height);
+            if (cursor.x < left || cursor.x > right || cursor.y < top || cursor.y > bottom)
+                continue;
+            // Topmost owner found. Border this only if it's shaded —
+            // otherwise the cursor belongs to a non-shaded window
+            // covering the area, and any shaded window underneath
+            // should not light up.
+            return (w.isShaded && w.shadeRestoreHeight > 0) ? &w : nullptr;
+        }
+        return nullptr;
+    }
+
+    static void DrawShadeGhostBorders(Drawing::RenderTarget& rt)
+    {
+        // Game-canvas (unscaled) coords — same space as window rects.
+        // ContextGetCursorPosition() returns WINDOW pixels (multiplied
+        // by windowScale) and would never overlap any window rect.
+        const auto cursor = ContextGetCursorPositionScaled();
+        const auto* w = TopmostGhostBordered(cursor);
+        if (w == nullptr)
+            return;
+        Drawing::Rectangle::fillInset(
+            rt, w->getShadeGhostRect(),
+            ColourWithFlags{ Drawing::Colour::white },
+            Drawing::Rectangle::BorderStyle::outset,
+            Drawing::Rectangle::FillBrightness::light,
+            Drawing::Rectangle::FillMode::none);
+    }
+
     void WindowDrawAll(Drawing::RenderTarget& rt, int32_t left, int32_t top, int32_t right, int32_t bottom)
     {
         auto windowRT = rt.Crop({ left, top }, { right - left, bottom - top });
@@ -1303,6 +1422,11 @@ static constexpr float kWindowScrollLocations[][2] = {
                     Drawing::Rectangle::FillMode::none);
             }
         }
+        // OPENRCT2MINI shade-ux-plan S-2: ghost border for shaded
+        // windows. Draws AFTER the active-window shadow + playfield
+        // outline so it overlays anything beneath; sits at the same
+        // layer as the other halo features by design (§1.5 pattern B).
+        DrawShadeGhostBorders(windowRT);
     }
 
     void WindowInitAll()

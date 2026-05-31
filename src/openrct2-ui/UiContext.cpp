@@ -233,18 +233,57 @@ private:
         return true;
     }
 
+    // OPENRCT2MINI shade-ux-plan S-3: ghost-extended lookup for the
+    // shade-window shortcut. Same back-to-front walk as
+    // FindFromPoint (WindowManager.cpp:1207-1230), but each shaded
+    // window's hit rect expands to its pre-shade ("ghost") area. This
+    // way a click on the area where the unshaded body WOULD be
+    // toggles the window's shade — pairing with the §1 ghost border
+    // so the user can see and target the rest of the shaded window
+    // they just located.
+    //
+    // ONLY the shade-toggle shortcut uses this variant. General
+    // clicks, drags, viewport interactions stay on plain
+    // FindFromPoint — the ghost area is not a generally-interactive
+    // region, just a target for the shade dialog.
+    static WindowBase* FindFromPointIncludingGhost(const ScreenCoordsXY& p)
+    {
+        for (auto it = gWindowList.rbegin(); it != gWindowList.rend(); ++it)
+        {
+            auto& w = *it;
+            if (w->flags.has(WindowFlag::dead))
+                continue;
+            const auto rect = w->getShadeGhostRect();
+            if (p.x < rect.GetLeft() || p.x > rect.GetRight()
+                || p.y < rect.GetTop() || p.y > rect.GetBottom())
+                continue;
+            return w.get();
+        }
+        return nullptr;
+    }
+
     void ShadeWindowUnderCursor()
     {
-        auto* wm = GetWindowManager();
-        if (wm == nullptr)
-            return;
         // _cursorState.position is in scaled (game-canvas) pixels — same
         // coordinate space FindFromPoint compares against w->windowPos.
-        WindowBase* w = wm->FindFromPoint(_cursorState.position);
+        // Use the ghost-extended hit-test so the shortcut also fires
+        // when the cursor sits over the pre-shade rect of an already-
+        // shaded window (per S-3 / §2).
+        WindowBase* w = FindFromPointIncludingGhost(_cursorState.position);
         if (w == nullptr)
             return;
         if (!isShadableWindow(*w))
             return;
+        // OPENRCT2MINI shade-ux-plan S-6 / §3.8.4: if the user is
+        // manually unshading an auto-shaded window via this shortcut,
+        // mark it user-overridden so the per-frame auto-shade loop
+        // (S-5) doesn't re-shade it while the cursor still overlaps.
+        // Flag clears when the cursor leaves the rect (S-6 polish).
+        if (w->isShaded && w->autoShadedByGridCursor)
+        {
+            w->autoShadedByGridCursor = false;
+            w->userOverrodeAutoShade = true;
+        }
         w->toggleShade();
     }
 
@@ -2391,6 +2430,145 @@ private:
         _vSelectorActivePrev = selectorActive;
     }
 
+    // OPENRCT2MINI shade-ux-plan §3.5: classes ineligible for the
+    // grid-cursor auto-shade pass. Excludes pop-ups (error / tooltip /
+    // mapTooltip / dropdown), toolbars (top / bottom), modal dialogs
+    // (loadsave + its overwrite prompt, savePrompt, fire / demolish /
+    // trackDelete / resetShortcutKeys prompts, networkStatus,
+    // progressWindow, objectLoadError), and the on-screen input modals
+    // (osk, textinput). S-6 audit pass: kept the spec's verbatim list
+    // and added the other modal prompts found in WindowClasses.h since
+    // each is a transient confirmation overlay the user is actively
+    // engaging with — auto-shading would steal it from view.
+    static bool isAutoShadeEligible(const WindowBase& w)
+    {
+        switch (w.classification)
+        {
+            case WindowClass::error:
+            case WindowClass::tooltip:
+            case WindowClass::mapTooltip:
+            case WindowClass::dropdown:
+            case WindowClass::topToolbar:
+            case WindowClass::bottomToolbar:
+            case WindowClass::loadsave:
+            case WindowClass::loadsaveOverwritePrompt:
+            case WindowClass::savePrompt:
+            case WindowClass::firePrompt:
+            case WindowClass::demolishRidePrompt:
+            case WindowClass::trackDeletePrompt:
+            case WindowClass::resetShortcutKeysPrompt:
+            case WindowClass::networkStatus:
+            case WindowClass::progressWindow:
+            case WindowClass::objectLoadError:
+            case WindowClass::osk:
+            case WindowClass::textinput:
+                return false;
+            default:
+                if (w.flags.has(WindowFlag::noTitleBar))
+                    return false;
+                return true;
+        }
+    }
+
+    // OPENRCT2MINI shade-ux-plan §3.4 / S-4+S-5+S-6: per-frame
+    // grid-cursor auto-shade. When the user is driving a tool's grid
+    // cursor over the playfield, eligible windows the cursor overlaps
+    // auto-shade and re-expand when the cursor leaves. When the
+    // gate goes off (focus mode, world mode, OSK, parked, etc.),
+    // every window previously auto-shaded reverts to its expanded
+    // state in one pass — per user spec 2026-06-01.
+    //
+    // Gate: active InputContext is a tool context AND SelectorMode is
+    // active. SelectorMode alone is NOT enough — it's also true in
+    // focus mode (widget navigation), and in focus mode _cursorState.
+    // position is a stale grid-cursor world-tile projection from
+    // SyncHiddenCursorParking that has nothing to do with the focus
+    // ring's screen position. So we'd shade random windows the
+    // user's actual on-screen attention isn't anywhere near.
+    //
+    // Overlap test uses the ghost rect (= pre-shade footprint when
+    // shaded, current bounds when not) so an auto-shaded window stays
+    // shaded while the cursor sits anywhere within the area the
+    // expanded window WOULD cover. Without this, the cursor crossing
+    // out of the collapsed title bar's bounds would immediately
+    // unshade — and re-shade as soon as the cursor re-entered the
+    // expanded body, jittering forever.
+    //
+    // userOverrodeAutoShade (S-6 / §3.8.4): if the user manually
+    // unshades an auto-shaded window via the §2 shade shortcut while
+    // the cursor still overlaps, suppress re-shade until the cursor
+    // leaves the rect once. ShadeWindowUnderCursor sets this flag.
+    static bool isGridCursorContext(InputContext ctx)
+    {
+        switch (ctx)
+        {
+            case InputContext::toolFootpath:
+            case InputContext::toolTerrain:
+            case InputContext::toolWater:
+            case InputContext::toolScenery:
+            case InputContext::toolLandRights:
+            case InputContext::toolTileInspector:
+            case InputContext::toolRideConstruction:
+            case InputContext::toolClearScenery:
+            case InputContext::toolPatrol:
+            case InputContext::toolPeepPickup:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    void ProcessGridCursorAutoShade()
+    {
+        const bool gateOn = isGridCursorContext(_inputManager.getActiveContext())
+            && _inputManager.getSelectorMode() == InputManager::SelectorMode::active;
+        const auto cursor = _cursorState.position;
+        for (auto& upW : gWindowList)
+        {
+            WindowBase& w = *upW;
+            if (w.flags.has(WindowFlag::dead))
+                continue;
+            if (!isAutoShadeEligible(w))
+                continue;
+            // Gate off (focus mode, world mode, OSK, parked, etc.):
+            // revert any windows the auto-shade owns.
+            if (!gateOn)
+            {
+                if (w.isShaded && w.autoShadedByGridCursor)
+                {
+                    w.autoShadedByGridCursor = false;
+                    w.userOverrodeAutoShade = false;
+                    w.toggleShade();
+                }
+                continue;
+            }
+            // Active grid-cursor tool: overlap test against the ghost rect.
+            const auto rect = w.getShadeGhostRect();
+            const bool overlap = cursor.x >= rect.GetLeft() && cursor.x <= rect.GetRight()
+                && cursor.y >= rect.GetTop() && cursor.y <= rect.GetBottom();
+            if (overlap)
+            {
+                if (!w.isShaded && !w.userOverrodeAutoShade)
+                {
+                    w.toggleShade();
+                    w.autoShadedByGridCursor = true;
+                }
+            }
+            else
+            {
+                // Cursor left the rect — clear the manual-override
+                // sticky gate so the next entry can re-engage
+                // auto-shade normally.
+                w.userOverrodeAutoShade = false;
+                if (w.isShaded && w.autoShadedByGridCursor)
+                {
+                    w.autoShadedByGridCursor = false;
+                    w.toggleShade();
+                }
+            }
+        }
+    }
+
     void ProcessVirtualGamepadCursor()
     {
         // OPENRCT2MINI cursor-sync follow-up #4: run the sync
@@ -2399,6 +2577,10 @@ private:
         // ProcessWorldCursor). Safe to run in any context — the
         // method is gated internally on selectorActive.
         SyncHiddenCursorParking();
+        // OPENRCT2MINI shade-ux-plan S-4/S-5: per-frame auto-shade.
+        // Runs after SyncHiddenCursorParking so the cursor position
+        // reflects this frame's grid-cursor screen projection (§3.4).
+        ProcessGridCursorAutoShade();
         switch (_inputManager.getActiveContext())
         {
             // OPENRCT2MINI osk-overhaul bug-fix §D: route the OSK

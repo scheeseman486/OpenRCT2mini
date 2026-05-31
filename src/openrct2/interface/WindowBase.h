@@ -120,10 +120,30 @@ namespace OpenRCT2
         // WidgetFlag::shadeHidden on every body widget. The three restore*
         // fields capture the pre-shade dimensions so toggleShade() can put
         // them back. Defaults to false; opens always show fully expanded.
+        //
+        // OPENRCT2MINI shade-ux-plan S-1: width is NOT saved — toggleShade
+        // and resizeFrame leave `width` untouched (the shaded title bar
+        // stays as wide as the un-shaded body). The pre-shade "ghost" rect
+        // — used by the shade-ux ghost border (§1) and the extended
+        // shade-toggle hit-test (§2) — is therefore
+        // `{ windowPos.x, windowPos.y, width, shadeRestoreHeight }`. The
+        // helper getShadeGhostRect() returns this; see shade-ux-plan.md
+        // §1.3/§1.4.
+        // OPENRCT2MINI shade-ux-plan S-4: autoShadedByGridCursor records
+        // whether THIS shade was triggered by the grid-cursor auto-shade
+        // path (rather than a manual shade-toggle). Distinguishes auto-
+        // from manual-shade so auto-unshade only reverts windows it owns.
         bool isShaded{ false };
         int16_t shadeRestoreHeight{ 0 };
         int16_t shadeRestoreMinHeight{ 0 };
         int16_t shadeRestoreMaxHeight{ 0 };
+        bool autoShadedByGridCursor{ false };
+        // OPENRCT2MINI shade-ux-plan §3.8.4 / S-6: set when the user
+        // manually unshades an auto-shaded window via the §2 shade
+        // shortcut while the grid cursor still overlaps. Suppresses the
+        // per-frame auto-shade re-engagement until the cursor leaves
+        // the window's rect, then clears.
+        bool userOverrodeAutoShade{ false };
 
         void setViewportLocation(const CoordsXYZ& coords);
         void invalidate();
@@ -133,6 +153,13 @@ namespace OpenRCT2
         // OPENRCT2MINI W5: flip isShaded and trigger a resizeFrame().
         // Saves/restores height fields around the toggle.
         void toggleShade();
+        // OPENRCT2MINI shade-ux-plan S-1: pre-shade ("ghost") rect in
+        // screen coords. Defined only when isShaded; returns
+        // { windowPos.x, windowPos.y, width, shadeRestoreHeight }.
+        // Width persists through shade so we read it from the live
+        // `width` field. When not shaded, falls back to the live
+        // bounds so the helper is always callable.
+        ScreenRect getShadeGhostRect() const;
 
         int16_t getTitleBarTargetHeight() const;
         int16_t getTitleBarCurrentHeight() const;

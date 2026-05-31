@@ -7,6 +7,8 @@
 #include "Cursors.h"
 #include "Viewport.h"
 
+#include <algorithm>
+
 namespace OpenRCT2
 {
     void WindowBase::setViewportLocation(const CoordsXYZ& coords)
@@ -36,8 +38,17 @@ namespace OpenRCT2
         // (plan §5.2 verification).
         constexpr int32_t kShadowOffX = 1;
         constexpr int32_t kShadowOffY = 2;
+        // OPENRCT2MINI shade-ux-plan S-2: when shaded, extend the
+        // dirty rect down to shadeRestoreHeight so the ghost border
+        // strips (drawn at the pre-shade extent by
+        // DrawShadeGhostBorders) get cleaned up on every invalidate
+        // call. Same shape as the drop-shadow extension above: any
+        // event that already invalidates the window (drag, close,
+        // z-order change, shade toggle, focus change) auto-covers the
+        // overlay region for free.
+        const int32_t effectiveHeight = isShaded ? std::max<int32_t>(height, shadeRestoreHeight) : height;
         GfxSetDirtyBlocks(
-            { windowPos, windowPos + ScreenCoordsXY{ width + kShadowOffX, height + kShadowOffY } });
+            { windowPos, windowPos + ScreenCoordsXY{ width + kShadowOffX, effectiveHeight + kShadowOffY } });
     }
 
     void WindowBase::removeViewport()
@@ -328,6 +339,21 @@ namespace OpenRCT2
         invalidate();
         resizeFrame();
         invalidate();
+    }
+
+    // OPENRCT2MINI shade-ux-plan S-1: pre-shade rect in screen coords.
+    // When shaded, the rect spans { windowPos, width, shadeRestoreHeight }
+    // — width persists through shade (the title bar stays as wide as the
+    // un-shaded body), so we read the live `width` field rather than save
+    // it pre-shade. When not shaded, return the live bounds so callers
+    // (e.g. the ghost-border overlay) can use this unconditionally.
+    ScreenRect WindowBase::getShadeGhostRect() const
+    {
+        const int16_t ghostH = isShaded ? shadeRestoreHeight : height;
+        return ScreenRect{
+            windowPos,
+            ScreenCoordsXY{ windowPos.x + width, windowPos.y + ghostH },
+        };
     }
 
     int16_t WindowBase::getTitleBarTargetHeight() const
