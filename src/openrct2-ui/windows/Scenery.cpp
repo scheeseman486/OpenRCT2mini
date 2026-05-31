@@ -4242,6 +4242,25 @@ namespace OpenRCT2::Ui::Windows
     // Returns false when the Scenery window isn't open, no item is
     // selected, the selected type isn't SmallScenery, or the item
     // lacks the stackable flag. True only when all four checks pass.
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step F follow-up (2026-06-01):
+    // public exporter for the BannerPlaceAction's path-edge predicate.
+    // Returns the path's lower-4 bits of GetEdges() (the WORLD-SPACE
+    // directions a banner can legally attach in) for the path at the
+    // given tile. 0 if no path. Caller compares with `1 << worldDir` to
+    // test a single direction, or iterates to find the first valid.
+    uint8_t WindowSceneryBannerValidEdgesAtTile(CoordsXY tile)
+    {
+        TileElement* el = MapGetFirstElementAt(tile);
+        if (el == nullptr)
+            return 0;
+        do
+        {
+            if (auto* path = el->AsPath(); path != nullptr)
+                return path->GetEdges() & 0x0F;
+        } while (!(el++)->IsLastForTile());
+        return 0;
+    }
+
     bool WindowSceneryCurrentItemIsStackable()
     {
         auto* windowMgr = GetWindowManager();
