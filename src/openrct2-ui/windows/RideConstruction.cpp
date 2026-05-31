@@ -1162,6 +1162,13 @@ namespace OpenRCT2::Ui::Windows
                     // — the big preview is the user's "go to the world"
                     // affordance. Mouse/virtual cursor click stays as
                     // Construct() since those paths aren't in widgetFocus.
+                    //
+                    // The widgetFocus check is correct after the
+                    // 2026-06-01 InputManager fix that gates the
+                    // bootstrap focus snap on !_lastInputWasRealMouse —
+                    // mouse users no longer get focus spuriously set, so
+                    // resolveActiveContext returns world for them and
+                    // this branch is gamepad-only.
                     if (OpenRCT2::Ui::GetInputManager().getActiveContext()
                         == OpenRCT2::Ui::InputContext::widgetFocus)
                     {

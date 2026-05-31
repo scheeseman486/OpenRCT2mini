@@ -5053,7 +5053,22 @@ void InputManager::process()
         }
 
         _lastTopmostFocusable = topmostFocusableCls;
-        if (shouldBeFocused && (_focusedWindowClass == WindowClass::null || topmostChanged))
+        // OPENRCT2MINI 2026-06-01 (user report): gate auto-snap on
+        // !_lastInputWasRealMouse, mirroring the selector auto-wake
+        // gate a few lines above. widgetFocusAlwaysOn defaults to true,
+        // so without this gate every real-mouse user gets focus snapped
+        // onto whatever window they just opened — which makes
+        // resolveActiveContext return widgetFocus, and any widget
+        // handler that gates on widgetFocus (e.g. WIDX_CONSTRUCT in
+        // RideConstruction / Footpath) takes its gamepad branch on a
+        // mouse click. The right semantic for `widgetFocusAlwaysOn`:
+        // focus is *available* without first pressing TAB, but doesn't
+        // *engage* until the user takes a non-cursor action.
+        // enterFocusModeRequested clears _lastInputWasRealMouse, so
+        // pressing TAB / focus.confirm still bootstraps focus the same
+        // frame.
+        if (shouldBeFocused && !_lastInputWasRealMouse
+            && (_focusedWindowClass == WindowClass::null || topmostChanged))
         {
             // Strict-z-order rule: focus the TOPMOST window with at
             // least one focusable widget. Nothing more. gWindowList's
