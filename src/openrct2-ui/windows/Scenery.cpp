@@ -2076,6 +2076,227 @@ namespace OpenRCT2::Ui::Windows
             gSceneryPlaceCost = cost;
         }
 
+    public:
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step A (2026-05-31): refresh
+        // the SmallScenery placement ghost at the grid cursor's tile. The
+        // mouse-driven onToolUpdate dispatcher (called from ProcessMouseTool
+        // every time the SDL mouse moves) is intentionally gated OFF in
+        // grid cursor mode (MouseInput.cpp:1490-1526 — three early-return
+        // checks for isToolFocusSelected, gridCursorParked, and gridCursor)
+        // so it doesn't clobber gMapSelectPositionA. That gates off the
+        // ghost refresh too, hence this dedicated entry point for the
+        // grid cursor path. Mirrors FootpathWindow::SetProvisionalAt-
+        // TilePublic (Footpath.cpp:2058) which solves the same problem
+        // for the footpath ghost. Must be public so the namespace-level
+        // WindowSceneryRefreshGhostAtCursor() free function can call it.
+        //
+        // The body is a tile-coords-direct equivalent of
+        // onToolUpdateSmallScenery (skipping the screen-pos → tile +
+        // shift-stack Z resolution dance from updatePlacementSmallScenery
+        // because the grid cursor has already done both). Quadrant
+        // defaults to NE; precision-modifier sub-tile picking arrives
+        // in Step B. Rotation comes from gWindowSceneryRotation (or
+        // a fresh UtilRand() for !isRotatable items, matching the
+        // mouse path at Scenery.cpp:2594-2597). Z stays at
+        // gSceneryPlaceZ (0 baseline until Step C wires shift-stack).
+        //
+        // Step A: SmallScenery only. Other four scenery types just
+        // clear any stale ghost so switching tabs in grid cursor mode
+        // doesn't leave a stale small-scenery ghost from before the
+        // tab change. Per-type wiring arrives in Steps E-H.
+        void RefreshGhostAtCursorPublic(CoordsXY cursorTileNw)
+        {
+            gMapSelectFlags.unset(MapSelectFlag::enableConstruct);
+
+            if (_sceneryPaintEnabled || gWindowSceneryEyedropperEnabled)
+            {
+                SceneryRemoveGhostToolPlacement();
+                return;
+            }
+
+            const auto selection = getTabSelection();
+            if (selection.IsUndefined())
+            {
+                SceneryRemoveGhostToolPlacement();
+                return;
+            }
+
+            // Step A scope: SmallScenery only. Clear any stale ghost
+            // from a previous SmallScenery selection so the user sees
+            // "nothing" (correct) rather than a sticky ghost from a
+            // previous frame when they tab away to a not-yet-wired
+            // type.
+            if (selection.SceneryType != SCENERY_TYPE_SMALL)
+            {
+                SceneryRemoveGhostToolPlacement();
+                return;
+            }
+
+            const auto* sceneryEntry = ObjectEntryManager::GetObjectEntry<SmallSceneryEntry>(selection.EntryIndex);
+            if (sceneryEntry == nullptr)
+            {
+                SceneryRemoveGhostToolPlacement();
+                return;
+            }
+
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step D fix (2026-05-31):
+            // use the caller-supplied cursor tile as the centre. Earlier
+            // code read mapTile from gMapSelectPositionA — broken in
+            // scatter mode because A was an expanded scatter rect NW
+            // corner, not the cursor tile. Each refresh re-shifted the
+            // rect by clusterHalf. Plumbing the cursor tile through
+            // explicitly keeps the centre stable across refreshes.
+            const CoordsXY mapTile = cursorTileNw;
+
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step C fix (2026-05-31):
+            // recompute gSceneryPlaceZ from the CURRENT tile's terrain
+            // surface + the accumulated shift offset. Mirrors mouse path
+            // updatePlacementSmallScenery (Scenery.cpp:2545-2563): when
+            // shift isn't held, Z is 0 (the action places at the
+            // terrain surface for that tile); when shift is held with
+            // a non-zero offset, Z is the absolute world Z = terrain +
+            // offset.
+            //
+            // Critical for the grid cursor path because the cursor
+            // traverses tiles with varying terrain — an absolute Z
+            // that was valid on tile A may be UNDERGROUND on tile B if
+            // B's terrain is higher. Recomputing per-frame keeps the
+            // placement floating consistently above terrain across
+            // cursor moves.
+            //
+            // User report 2026-05-31: "Sometimes the Z position of
+            // sub-grid objects gets set to be underground after
+            // traversing to another cell" — exact signature of the
+            // stale-absolute-Z bug.
+            if (gSceneryShiftPressed && gSceneryShiftPressZOffset != 0)
+            {
+                auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
+                if (surfaceElement != nullptr)
+                {
+                    const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+                    constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
+                    gSceneryPlaceZ = std::clamp<int16_t>(
+                        surfZ + gSceneryShiftPressZOffset, 16, kZMax);
+                }
+            }
+            else
+            {
+                gSceneryPlaceZ = 0;
+            }
+
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step B (2026-05-31):
+            // derive the quadrant from the cursor model's orientation.
+            // The precision picker (held precision + diagonal D-pad)
+            // sets _orientation to MapSelectType::quarter0..3 (one
+            // per cardinal direction the user pressed). WriteGridCursor-
+            // Selection runs in ToolContext::onStep BEFORE this helper
+            // (SceneryContextImpl::onStep dispatches ToolContext::onStep
+            // first) and writes gMapSelectType from _orientation, so by
+            // the time we get here it's the picked quarter.
+            //
+            // Conversion: mouse path's onToolUpdateSmallScenery sets
+            // gMapSelectType = getMapSelectQuarter(quadrant ^ 2) at
+            // Scenery.cpp:1859 — i.e. picked direction == quadrant ^ 2.
+            // Inverting: quadrant = picked_direction ^ 2.
+            //
+            // When orientation isn't a quarter (default-mode or the
+            // user hasn't picked yet), fall back to quadrant 0 — that
+            // renders as MapSelectType::quarter2 (the south-east-ish
+            // quadrant by the mouse-path convention), a stable visible
+            // default. The user can then hold precision + diagonal to
+            // pick a different quadrant.
+            uint8_t quadrant = 0;
+            if (gMapSelectType >= MapSelectType::quarter0 && gMapSelectType <= MapSelectType::quarter3)
+            {
+                const uint8_t pickedDirection
+                    = static_cast<uint8_t>(gMapSelectType) - static_cast<uint8_t>(MapSelectType::quarter0);
+                quadrant = pickedDirection ^ 2;
+            }
+
+            // Rotation: gWindowSceneryRotation is the user-selected
+            // rotation (0..3, set by mouse Z/X or tool.rotate). For
+            // non-rotatable items, the mouse path randomises every
+            // tool update — match that (the cosmetic spin is part of
+            // how non-rotatable items show up at varied angles).
+            uint8_t rotation = gWindowSceneryRotation;
+            if (!sceneryEntry->flags.has(SmallSceneryFlag::isRotatable))
+                rotation = UtilRand() & 0xFF;
+            rotation -= GetCurrentRotation();
+            rotation &= 0x3;
+
+            gMapSelectFlags.set(MapSelectFlag::enable);
+
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step D (2026-05-31):
+            // scatter mode highlight. When the user has scatter enabled
+            // (SmallScenery only), expand gMapSelectPositionA/B to a
+            // gWindowSceneryScatterSize × gWindowSceneryScatterSize
+            // rect centred on the cursor tile so the user sees the
+            // scatter footprint. Mirrors mouse onToolUpdateSmallScenery
+            // (Scenery.cpp:1833-1844).
+            //
+            // Cluster size formula matches the mouse path: (size - 1) *
+            // kCoordsXYStep on each axis; even sizes get a +1 step on
+            // the B corner to keep the rect symmetric-ish around
+            // mapTile.
+            if (gWindowSceneryScatterEnabled)
+            {
+                const uint16_t clusterSize = (gWindowSceneryScatterSize - 1) * kCoordsXYStep;
+                gMapSelectPositionA.x = mapTile.x - clusterSize / 2;
+                gMapSelectPositionA.y = mapTile.y - clusterSize / 2;
+                gMapSelectPositionB.x = mapTile.x + clusterSize / 2;
+                gMapSelectPositionB.y = mapTile.y + clusterSize / 2;
+                if (gWindowSceneryScatterSize % 2 == 0)
+                {
+                    gMapSelectPositionB.x += kCoordsXYStep;
+                    gMapSelectPositionB.y += kCoordsXYStep;
+                }
+                gMapSelectType = MapSelectType::full;
+            }
+            else
+            {
+                // Single-tile rect (collapse B back to A in case the
+                // user toggled scatter off mid-session).
+                gMapSelectPositionB.x = mapTile.x;
+                gMapSelectPositionB.y = mapTile.y;
+                // Match the mouse path's per-item highlight choice
+                // (Scenery.cpp:1856-1860): full tile for occupiesFullTile
+                // items, otherwise the quadrant highlight for the picked
+                // quadrant.
+                if (sceneryEntry->flags.has(SmallSceneryFlag::occupiesFullTile))
+                    gMapSelectType = MapSelectType::full;
+                else
+                    gMapSelectType = getMapSelectQuarter((quadrant ^ 2));
+            }
+
+            // No-change shortcut — matches Scenery.cpp:1862-1868. If
+            // the ghost is already at the cursor's tile + quadrant +
+            // Z + item, don't re-dispatch (re-dispatching every frame
+            // would flicker the ghost and waste cycles).
+            if ((gSceneryGhostType & SCENERY_GHOST_FLAG_0) && mapTile == gSceneryGhostPosition && quadrant == _unkF64F0E
+                && gSceneryPlaceZ == _unkF64F0A && gSceneryPlaceObject.SceneryType == SCENERY_TYPE_SMALL
+                && gSceneryPlaceObject.EntryIndex == selection.EntryIndex)
+            {
+                return;
+            }
+
+            SceneryRemoveGhostToolPlacement();
+
+            _unkF64F0E = quadrant;
+            _unkF64F0A = gSceneryPlaceZ;
+
+            // No shift-stack Z retry loop in Step A — that's Step C.
+            // Single dispatch; if it fails (item won't fit at Z=0 on
+            // this tile) the ghost just doesn't appear, same way the
+            // mouse path's first iteration of the for-loop would
+            // behave without the gSceneryShiftPressed retry.
+            money64 cost = TryPlaceGhostSmallScenery(
+                { mapTile, gSceneryPlaceZ, rotation }, quadrant, selection.EntryIndex, _sceneryPrimaryColour,
+                _scenerySecondaryColour, _sceneryTertiaryColour);
+
+            gSceneryPlaceCost = cost;
+        }
+
+    private:
         /**
          *
          *  rct2: 0x006E287B
@@ -3618,5 +3839,226 @@ namespace OpenRCT2::Ui::Windows
             ToolSet(*toolWindow, WIDX_SCENERY_BACKGROUND, Tool::arrow);
             gInputFlags.set(InputFlag::allowRightMouseRemoval);
         }
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.4 (Step A, 2026-05-31): grid-cursor
+    // dispatch for SmallScenery placement. Mirrors WindowLandPaintAtCursor
+    // (Land.cpp:1049) and WindowLandRightsApplyAtCursor (LandRights.cpp):
+    // a globals-driven free function with no screen-pos input. The per-
+    // frame onToolUpdateSmallScenery fires from the parked virtual
+    // cursor and keeps the placement globals — gMapSelectPositionA (tile
+    // XY), gSceneryQuadrant (quadrant of the small piece on the tile),
+    // gSceneryPlaceRotation (rotation), gSceneryPlaceZ (height) — all
+    // current. We just read them and dispatch SmallSceneryPlaceAction.
+    //
+    // Step A scope: SmallScenery only. The other four scenery types
+    // (PathItem / Wall / LargeScenery / Banner) early-return here and
+    // are wired in later §11.4.11 steps. Paint mode and eyedropper mode
+    // also early-return — those mode dispatchers will arrive in Step I.
+    //
+    // The cluster-scatter loop and zAttemptRange Z-retry loop from
+    // onToolDownSmallScenery are intentionally NOT replicated in Step A:
+    // - scatter is a Step D feature
+    // - Z stacking with shift is a Step C feature
+    // The single PlaceAction dispatch here is the minimum that lets the
+    // grid cursor place a small scenery piece on PAD A, validating the
+    // dispatch + ghost + cost wiring end-to-end before adding modes.
+    void WindowSceneryPlaceAtCursor()
+    {
+        if (_sceneryPaintEnabled || gWindowSceneryEyedropperEnabled)
+            return;
+
+        const auto selection = WindowSceneryGetTabSelection();
+        if (selection.IsUndefined())
+            return;
+        if (selection.SceneryType != SCENERY_TYPE_SMALL)
+            return; // Step A: SmallScenery only
+
+        const auto* sceneryEntry = ObjectEntryManager::GetObjectEntry<SmallSceneryEntry>(selection.EntryIndex);
+        if (sceneryEntry == nullptr)
+            return;
+
+        const int16_t baseX = gMapSelectPositionA.x;
+        const int16_t baseY = gMapSelectPositionA.y;
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step D (2026-05-31):
+        // scatter mode dispatch. When the user has scatter enabled
+        // (SmallScenery only), dispatch N pieces at random positions
+        // within the size × size rect around the cursor tile, with
+        // random quadrants for non-full-tile items and a rotation
+        // increment for non-rotatable items. Mirrors the cluster loop
+        // from onToolDownSmallScenery (Scenery.cpp:2948-3060). gMap-
+        // SelectPositionA is the SCATTER RECT'S NW corner when scatter
+        // is on (RefreshGhostAtCursorPublic expanded it), so we need
+        // to recompute the centre tile here for the random offset
+        // origin.
+        //
+        // Density 0 (Low) = size pieces, 1 (Medium) = size*2,
+        // 2 (High) = size*3. Matches the mouse path's switch at
+        // Scenery.cpp:2954-2967.
+        bool isCluster = gWindowSceneryScatterEnabled;
+        int32_t quantity = 1;
+        int16_t centreX = baseX;
+        int16_t centreY = baseY;
+        if (isCluster)
+        {
+            switch (gWindowSceneryScatterDensity)
+            {
+                case ScatterToolDensity::LowDensity:
+                    quantity = gWindowSceneryScatterSize;
+                    break;
+                case ScatterToolDensity::MediumDensity:
+                    quantity = gWindowSceneryScatterSize * 2;
+                    break;
+                case ScatterToolDensity::HighDensity:
+                    quantity = gWindowSceneryScatterSize * 3;
+                    break;
+            }
+            // Recompute centre tile: gMapSelectPositionA is the NW
+            // corner of the scatter rect (set by RefreshGhost). Centre
+            // = NW + (size-1)/2 * step. For even sizes there's a
+            // half-step bias the mouse path doesn't exactly correct
+            // for, but it's good enough as a scatter origin.
+            const uint16_t clusterHalf = (gWindowSceneryScatterSize - 1) * kCoordsXYStep / 2;
+            centreX = baseX + clusterHalf;
+            centreY = baseY + clusterHalf;
+        }
+
+        for (int32_t q = 0; q < quantity; q++)
+        {
+            int16_t curX = centreX;
+            int16_t curY = centreY;
+            uint8_t quadrant = gSceneryQuadrant;
+
+            if (isCluster)
+            {
+                if (!sceneryEntry->flags.has(SmallSceneryFlag::occupiesFullTile))
+                    quadrant = UtilRand() & 3;
+                int16_t xOff = (UtilRand() % gWindowSceneryScatterSize) - (gWindowSceneryScatterSize / 2);
+                int16_t yOff = (UtilRand() % gWindowSceneryScatterSize) - (gWindowSceneryScatterSize / 2);
+                if (gWindowSceneryScatterSize % 2 == 0)
+                {
+                    xOff += 1;
+                    yOff += 1;
+                }
+                curX += xOff * kCoordsXYStep;
+                curY += yOff * kCoordsXYStep;
+
+                if (!sceneryEntry->flags.has(SmallSceneryFlag::isRotatable))
+                    gSceneryPlaceRotation = (gSceneryPlaceRotation + 1) & 3;
+            }
+
+            auto smallSceneryPlaceAction = GameActions::SmallSceneryPlaceAction(
+                { curX, curY, gSceneryPlaceZ, gSceneryPlaceRotation }, quadrant, selection.EntryIndex,
+                _sceneryPrimaryColour, _scenerySecondaryColour, _sceneryTertiaryColour);
+
+            smallSceneryPlaceAction.SetCallback(
+                [](const GameActions::GameAction* ga, const GameActions::Result* result) {
+                    if (result->error == GameActions::Status::ok)
+                        Audio::Play3D(Audio::SoundId::placeItem, result->position);
+                });
+
+            GameActions::Execute(&smallSceneryPlaceAction, getGameState());
+        }
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.4 (2026-05-31): mode getters for
+    // SceneryContextImpl. Both return false when the Scenery window is
+    // closed (so the precision picker / verb dispatch behaves as in
+    // default-place mode rather than spuriously taking the paint/eyedrop
+    // branches). The _sceneryPaintEnabled global is file-static; the
+    // getter is its window-lifetime-safe wrapper.
+    bool WindowSceneryIsPaintMode()
+    {
+        auto* windowMgr = GetWindowManager();
+        auto* w = static_cast<SceneryWindow*>(windowMgr->FindByClass(WindowClass::scenery));
+        return w != nullptr && _sceneryPaintEnabled;
+    }
+
+    bool WindowSceneryIsEyedropperMode()
+    {
+        auto* windowMgr = GetWindowManager();
+        auto* w = static_cast<SceneryWindow*>(windowMgr->FindByClass(WindowClass::scenery));
+        return w != nullptr && gWindowSceneryEyedropperEnabled;
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step A (2026-05-31): bridge to
+    // SceneryWindow::RefreshGhostAtCursorPublic for the grid cursor's
+    // ghost-tile rendering. Mirrors WindowFootpathSetProvisionalAtTile
+    // (Footpath.cpp:2931). Called from SceneryContextImpl::onActivate
+    // and onStep so the small scenery ghost follows the grid cursor's
+    // position (the mouse-driven onToolUpdate is gated off during grid
+    // cursor mode at MouseInput.cpp:1490-1526). No-op when the
+    // Scenery window isn't open.
+    void WindowSceneryRefreshGhostAtCursor(CoordsXY cursorTileNw)
+    {
+        auto* windowMgr = GetWindowManager();
+        auto* w = static_cast<SceneryWindow*>(windowMgr->FindByClass(WindowClass::scenery));
+        if (w == nullptr)
+            return;
+        w->RefreshGhostAtCursorPublic(cursorTileNw);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31): tell the
+    // grid cursor whether the currently-selected SmallScenery item
+    // supports Z stacking. Mouse path's updatePlacementSmallScenery
+    // (Scenery.cpp:2522) gates Z raise capability on
+    // SmallSceneryFlag::isStackable; mirror that for the gamepad path
+    // so the Z gesture no-ops on non-stackable items (avoids the
+    // ghost vanishing at Z > 0 because the place action rejects it).
+    //
+    // Returns false when the Scenery window isn't open, no item is
+    // selected, the selected type isn't SmallScenery, or the item
+    // lacks the stackable flag. True only when all four checks pass.
+    bool WindowSceneryCurrentItemIsStackable()
+    {
+        auto* windowMgr = GetWindowManager();
+        auto* w = static_cast<SceneryWindow*>(windowMgr->FindByClass(WindowClass::scenery));
+        if (w == nullptr)
+            return false;
+        const auto selection = w->getTabSelection();
+        if (selection.IsUndefined() || selection.SceneryType != SCENERY_TYPE_SMALL)
+            return false;
+        const auto* entry = ObjectEntryManager::GetObjectEntry<SmallSceneryEntry>(selection.EntryIndex);
+        if (entry == nullptr)
+            return false;
+        return entry->flags.has(SmallSceneryFlag::isStackable);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step B rework (2026-05-31): is
+    // the currently-selected SmallScenery item a non-full-tile item (one
+    // that sits on a single quadrant of a tile, like a bench / lamp /
+    // small flower bed)? Drives the SceneryContextImpl's half-tile
+    // cursor mode: when true, the D-pad navigates at quadrant
+    // granularity (4 stops per tile, smoothly crossing tile boundaries)
+    // instead of full-tile + precision-modifier-for-quadrant-pick.
+    //
+    // Returns false for:
+    //   - Scenery window closed
+    //   - No selection or non-SMALL type (other types are full-tile or
+    //     have their own per-tile-edge gesture handled separately)
+    //   - SmallScenery with the occupiesFullTile flag (full-tile items
+    //     don't have quadrants — they cover the whole tile)
+    //   - Paint or eyedropper mode active (those modes operate on
+    //     existing scenery and don't care about ghost quadrant)
+    //   - Scatter mode enabled (scatter is a brush, not a per-quadrant
+    //     pick — half-tile granularity would be confusing)
+    bool WindowSceneryCurrentItemIsNonFullTileSmall()
+    {
+        auto* windowMgr = GetWindowManager();
+        auto* w = static_cast<SceneryWindow*>(windowMgr->FindByClass(WindowClass::scenery));
+        if (w == nullptr)
+            return false;
+        if (_sceneryPaintEnabled || gWindowSceneryEyedropperEnabled)
+            return false;
+        if (gWindowSceneryScatterEnabled)
+            return false;
+        const auto selection = w->getTabSelection();
+        if (selection.IsUndefined() || selection.SceneryType != SCENERY_TYPE_SMALL)
+            return false;
+        const auto* entry = ObjectEntryManager::GetObjectEntry<SmallSceneryEntry>(selection.EntryIndex);
+        if (entry == nullptr)
+            return false;
+        return !entry->flags.has(SmallSceneryFlag::occupiesFullTile);
     }
 } // namespace OpenRCT2::Ui::Windows

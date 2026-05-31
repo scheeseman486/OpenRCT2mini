@@ -45,6 +45,10 @@
 #include <openrct2/world/Footpath.h>
 #include <openrct2/world/Map.h>
 #include <openrct2/world/MapSelection.h>
+// OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31): for
+// gSceneryPlaceZ + gSceneryShiftPressed used by the SmallScenery
+// shift+D-pad Z-stack gesture in SceneryContextImpl.
+#include <openrct2/world/Scenery.h>
 #include "WidgetFocus.h"
 
 using namespace OpenRCT2::Ui;
@@ -2091,21 +2095,425 @@ namespace
         {
             return InputContext::toolScenery;
         }
-        // §11.4: small scenery sits on a tile quadrant (NE / NW / SE /
-        // SW). Precision modifier + diagonal D-pad chord picks the
-        // quadrant (per user 2026-05-24 spec answer 3: "quadrants are
-        // up+left/up+right/down+left/down+right"). onPlace verb wiring
-        // is Phase 3.G follow-up; subset declaration here makes the
-        // selection ring respond to the diagonal chord even before
-        // the verb itself dispatches the SmallSceneryPlace game-action.
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step B rework (2026-05-31):
+        // precision modifier is no longer the quadrant picker for non-
+        // full-tile SmallScenery. The cursor now moves at half-tile
+        // granularity (4 quadrant-stops per tile, see onStep override)
+        // so the user gets quadrant selection for free as part of D-pad
+        // navigation — no modifier needed.
+        //
+        // Returning SubsetType::none disables the precision picker
+        // entirely. Wall items (Step G) will reinstate it with
+        // SubsetType::edges since walls genuinely need a separate
+        // gesture for the side picker — there's no half-tile-cursor
+        // equivalent for "which side of the tile". Other scenery types
+        // (Path Item, Large, Banner) are full-tile and don't have a
+        // sub-tile pick.
         //
         // §18.4.e.1 (2026-05-24): subclass hook renamed
         // precisionSubsetForTool; base ToolContext::precisionSubset()
         // wraps it with the size > 1 gate.
         SubsetType precisionSubsetForTool() const override
         {
-            return SubsetType::quadrants;
+            return SubsetType::none;
         }
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step B polish (2026-05-31):
+        // shift the virtual cursor sprite to the centre of the currently-
+        // selected sub-quadrant instead of the tile centre. Quadrant
+        // centres are at tile-NW + (8 or 24, 8 or 24); ViewportInteraction-
+        // MapToScreen adds kCoordsXYHalfTile (=16) internally to project
+        // NW corner → tile centre, so to land on the SUB-cell centre we
+        // need a (±8, ±8) offset relative to the input.
+        //   _quarterPhase bit 0 (E side) → +8 on Y axis (east); 0 → -8
+        //   _quarterPhase bit 1 (S side) → +8 on X axis (south); 0 → -8
+        // No-op for full-tile / scatter / paint / eyedrop modes
+        // (gate matches the same condition that engages half-tile
+        // navigation in onStep, so the sprite stays centred when the
+        // navigation does).
+        CoordsXY cursorParkXYExtra() const override
+        {
+            if (!Windows::WindowSceneryCurrentItemIsNonFullTileSmall())
+                return { 0, 0 };
+            const int32_t dx = (_quarterPhase & 0b10) ? +8 : -8; // south (+X) vs north
+            const int32_t dy = (_quarterPhase & 0b01) ? +8 : -8; // east (+Y) vs west
+            return { dx, dy };
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 (Step A, 2026-05-31):
+        // dispatch SmallSceneryPlaceAction at the cursor's tile +
+        // quadrant + rotation + Z. The free function in Scenery.cpp
+        // reads the placement globals kept current by our
+        // RefreshGhostAtCursor pump (onActivate + onStep below).
+        // Mirrors WindowLandPaintAtCursor's shape (§11.2). Step A
+        // scope is SmallScenery only; paint / eyedropper modes and
+        // the other four scenery types early-return inside the helper.
+        Disposition onPlace() override
+        {
+            Windows::WindowSceneryPlaceAtCursor();
+            // Refresh the ghost immediately after place — placement
+            // consumed the SCENERY_GHOST_FLAG_0 marker (the action
+            // succeeded and committed) so the next-frame ghost needs
+            // a fresh dispatch to show. Otherwise the cursor would
+            // sit "naked" on the next tile until movement re-fires
+            // onStep.
+            Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+            return Disposition::Consumed;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step A (2026-05-31): the
+        // mouse-driven onToolUpdate dispatcher that normally keeps
+        // the scenery ghost current is gated OFF in grid cursor mode
+        // (MouseInput.cpp:1490-1526 — three early-return checks for
+        // isToolFocusSelected, gridCursorParked, gridCursor). So the
+        // grid cursor has to drive the ghost itself: onActivate to
+        // paint the initial ghost when the user enters grid cursor
+        // mode with the scenery tool armed, onStep to chase the ghost
+        // to the new tile every time the cursor moves. Mirrors
+        // FootpathContextImpl::onActivate / onStep which solve the
+        // same problem for the path ghost via
+        // WindowFootpathSetProvisionalAtTile.
+        void onActivate() override
+        {
+            ToolContext::onActivate();
+            Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step B rework (2026-05-31):
+        // half-tile cursor for non-full-tile SmallScenery. Each D-pad
+        // press moves the cursor by ONE QUADRANT (= half a tile in one
+        // axis) instead of a full tile. Tile boundaries are crossed
+        // smoothly as the quadrant phase rolls over from one side to
+        // the other.
+        //
+        // Per-axis phase encoding (in _quarterPhase):
+        //   bit 0 (0b01): east side (1) vs west side (0) of current tile
+        //   bit 1 (0b10): south side (1) vs north side (0) of current tile
+        //
+        // For each D-pad direction (after camera-rotation translation
+        // to world direction):
+        //   N (move toward -X world): if already on north side → step
+        //     tile N and become south side of new tile; else just flip
+        //     the south bit to 0 (move from south half to north half of
+        //     same tile).
+        //   Similarly for S/E/W.
+        //
+        // Full-tile items + paint/eyedrop/scatter modes pass through to
+        // the base onStep (one tile per press, existing behaviour).
+        // Step A's ghost-refresh-after-step contract is preserved by
+        // calling RefreshGhostAtCursorPublic at the end of both
+        // branches.
+        //
+        // The quadrant highlight (gMapSelectType) is updated to match
+        // the current phase via quarterPhaseToMapSelect(); the existing
+        // RefreshGhostAtCursorPublic derivation (quadrant = direction ^ 2)
+        // picks up the new quadrant for both the visible ghost and the
+        // PAD-A dispatch. Drops the Step B precision-picker pathway —
+        // no modifier needed anymore for quadrant selection.
+        Disposition onStep(::Direction dpad) override
+        {
+            if (!Windows::WindowSceneryCurrentItemIsNonFullTileSmall())
+            {
+                const auto result = ToolContext::onStep(dpad);
+                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+                return result;
+            }
+
+            // Half-tile mode: translate screen-relative dpad to world
+            // direction. Mirrors the canonical rotation transform from
+            // stepForDirection's compass mode (InputContextStrategy.cpp:
+            // 538-552) — at rot=0 dpad UP=N, at rot=1 dpad UP=W (the
+            // camera rotated CCW so the world's W edge is now at the
+            // top of the screen), at rot=2 dpad UP=S, at rot=3 dpad
+            // UP=E. The formula `(dpad + 4 - rot) & 3` matches the
+            // table+Rotate((4-r)&3) shape — equivalent because we're
+            // working with direction indices instead of TileCoordsXY
+            // deltas. Earlier code had this inverted as `(dpad + rot)
+            // & 3`, which sent the cursor the WRONG way at every
+            // non-zero camera rotation.
+            const uint8_t rot = OpenRCT2::GetCurrentRotation() & 3;
+            const uint8_t worldDir = (static_cast<uint8_t>(dpad) + 4 - rot) & 3;
+
+            bool stepCursor = false;
+            switch (worldDir)
+            {
+                case 0: // N: south→north within tile, or step tile N
+                    if (_quarterPhase & 0b10)
+                        _quarterPhase &= ~0b10;
+                    else
+                    {
+                        _quarterPhase |= 0b10;
+                        stepCursor = true;
+                    }
+                    break;
+                case 2: // S
+                    if (!(_quarterPhase & 0b10))
+                        _quarterPhase |= 0b10;
+                    else
+                    {
+                        _quarterPhase &= ~0b10;
+                        stepCursor = true;
+                    }
+                    break;
+                case 1: // E
+                    if (!(_quarterPhase & 0b01))
+                        _quarterPhase |= 0b01;
+                    else
+                    {
+                        _quarterPhase &= ~0b01;
+                        stepCursor = true;
+                    }
+                    break;
+                case 3: // W
+                    if (_quarterPhase & 0b01)
+                        _quarterPhase &= ~0b01;
+                    else
+                    {
+                        _quarterPhase |= 0b01;
+                        stepCursor = true;
+                    }
+                    break;
+            }
+
+            if (stepCursor)
+            {
+                // Cursor moves to the adjacent tile in the world
+                // direction the user pressed. The base onStep handles
+                // camera follow + bump scroll + cursor model update.
+                ToolContext::onStep(dpad);
+            }
+
+            // Sync orientation to the new phase. The cursor model
+            // owns the canonical orientation; gMapSelectType is its
+            // serialised form (written by WriteGridCursorSelection
+            // during the base onStep call). For the non-stepping
+            // branch we write gMapSelectType directly since base onStep
+            // didn't run.
+            const auto orientation = quarterPhaseToMapSelect(_quarterPhase);
+            if (auto* model = getCursorModel(); model != nullptr)
+            {
+                if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                    grid->setOrientation(orientation);
+            }
+            gMapSelectType = orientation;
+
+            Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+            return Disposition::Consumed;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31): Z-stack
+        // gesture for stackable SmallScenery items. The user holds the
+        // shift modifier (kInterfaceShiftModifier — PAD Y on gamepad,
+        // Shift on keyboard) and taps D-pad up/down to raise/lower the
+        // placement Z plane. SmallSceneryFlag::isStackable gates the
+        // gesture — non-stackable items (most benches, lamps) have no
+        // Z choice in the mouse path either (Scenery.cpp:2522).
+        //
+        // Z lives in gSceneryPlaceZ (a global written by the existing
+        // ghost machinery), not the cursor model's Z, because the
+        // mouse path's ghost helpers + place actions all read
+        // gSceneryPlaceZ. Direct writes keep us byte-compatible with
+        // the mouse path's placement semantics.
+        //
+        // Step size: kCoordsZStep (8 world units) per press, matching
+        // the mouse path's `gSceneryPlaceZ += 8` retry-loop step
+        // (Scenery.cpp:1890). Clamp ≥ 0 — SmallScenery doesn't
+        // support underground placement, unlike RideConstruction.
+        //
+        // refresh ghost after every Z change so the visible ghost
+        // floats at the new plane immediately.
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step C fix (2026-05-31):
+        // raise/lower drive the OFFSET above terrain, not the absolute
+        // Z. The ghost helper recomputes absolute Z = terrain + offset
+        // on every refresh, so the placement floats consistently above
+        // terrain as the cursor traverses tiles. Mirrors mouse-path
+        // accumulator gSceneryShiftPressZOffset semantics.
+        Disposition onRaise() override
+        {
+            if (!Windows::WindowSceneryCurrentItemIsStackable())
+                return Disposition::Consumed;
+            // Cap the offset at the same headroom the mouse path uses
+            // for maxPossibleHeight; the place action will reject
+            // anything that overshoots for the particular item.
+            constexpr int16_t kOffsetMax = (255 - 4) * kCoordsZStep;
+            gSceneryShiftPressZOffset = static_cast<int16_t>(std::min<int32_t>(
+                gSceneryShiftPressZOffset + kCoordsZStep, kOffsetMax));
+            gSceneryShiftPressed = true;
+            _zAdjustedDuringHold = true;
+            Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+            return Disposition::Consumed;
+        }
+
+        Disposition onLower() override
+        {
+            if (!Windows::WindowSceneryCurrentItemIsStackable())
+                return Disposition::Consumed;
+            gSceneryShiftPressZOffset = static_cast<int16_t>(std::max<int32_t>(
+                gSceneryShiftPressZOffset - kCoordsZStep, 0));
+            // Drop the shift-pressed flag when the offset returns to 0
+            // so the ghost helper takes the "Z=0, action places at
+            // terrain" branch instead of "terrain + 0" (which is
+            // surface, same result, but match the mouse path's
+            // convention precisely).
+            gSceneryShiftPressed = gSceneryShiftPressZOffset > 0;
+            _zAdjustedDuringHold = true;
+            Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+            return Disposition::Consumed;
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31):
+        // shift-modifier press/release edge detection for the
+        // snapshot-reset semantics. Mirrors FootpathContextImpl::
+        // processFrame's _zLockWasHeld pattern (InputManager.cpp:1758
+        // -1802), adapted to write gSceneryPlaceZ instead of the
+        // cursor model's Z.
+        //
+        // Behaviour:
+        //   - Press edge: snapshot gSceneryPlaceZ, clear the
+        //     adjusted-during-hold flag.
+        //   - Release edge: if the user never adjusted Z during the
+        //     hold (tap-alone) OR the net Z change is zero (raised
+        //     then lowered back to where they started), reset Z to 0.
+        //     Otherwise keep the elevated Z (sticky placement plane).
+        //
+        // The "tap-alone reset to ground" branch is the discoverable
+        // way out of an elevated plane: hold shift, release without
+        // pressing anything → back to ground. Matches Footpath.
+        void processFrame(uint32_t nowMs) override
+        {
+            ToolContext::processFrame(nowMs);
+
+            // Gate on stackability so the state machine doesn't churn
+            // for non-stackable items where the gesture is a no-op
+            // anyway. (Tap-alone reset is also meaningless in that
+            // case because gSceneryPlaceZ is forced to 0 by the
+            // earlier item selection.)
+            if (!Windows::WindowSceneryCurrentItemIsStackable())
+            {
+                _zLockWasHeld = false;
+                _zAdjustedDuringHold = false;
+                return;
+            }
+
+            const bool zLockNow = OpenRCT2::Ui::isShiftModifierHeldInTool();
+            if (zLockNow != _zLockWasHeld)
+            {
+                if (zLockNow)
+                {
+                    // Press edge — snapshot the OFFSET so we can detect
+                    // net-zero changes on release.
+                    _zSnapshot = gSceneryShiftPressZOffset;
+                    _zAdjustedDuringHold = false;
+                }
+                else
+                {
+                    // Release edge — if user did tap-alone OR raised/
+                    // lowered net-zero, reset elevation to ground.
+                    const int16_t currentOffset = gSceneryShiftPressZOffset;
+                    if ((!_zAdjustedDuringHold || currentOffset == _zSnapshot) && currentOffset != 0)
+                    {
+                        gSceneryShiftPressZOffset = 0;
+                        gSceneryShiftPressed = false;
+                        Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+                    }
+                    _zAdjustedDuringHold = false;
+                }
+                _zLockWasHeld = zLockNow;
+            }
+        }
+
+    private:
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step D fix (2026-05-31):
+        // helper to grab the cursor's tile NW corner from the cursor
+        // model. Avoids reading gMapSelectPositionA which gets expanded
+        // into a scatter rect — using A as both input (centre) and
+        // output (rect) caused the rect to drift NW on every refresh.
+        // The cursor model is the canonical source of truth.
+        CoordsXY currentCursorTileNw()
+        {
+            if (auto* model = getCursorModel(); model != nullptr)
+            {
+                if (auto* grid = dynamic_cast<GridCursorModel*>(model); grid != nullptr)
+                    return grid->getPosition().ToCoordsXY();
+            }
+            // Fallback when the cursor model isn't a grid model — read
+            // gMapSelectPositionA (single-tile case where this is the
+            // cursor tile NW corner).
+            return { gMapSelectPositionA.x, gMapSelectPositionA.y };
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step B rework (2026-05-31):
+        // half-tile cursor phase for non-full-tile SmallScenery. Two bits
+        // encoding which quadrant of the current tile the cursor sits in:
+        //   bit 0 (0b01) = east side (1) vs west (0)
+        //   bit 1 (0b10) = south side (1) vs north (0)
+        // So _quarterPhase values map to corners:
+        //   0b00 (0) = NW corner
+        //   0b01 (1) = NE corner
+        //   0b10 (2) = SW corner
+        //   0b11 (3) = SE corner
+        // Default 0 (NW) is the cursor's "first quadrant" when entering
+        // non-full-tile mode; user steps from there via D-pad.
+        uint8_t _quarterPhase = 0;
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step B rework (2026-05-31):
+        // map a phase value to the matching MapSelectType for the
+        // visible quadrant highlight. The mapping comes from the
+        // precision picker's mod_x/mod_y analysis in
+        // InputContextStrategy.cpp:1271-1284:
+        //
+        //   mod_x <= 16 (N half) && mod_y < 16 (W half) → direction 2
+        //   mod_x <= 16 (N half) && mod_y >= 16 (E half) → direction 3
+        //   mod_x >  16 (S half) && mod_y < 16 (W half) → direction 1
+        //   mod_x >  16 (S half) && mod_y >= 16 (E half) → direction 0
+        //
+        // So:
+        //   quarter0 = SE (S half + E half)
+        //   quarter1 = SW (S half + W half)   ← NOT NE
+        //   quarter2 = NW (N half + W half)
+        //   quarter3 = NE (N half + E half)   ← NOT SW
+        //
+        // Phase encoding (bit 0 = E, bit 1 = S):
+        //   phase 0 = NW (N, W) → quarter2
+        //   phase 1 = NE (N, E) → quarter3
+        //   phase 2 = SW (S, W) → quarter1
+        //   phase 3 = SE (S, E) → quarter0
+        //
+        // Earlier code had quarter1/quarter3 swapped (labelled them NE/
+        // SW respectively when they actually represent SW/NE). With the
+        // swap, pressing DOWN at rot=0 cycled the visible highlight
+        // NW→NE→(S-neighbour)NW→NE rather than the intended NW→SW→
+        // (S-neighbour)NW→SW. User report 2026-05-31: "Pressing down
+        // cycles through N, E of that cell, then goes to the cell to
+        // the S, and cycles through N, E of that cell" — exactly the
+        // swap signature.
+        //
+        // The existing RefreshGhostAtCursorPublic derivation (quadrant
+        // = picked_direction ^ 2) then maps these back to the quadrant
+        // index SmallSceneryPlaceAction expects.
+        static MapSelectType quarterPhaseToMapSelect(uint8_t phase)
+        {
+            static constexpr MapSelectType kMap[4] = {
+                MapSelectType::quarter2, // phase 0 = NW
+                MapSelectType::quarter3, // phase 1 = NE
+                MapSelectType::quarter1, // phase 2 = SW
+                MapSelectType::quarter0, // phase 3 = SE
+            };
+            return kMap[phase & 3];
+        }
+
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31):
+        // shift-modifier hold-Z gesture state machine.
+        //   _zLockWasHeld: prev-frame value for press/release edge
+        //     detection.
+        //   _zSnapshot: gSceneryPlaceZ at the press edge; release
+        //     compares against current Z to detect net-zero changes.
+        //   _zAdjustedDuringHold: set true by onRaise/onLower when
+        //     the user actually presses up/down during the hold.
+        //     False at release-edge = tap-alone = reset to ground.
+        bool _zLockWasHeld = false;
+        int16_t _zSnapshot = 0;
+        bool _zAdjustedDuringHold = false;
     };
 
     class LandRightsContextImpl final : public ToolContext

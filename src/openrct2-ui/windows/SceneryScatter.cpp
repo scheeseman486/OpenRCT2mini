@@ -8,6 +8,8 @@
  *****************************************************************************/
 
 #include <algorithm>
+#include <openrct2-ui/UiContext.h>
+#include <openrct2-ui/input/InputManager.h>
 #include <openrct2-ui/interface/LandTool.h>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2-ui/windows/Windows.h>
@@ -71,6 +73,25 @@ namespace OpenRCT2::Ui::Windows
             gWindowSceneryScatterEnabled = true;
             gWindowSceneryScatterSize = 16;
             gWindowSceneryScatterDensity = ScatterToolDensity::MediumDensity;
+
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step D fix (2026-05-31):
+            // when the user opens scatter mode from focus mode (e.g. PAD A
+            // on the Scenery window's scatter button), re-engage grid
+            // cursor on the underlying Scenery tool so the user lands on
+            // the playfield with the scatter rect highlight active —
+            // rather than being bounced to widget focus on this
+            // SceneryScatter config panel. Mirrors the WIDX_CONSTRUCT
+            // engage pattern from Footpath.cpp:377-393 / RideConstruction.
+            // Mouse clicks (active context = worldCursor or hidden) don't
+            // trigger this branch — they stay in their existing flow.
+            auto& inputMgr = OpenRCT2::Ui::GetInputManager();
+            if (inputMgr.getActiveContext() == OpenRCT2::Ui::InputContext::widgetFocus)
+            {
+                inputMgr.setToolFocusSelected(
+                    true,
+                    OpenRCT2::Ui::InputManager::SelectorTransitionSource::virtualUserInput);
+                inputMgr.setSelectorMode(OpenRCT2::Ui::InputManager::SelectorMode::active);
+            }
         }
 
         void onClose() override

@@ -878,6 +878,21 @@ namespace OpenRCT2::Ui
         // responsible for sampling whatever tile it cares about.
         virtual int32_t cursorParkZExtra(CoordsXY /*worldCoord*/) const { return 0; }
 
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step B follow-up (2026-05-31):
+        // per-tool extra X/Y offset for the parked cursor sprite. The
+        // baseline projection input in SyncHiddenCursorParking is the
+        // tile's NW corner; ViewportInteractionMapToScreen adds
+        // kCoordsXYHalfTile (=16) internally to project to tile centre.
+        // For tools that operate on a sub-tile cell (e.g. SmallScenery
+        // half-tile cursor), the sprite should sit at the SUB-CELL
+        // centre instead. Override this hook to return a per-axis
+        // offset relative to the input — e.g. (+8, +8) shifts the
+        // projection from tile centre to SE quadrant centre.
+        //
+        // Default = no offset (sprite at tile centre, matching the
+        // historical behaviour for full-tile tools).
+        virtual CoordsXY cursorParkXYExtra() const { return { 0, 0 }; }
+
         // OPENRCT2MINI ride-construction-grid-cursor-plan §4 (Phase R,
         // 2026-05-25): head-follow hooks. Subclasses override these to
         // opt into the head-follow pattern (cursor chases a tool-window

@@ -2214,7 +2214,7 @@ private:
                         const auto [a, b] = grid->computeBrushRange();
                         const auto aXY = a.ToCoordsXY();
                         const auto bXY = b.ToCoordsXY();
-                        const CoordsXY rectCentreInput{ (aXY.x + bXY.x) / 2, (aXY.y + bXY.y) / 2 };
+                        CoordsXY rectCentreInput{ (aXY.x + bXY.x) / 2, (aXY.y + bXY.y) / 2 };
                         // OPENRCT2MINI grid-cursor-plan §18.C follow-up
                         // (2026-05-24, water Z parity): give the active
                         // ToolContext a chance to add tool-specific Z
@@ -2226,6 +2226,22 @@ private:
                         int32_t extraZ = 0;
                         if (auto* tool = dynamic_cast<ToolContext*>(&strategy); tool != nullptr)
                             extraZ = tool->cursorParkZExtra(rectCentreInput);
+                        // OPENRCT2MINI grid-cursor-plan §11.4 Step B
+                        // polish (2026-05-31): tools that operate on
+                        // sub-tile cells (SmallScenery half-tile
+                        // cursor) park the sprite at the sub-cell
+                        // centre instead of the tile centre. The
+                        // offset is added to rectCentreInput so
+                        // ViewportInteractionMapToScreen's internal
+                        // +kCoordsXYHalfTile projection lands at the
+                        // sub-cell centre instead of the tile centre.
+                        // Default tools return (0, 0) — no change.
+                        if (auto* tool = dynamic_cast<ToolContext*>(&strategy); tool != nullptr)
+                        {
+                            const auto subCellOffset = tool->cursorParkXYExtra();
+                            rectCentreInput.x += subCellOffset.x;
+                            rectCentreInput.y += subCellOffset.y;
+                        }
                         // OPENRCT2MINI grid-cursor Z-follow (2026-05-31):
                         // when the active context exposes an absolute
                         // elevated head world Z (track / bridge build —

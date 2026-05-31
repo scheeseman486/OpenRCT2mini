@@ -615,6 +615,58 @@ namespace OpenRCT2::Ui::Windows
     void WindowSceneryResetSelectedSceneryItems();
     const ScenerySelection WindowSceneryGetTabSelection();
     void ToggleSceneryWindow();
+    // OPENRCT2MINI grid-cursor-plan §11.4 (Step A, 2026-05-31): grid-cursor
+    // dispatch for SmallScenery placement. Reads tile coords from
+    // gMapSelectPositionA (the parked grid cursor) and per-frame globals
+    // (gSceneryPlaceZ, gSceneryQuadrant, gSceneryPlaceRotation) kept
+    // current by the existing per-frame onToolUpdateSmallScenery + ghost
+    // pipeline. Step A scope is SmallScenery only — PathItem / Wall /
+    // LargeScenery / Banner dispatch will arrive in later §11.4.11 steps.
+    // Mirrors the WindowLandPaintAtCursor / WindowLandRightsApplyAtCursor
+    // pattern from §11.2 / §11.5: a globals-driven free function with no
+    // screen-pos input, because the per-frame onToolUpdate from the
+    // parked virtual cursor already keeps the placement globals current.
+    void WindowSceneryPlaceAtCursor();
+    // OPENRCT2MINI grid-cursor-plan §11.4 (2026-05-31): mode getters for
+    // SceneryContextImpl to branch verb dispatch on. WindowSceneryIs-
+    // PaintMode wraps the file-static _sceneryPaintEnabled (recolour
+    // mode); WindowSceneryIsEyedropperMode returns the existing global
+    // gWindowSceneryEyedropperEnabled. Both return false when the
+    // Scenery window isn't open, mirroring WindowLandIsPaintMode shape.
+    bool WindowSceneryIsPaintMode();
+    bool WindowSceneryIsEyedropperMode();
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step A (2026-05-31): refresh the
+    // SmallScenery placement ghost at the grid cursor's tile. Mirrors
+    // WindowFootpathSetProvisionalAtTile — the mouse-driven onToolUpdate
+    // is gated off during grid cursor mode (MouseInput.cpp:1490-1526),
+    // so the ghost needs a dedicated entry point. Called by
+    // SceneryContextImpl::onActivate and onStep; no-op when the Scenery
+    // window isn't open or no item is selected.
+    //
+    // §11.4 Step D fix (2026-05-31): caller passes the cursor's tile
+    // (NW corner in world units) explicitly so the helper has a stable
+    // centre source independent of gMapSelectPositionA's current state.
+    // gMapSelectPositionA gets expanded into a rect in scatter mode
+    // and reading it back as "centre" caused the rect to drift NW on
+    // every refresh.
+    void WindowSceneryRefreshGhostAtCursor(CoordsXY cursorTileNw);
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31): does the
+    // currently-selected SmallScenery item support Z stacking? Gates
+    // the grid cursor's shift+D-pad-Z gesture so it no-ops on non-
+    // stackable items (mirrors mouse path's can_raise_item check in
+    // updatePlacementSmallScenery). Returns false for non-Small types
+    // and when the Scenery window is closed.
+    bool WindowSceneryCurrentItemIsStackable();
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step B rework (2026-05-31):
+    // does the currently-selected SmallScenery item occupy a single
+    // quadrant of a tile (non-full-tile)? When true, SceneryContextImpl
+    // engages half-tile cursor mode — D-pad moves at quadrant
+    // granularity across a subdivided grid, smoothly crossing tile
+    // boundaries. No precision modifier needed for quadrant pick.
+    // Returns false for full-tile items, non-SMALL types, scatter
+    // mode, paint/eyedropper modes, and when the Scenery window is
+    // closed.
+    bool WindowSceneryCurrentItemIsNonFullTileSmall();
 
     // SceneryScatter
     WindowBase* SceneryScatterOpen();
