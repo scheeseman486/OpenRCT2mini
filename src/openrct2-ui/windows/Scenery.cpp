@@ -2273,15 +2273,24 @@ namespace OpenRCT2::Ui::Windows
             // 3083). Highlight uses MapSelectType::edge0..edge3 so the
             // user sees which side of the tile the wall will land on.
             //
-            // Z computation (v2 2026-06-01): when the user has bumped
-            // the Shift+D-pad Z offset (gSceneryShiftPressZOffset),
-            // gSceneryPlaceZ = (surfaceZ & 0xFFF0) + offset. Otherwise
-            // gSceneryPlaceZ = 0 (let WallPlaceAction figure out the
-            // actual surface attachment point). Exact mirror of mouse
-            // path updatePlacementWall Scenery.cpp:3114-3151. Earlier
-            // attempts wrote gSceneryPlaceZ as raw offset — that put
-            // the wall below the surface, so the place action rejected
-            // and the ghost vanished.
+            // Z behaviour (v3 2026-06-01):
+            //   - Shift NOT held: gSceneryPlaceZ = 0, single ghost
+            //     attempt. WallPlaceAction figures out surface
+            //     attachment. If blocked at surface, ghost vanishes
+            //     (same as mouse default placement).
+            //   - Shift held: scan from (surfaceZ & 0xFFF0) + offset
+            //     upward in +8 increments, up to 20 retries, until a
+            //     valid placement is found. Auto-snaps the ghost to
+            //     the topmost open Z (or to a gap in a stack of
+            //     walls where the new wall fits). Mirrors mouse path
+            //     onToolUpdateWall's attemptsLeft=20 retry loop at
+            //     Scenery.cpp:1965-1981 but with offset=0 also doing
+            //     the scan, so "just hold shift" = auto-find-topmost
+            //     without needing the user to press up first.
+            //
+            // Earlier attempts wrote gSceneryPlaceZ as a raw offset —
+            // that put the wall below the surface, the place action
+            // rejected, and the ghost vanished.
             if (selection.SceneryType == SCENERY_TYPE_WALL)
             {
                 const CoordsXY mapTile = cursorTileNw;
@@ -2289,30 +2298,6 @@ namespace OpenRCT2::Ui::Windows
                 uint8_t edge = gWindowSceneryRotation;
                 edge -= GetCurrentRotation();
                 edge &= 0x3;
-
-                // Compute placement Z from the surface + offset, the
-                // same way updatePlacementWall does. Offset == 0 means
-                // "at the surface" so we set gSceneryPlaceZ = 0 and let
-                // the action figure it out.
-                if (gSceneryShiftPressed && gSceneryShiftPressZOffset != 0)
-                {
-                    auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
-                    if (surfaceElement != nullptr)
-                    {
-                        const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
-                        constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
-                        gSceneryPlaceZ = std::clamp<int16_t>(
-                            surfZ + gSceneryShiftPressZOffset, 16, kZMax);
-                    }
-                    else
-                    {
-                        gSceneryPlaceZ = 0;
-                    }
-                }
-                else
-                {
-                    gSceneryPlaceZ = 0;
-                }
 
                 // Highlight the chosen edge of the cursor tile.
                 gMapSelectFlags.set(MapSelectFlag::enable);
@@ -2322,21 +2307,54 @@ namespace OpenRCT2::Ui::Windows
                 gMapSelectPositionB.y = mapTile.y;
                 gMapSelectType = getMapSelectEdge(edge);
 
-                // No-change shortcut — matches mouse path
-                // (Scenery.cpp:1953-1958).
-                if ((gSceneryGhostType & SCENERY_GHOST_FLAG_2) && mapTile == gSceneryGhostPosition
-                    && edge == gSceneryGhostWallRotation && gSceneryPlaceZ == _unkF64F0A)
+                // Compute initial placement Z + retry count from shift
+                // state. When shift isn't held, single attempt at Z=0
+                // (action handles surface). When shift IS held, start
+                // at surfaceZ_aligned + offset and retry +8 up to 20
+                // times so the ghost auto-finds the next valid slot.
+                int16_t placeZ = 0;
+                uint8_t attempts = 1;
+                if (gSceneryShiftPressed)
+                {
+                    auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
+                    if (surfaceElement != nullptr)
+                    {
+                        const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+                        constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
+                        placeZ = std::clamp<int16_t>(
+                            surfZ + gSceneryShiftPressZOffset, 16, kZMax);
+                        attempts = 20;
+                    }
+                }
+
+                // No-change shortcut — only valid when the would-be
+                // initial Z matches the previous ghost. With the
+                // retry-up scan we can't shortcut on the START Z
+                // because the FINAL Z (after retries) is what
+                // gSceneryGhostPosition.z holds, so skip the shortcut
+                // when the retry path is active.
+                if (attempts == 1
+                    && (gSceneryGhostType & SCENERY_GHOST_FLAG_2) && mapTile == gSceneryGhostPosition
+                    && edge == gSceneryGhostWallRotation && placeZ == _unkF64F0A)
                 {
                     return;
                 }
 
                 SceneryRemoveGhostToolPlacement();
                 gSceneryGhostWallRotation = edge;
-                _unkF64F0A = gSceneryPlaceZ;
 
-                money64 cost = TryPlaceGhostWall(
-                    { mapTile, gSceneryPlaceZ }, edge, selection.EntryIndex, _sceneryPrimaryColour,
-                    _scenerySecondaryColour, _sceneryTertiaryColour);
+                gSceneryPlaceZ = placeZ;
+                money64 cost = kMoney64Undefined;
+                for (uint8_t i = 0; i < attempts; i++)
+                {
+                    cost = TryPlaceGhostWall(
+                        { mapTile, gSceneryPlaceZ }, edge, selection.EntryIndex, _sceneryPrimaryColour,
+                        _scenerySecondaryColour, _sceneryTertiaryColour);
+                    if (cost != kMoney64Undefined)
+                        break;
+                    gSceneryPlaceZ += 8;
+                }
+                _unkF64F0A = gSceneryPlaceZ;
                 gSceneryPlaceCost = cost;
                 return;
             }

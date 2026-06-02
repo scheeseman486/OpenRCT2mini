@@ -2433,20 +2433,23 @@ namespace
         // accumulator gSceneryShiftPressZOffset semantics.
         Disposition onRaise() override
         {
-            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v2
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v3
             // (2026-06-01): Wall Z adjustment via the same shift-press
             // offset mechanism SmallScenery uses. Walls AND SmallScenery
             // share gSceneryShiftPressZOffset; the wall ghost branch in
             // RefreshGhostAtCursorPublic computes absolute Z =
             // (surfaceZ & 0xFFF0) + offset (mirrors mouse path
-            // Scenery.cpp:3124-3129). Step is kLandHeightStep (16) for
-            // a one-wall-height bump per press — the mouse path's +8
-            // retry is for Z-fit on placement, not for user gestures.
+            // Scenery.cpp:3124-3129). Step is kCoordsZStep (8) per
+            // press — walls have varied heights (some 8, some 16), so
+            // we need 8-unit alignment so the ghost snaps to wall
+            // grid positions correctly. Matches the mouse path's
+            // updatePlacementWall ZOffset Numerics::floor2(., 8) at
+            // Scenery.cpp:2930.
             const auto sel = Windows::WindowSceneryGetTabSelection();
             const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
             if (!isWall && !Windows::WindowSceneryCurrentItemIsStackable())
                 return Disposition::Consumed;
-            const int16_t step = isWall ? static_cast<int16_t>(kLandHeightStep) : static_cast<int16_t>(kCoordsZStep);
+            const int16_t step = static_cast<int16_t>(kCoordsZStep);
             // Cap the offset at the same headroom the mouse path uses
             // for maxPossibleHeight; the place action will reject
             // anything that overshoots for the particular item.
@@ -2462,13 +2465,14 @@ namespace
         Disposition onLower() override
         {
             // Walls share the same shift-press offset mechanism (see
-            // onRaise). Step is kLandHeightStep for walls; kCoordsZStep
-            // for SmallScenery.
+            // onRaise). Step is kCoordsZStep (8) for both walls and
+            // SmallScenery — walls need 8-unit alignment because of
+            // varied wall heights.
             const auto sel = Windows::WindowSceneryGetTabSelection();
             const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
             if (!isWall && !Windows::WindowSceneryCurrentItemIsStackable())
                 return Disposition::Consumed;
-            const int16_t step = isWall ? static_cast<int16_t>(kLandHeightStep) : static_cast<int16_t>(kCoordsZStep);
+            const int16_t step = static_cast<int16_t>(kCoordsZStep);
             gSceneryShiftPressZOffset = static_cast<int16_t>(std::max<int32_t>(
                 gSceneryShiftPressZOffset - step, 0));
             // Drop the shift-pressed flag when the offset returns to 0
@@ -2503,6 +2507,34 @@ namespace
         void processFrame(uint32_t nowMs) override
         {
             ToolContext::processFrame(nowMs);
+
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v3
+            // (2026-06-01): Wall shift-state sync. The wall ghost
+            // branch in RefreshGhostAtCursorPublic gates its retry-up
+            // scan on gSceneryShiftPressed, which is the mouse path's
+            // "shift key currently held" flag (Scenery.cpp:2907-2939).
+            // For grid cursor we keep it in sync with the shift
+            // modifier here, and refresh the ghost on every edge so
+            // the user immediately sees the auto-snapped Z when they
+            // first hold shift (or it returns to ground on release).
+            const auto sel = Windows::WindowSceneryGetTabSelection();
+            const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
+            if (isWall)
+            {
+                const bool shiftNow = OpenRCT2::Ui::isShiftModifierHeldInTool();
+                if (shiftNow != gSceneryShiftPressed)
+                {
+                    gSceneryShiftPressed = shiftNow;
+                    Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+                }
+                // Walls don't use the tap-alone-reset state machine
+                // (the offset persists across shift cycles, matching
+                // mouse-path behaviour). Reset the SmallScenery flags
+                // so they're clean when the user switches tabs.
+                _zLockWasHeld = false;
+                _zAdjustedDuringHold = false;
+                return;
+            }
 
             // Gate on stackability so the state machine doesn't churn
             // for non-stackable items where the gesture is a no-op
