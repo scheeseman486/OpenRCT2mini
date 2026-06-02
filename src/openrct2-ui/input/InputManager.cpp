@@ -2445,7 +2445,7 @@ namespace
             if (isWall)
             {
                 Windows::WindowSceneryScanWallZ(currentCursorTileNw(), +1, /*includeStart=*/false, 20);
-                _zAdjustedDuringHold = true;
+                _wallZAdjustedDuringHold = true;
                 return Disposition::Consumed;
             }
             if (!Windows::WindowSceneryCurrentItemIsStackable())
@@ -2469,7 +2469,7 @@ namespace
             if (isWall)
             {
                 Windows::WindowSceneryScanWallZ(currentCursorTileNw(), -1, /*includeStart=*/false, 20);
-                _zAdjustedDuringHold = true;
+                _wallZAdjustedDuringHold = true;
                 return Disposition::Consumed;
             }
             if (!Windows::WindowSceneryCurrentItemIsStackable())
@@ -2506,18 +2506,20 @@ namespace
             ToolContext::processFrame(nowMs);
 
             // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v6
-            // (2026-06-02): Wall shift-press edge detection. On press
-            // edge (shift goes false → true) run an upscan with
-            // includeStart=true — if the current offset is already
-            // valid, the ghost stays put; if invalid (e.g. user moved
-            // cursor onto a tile with walls), it snaps up to nearest
-            // valid. Mirrors the user-described "press the Z
-            // modifier → raises up to closest valid space".
+            // (2026-06-02): Wall shift-press/release edge handling.
             //
-            // No release-edge action — the offset persists, matching
-            // Footpath/Land grid cursors. The wall ghost branch in
-            // RefreshGhostAtCursorPublic just renders at offset
-            // (single attempt, no per-frame retry).
+            //   - Press edge: clear _wallZAdjustedDuringHold (about
+            //     to start a fresh hold). Run ScanWallZ(+1,
+            //     includeStart=true) so an already-valid offset stays
+            //     put and an invalid one snaps to nearest valid.
+            //   - Release edge: if the user never pressed D-pad
+            //     up/down during the hold (tap-alone), reset offset
+            //     to 0 then scan upward for the lowest valid Z.
+            //     User-spec behaviour: "if the user presses Z
+            //     modifier without shifting its position, reset Z to
+            //     the lowest valid position".
+            //   - Held without edge: offset persists (no per-frame
+            //     work — the ghost branch renders at offset).
             const auto sel = Windows::WindowSceneryGetTabSelection();
             const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
             if (isWall)
@@ -2525,8 +2527,21 @@ namespace
                 const bool shiftNow = OpenRCT2::Ui::isShiftModifierHeldInTool();
                 if (shiftNow && !_wallShiftWasHeld)
                 {
+                    // Press edge: arm the tap-alone tracker and
+                    // snap to nearest valid at-or-above current.
+                    _wallZAdjustedDuringHold = false;
                     Windows::WindowSceneryScanWallZ(
                         currentCursorTileNw(), +1, /*includeStart=*/true, 20);
+                }
+                else if (!shiftNow && _wallShiftWasHeld)
+                {
+                    // Release edge: tap-alone reset to lowest valid.
+                    if (!_wallZAdjustedDuringHold)
+                    {
+                        gSceneryShiftPressZOffset = 0;
+                        Windows::WindowSceneryScanWallZ(
+                            currentCursorTileNw(), +1, /*includeStart=*/true, 20);
+                    }
                 }
                 _wallShiftWasHeld = shiftNow;
                 // Reset SmallScenery state machine flags so they're
@@ -2537,6 +2552,7 @@ namespace
             }
             // Non-wall: reset wall shift edge tracker.
             _wallShiftWasHeld = false;
+            _wallZAdjustedDuringHold = false;
 
             // Gate on stackability so the state machine doesn't churn
             // for non-stackable items where the gesture is a no-op
@@ -2677,7 +2693,13 @@ namespace
         // stays put; otherwise the ghost snaps to nearest valid
         // above. Independent of _zLockWasHeld (which gates the
         // SmallScenery tap-alone-reset state machine).
+        //
+        // _wallZAdjustedDuringHold: set true by onRaise/onLower wall
+        // branches when the user presses D-pad up/down during the
+        // shift hold. False at release edge = tap-alone gesture =
+        // reset offset to 0 + rescan upward for lowest valid.
         bool _wallShiftWasHeld = false;
+        bool _wallZAdjustedDuringHold = false;
     };
 
     class LandRightsContextImpl final : public ToolContext
