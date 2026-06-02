@@ -651,19 +651,18 @@ namespace OpenRCT2::Ui::Windows
     // every refresh.
     void WindowSceneryRefreshGhostAtCursor(CoordsXY cursorTileNw);
 
-    // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v5 (2026-06-02):
-    // Scan wall placement Z DOWNWARD from current gSceneryShiftPressZOffset
-    // to find the next valid lower placement. Steps in 8-unit decrements
-    // up to maxSteps times. On the first valid offset found, updates
-    // gSceneryShiftPressZOffset and refreshes the ghost. Returns true on
-    // success. Uses GameActions::Query so the scan has no side effects.
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v6 (2026-06-02):
+    // Scan wall placement Z in `direction` (+1=up, -1=down) for the next
+    // valid placement. Steps in 8-unit increments up to maxSteps times.
+    // When includeStart=true, the first query is at the CURRENT offset
+    // (used by the shift-press-edge auto-snap so an already-valid offset
+    // is preserved); when false, starts at offset+direction*step (used
+    // by D-pad up/down so each press moves the ghost).
     //
-    // Required because the per-frame up-scan in RefreshGhostAtCursorPublic
-    // would otherwise fight a D-pad-down move and re-snap upward. Caller
-    // (SceneryContextImpl::onLower) uses this to land the offset on a
-    // valid lower Z, so the subsequent per-frame up-scan sees a valid
-    // placement and doesn't move it.
-    bool WindowSceneryScanWallZDown(CoordsXY cursorTileNw, int maxSteps);
+    // Uses GameActions::Query — no side effects. On success: updates
+    // gSceneryShiftPressZOffset and refreshes the ghost. Returns true.
+    // On failure (nothing valid in range): leaves offset unchanged.
+    bool WindowSceneryScanWallZ(CoordsXY cursorTileNw, int8_t direction, bool includeStart, int maxSteps);
     // OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31): does the
     // currently-selected SmallScenery item support Z stacking? Gates
     // the grid cursor's shift+D-pad-Z gesture so it no-ops on non-

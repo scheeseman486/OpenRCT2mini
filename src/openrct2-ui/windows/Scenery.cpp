@@ -2264,32 +2264,27 @@ namespace OpenRCT2::Ui::Windows
                 return;
             }
 
-            // OPENRCT2MINI grid-cursor-plan §11.4 Step G (2026-06-01):
-            // Wall branch. Walls attach to one edge of a tile (N/E/S/W)
-            // — the direction picker IS the rotation. Direction comes
-            // from gWindowSceneryRotation - GetCurrentRotation() (same
-            // screen→world conversion as Banner). Highlight uses
-            // MapSelectType::edge0..edge3 so the user sees which side
-            // of the tile the wall will land on.
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G (2026-06-01,
+            // v6 simplified 2026-06-02): Wall branch. Walls attach to
+            // one edge of a tile (N/E/S/W) — the direction picker IS
+            // the rotation. Direction = gWindowSceneryRotation -
+            // GetCurrentRotation(). Highlight uses MapSelectType::
+            // edge0..edge3 so the user sees which side of the tile
+            // the wall will land on.
             //
-            // Z behaviour (v4 2026-06-01): Z height is PERSISTENT —
-            // matches every other grid cursor (Footpath, Land). Once
-            // the user has elevated the ghost (via auto-snap or
-            // D-pad), the elevation survives shift release. PAD A
-            // places at the elevated Z.
+            // Z is the persistent gSceneryShiftPressZOffset:
+            //   - offset == 0 → placeZ = 0 (WallPlaceAction handles
+            //     surface attachment).
+            //   - offset > 0 → placeZ = (surfaceZ & 0xFFF0) + offset
+            //     (absolute elevated Z).
             //
-            //   - Offset > 0: placeZ = (surfaceZ & 0xFFF0) + offset.
-            //     Single attempt. Persists across shift release.
-            //   - Offset == 0 + shift NOT held: placeZ = 0. Single
-            //     attempt. WallPlaceAction handles surface.
-            //   - Shift held: auto-scan upward from (surfaceZ +
-            //     offset) in +8 increments up to 20 retries until a
-            //     valid placement is found. On success, the offset
-            //     is updated to match the snapped Z so the
-            //     elevation is preserved when shift is released.
-            //     Auto-snaps to topmost open slot OR a gap in a
-            //     stack where the new wall fits — mirrors mouse path
-            //     onToolUpdateWall retry (Scenery.cpp:1965-1981).
+            // No per-frame retry. All Z choice is driven by explicit
+            // gestures: shift-press-edge auto-snaps to nearest valid
+            // (SceneryContextImpl::processFrame calls ScanWallZ with
+            // includeStart=true); D-pad up/down call ScanWallZ in
+            // their direction. If the current offset is invalid (e.g.
+            // user moved cursor to a blocked tile), the ghost simply
+            // vanishes — user can D-pad up/down to find valid.
             if (selection.SceneryType == SCENERY_TYPE_WALL)
             {
                 const CoordsXY mapTile = cursorTileNw;
@@ -2306,39 +2301,21 @@ namespace OpenRCT2::Ui::Windows
                 gMapSelectPositionB.y = mapTile.y;
                 gMapSelectType = getMapSelectEdge(edge);
 
-                auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
-                const int16_t surfZ = (surfaceElement != nullptr)
-                    ? static_cast<int16_t>(surfaceElement->GetBaseZ() & 0xFFF0)
-                    : 0;
-                constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
-                constexpr int16_t kOffsetMax = (255 - 4) * kCoordsZStep;
-
-                // Compute initial placement Z from the persistent
-                // offset. Offset > 0 → elevated placement (surf +
-                // offset). Offset == 0 → 0 (action handles surface).
                 int16_t placeZ = 0;
-                if (gSceneryShiftPressZOffset > 0 && surfaceElement != nullptr)
+                if (gSceneryShiftPressZOffset > 0)
                 {
-                    placeZ = std::clamp<int16_t>(
-                        surfZ + gSceneryShiftPressZOffset, 16, kZMax);
+                    auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
+                    if (surfaceElement != nullptr)
+                    {
+                        const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+                        constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
+                        placeZ = std::clamp<int16_t>(
+                            surfZ + gSceneryShiftPressZOffset, 16, kZMax);
+                    }
                 }
 
-                // Auto-scan upward when shift is held. With offset=0
-                // we still want the scan to start at the surface so
-                // "just hold shift" finds the topmost slot, so we
-                // bump placeZ to surfZ in that case before the scan.
-                const bool autoScan = gSceneryShiftPressed && surfaceElement != nullptr;
-                if (autoScan && gSceneryShiftPressZOffset == 0)
-                {
-                    placeZ = surfZ;
-                }
-                const uint8_t attempts = autoScan ? 20 : 1;
-
-                // No-change shortcut — only valid for single-attempt
-                // path (auto-scan always reruns to potentially update
-                // offset).
-                if (attempts == 1
-                    && (gSceneryGhostType & SCENERY_GHOST_FLAG_2) && mapTile == gSceneryGhostPosition
+                // No-change shortcut.
+                if ((gSceneryGhostType & SCENERY_GHOST_FLAG_2) && mapTile == gSceneryGhostPosition
                     && edge == gSceneryGhostWallRotation && placeZ == _unkF64F0A)
                 {
                     return;
@@ -2346,31 +2323,12 @@ namespace OpenRCT2::Ui::Windows
 
                 SceneryRemoveGhostToolPlacement();
                 gSceneryGhostWallRotation = edge;
-
                 gSceneryPlaceZ = placeZ;
-                money64 cost = kMoney64Undefined;
-                for (uint8_t i = 0; i < attempts; i++)
-                {
-                    cost = TryPlaceGhostWall(
-                        { mapTile, gSceneryPlaceZ }, edge, selection.EntryIndex, _sceneryPrimaryColour,
-                        _scenerySecondaryColour, _sceneryTertiaryColour);
-                    if (cost != kMoney64Undefined)
-                        break;
-                    gSceneryPlaceZ += 8;
-                }
+                _unkF64F0A = placeZ;
 
-                // Persist the snapped Z by updating the offset to
-                // match. Only fires when auto-scan succeeded — when
-                // shift isn't held we don't touch offset (the
-                // D-pad-driven user setting stays as-is).
-                if (cost != kMoney64Undefined && autoScan && surfaceElement != nullptr)
-                {
-                    const int32_t snappedOffset = static_cast<int32_t>(gSceneryPlaceZ) - surfZ;
-                    gSceneryShiftPressZOffset = static_cast<int16_t>(
-                        std::clamp<int32_t>(snappedOffset, 0, kOffsetMax));
-                }
-
-                _unkF64F0A = gSceneryPlaceZ;
+                money64 cost = TryPlaceGhostWall(
+                    { mapTile, placeZ }, edge, selection.EntryIndex, _sceneryPrimaryColour,
+                    _scenerySecondaryColour, _sceneryTertiaryColour);
                 gSceneryPlaceCost = cost;
                 return;
             }
@@ -2689,31 +2647,27 @@ namespace OpenRCT2::Ui::Windows
         }
 
     public:
-        // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v5
-        // (2026-06-02): Scan wall placement Z downward from the current
-        // gSceneryShiftPressZOffset to find the next valid lower
-        // placement. Steps in 8-unit decrements up to maxSteps times.
-        // Uses GameActions::Query so the scan has no side effects
-        // (no temporary ghosts created during the scan).
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v6
+        // (2026-06-02): Scan wall placement Z in direction (+1 up,
+        // -1 down) to find the next valid placement. Steps in 8-unit
+        // increments up to maxSteps times. Uses GameActions::Query
+        // so the scan has no side effects.
+        //
+        // When includeStart is true, the FIRST query is at the current
+        // offset (used by the shift-press-edge auto-snap so an
+        // already-valid offset is preserved). When false, the first
+        // query is at offset + direction*step (used by D-pad up/down
+        // so the cursor actually moves on each press).
         //
         // On the first valid offset found: updates
-        // gSceneryShiftPressZOffset to that value and refreshes the
-        // ghost (rendered at the new Z). Returns true.
+        // gSceneryShiftPressZOffset and refreshes the ghost. Returns
+        // true. Otherwise leaves offset unchanged. Returns false.
         //
-        // On no valid offset below current (or stepped past 0 without
-        // finding one): leaves gSceneryShiftPressZOffset unchanged,
-        // does not refresh. Returns false.
-        //
-        // Convention: when target offset == 0, the Z queried is 0
-        // (mouse-path "let the action figure out surface attachment").
-        // For target > 0, Z = (surfaceZ & 0xFFF0) + target.
-        //
-        // Called from SceneryContextImpl::onLower when wall is the
-        // selected tab so D-pad down can skip blocked Zs to reach the
-        // next valid slot — without this, the per-frame up-scan in
-        // RefreshGhostAtCursorPublic would fight the down move and
-        // re-snap upward.
-        bool ScanWallZDownPublic(CoordsXY tile, int maxSteps)
+        // Convention: target offset == 0 → query Z=0 (mouse-path
+        // "let the action figure out surface attachment"). target > 0
+        // → query Z = (surfaceZ & 0xFFF0) + target (elevated
+        // placement).
+        bool ScanWallZPublic(CoordsXY tile, int8_t direction, bool includeStart, int maxSteps)
         {
             const auto sel = getTabSelection();
             if (sel.IsUndefined() || sel.SceneryType != SCENERY_TYPE_WALL)
@@ -2730,11 +2684,15 @@ namespace OpenRCT2::Ui::Windows
 
             constexpr int16_t kStep = static_cast<int16_t>(kCoordsZStep);
             constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
+            constexpr int32_t kOffsetMax = (255 - 4) * kCoordsZStep;
 
-            int32_t target = static_cast<int32_t>(gSceneryShiftPressZOffset) - kStep;
+            int32_t target = static_cast<int32_t>(gSceneryShiftPressZOffset);
+            if (!includeStart)
+                target += static_cast<int32_t>(direction) * kStep;
+
             for (int i = 0; i < maxSteps; i++)
             {
-                if (target < 0)
+                if (target < 0 || target > kOffsetMax)
                     break;
 
                 int16_t z = (target == 0)
@@ -2752,7 +2710,7 @@ namespace OpenRCT2::Ui::Windows
                     RefreshGhostAtCursorPublic(tile);
                     return true;
                 }
-                target -= kStep;
+                target += static_cast<int32_t>(direction) * kStep;
             }
             return false;
         }
@@ -4441,18 +4399,21 @@ namespace OpenRCT2::Ui::Windows
         w->RefreshGhostAtCursorPublic(cursorTileNw);
     }
 
-    // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v5 (2026-06-02):
-    // Free-function wrapper for SceneryWindow::ScanWallZDownPublic. Called
-    // from SceneryContextImpl::onLower when wall is selected to skip
-    // blocked Zs and find the next valid lower placement. Returns true on
-    // success (offset updated and ghost refreshed).
-    bool WindowSceneryScanWallZDown(CoordsXY cursorTileNw, int maxSteps)
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v6 (2026-06-02):
+    // Free-function wrapper for SceneryWindow::ScanWallZPublic. Scans wall
+    // placement Z in `direction` (+1=up, -1=down) for the next valid
+    // placement. Three call sites:
+    //   - onRaise wall: ScanWallZ(+1, includeStart=false, 20)
+    //   - onLower wall: ScanWallZ(-1, includeStart=false, 20)
+    //   - shift-press-edge: ScanWallZ(+1, includeStart=true, 20) so an
+    //     already-valid offset is preserved when the user first holds shift
+    bool WindowSceneryScanWallZ(CoordsXY cursorTileNw, int8_t direction, bool includeStart, int maxSteps)
     {
         auto* windowMgr = GetWindowManager();
         auto* w = static_cast<SceneryWindow*>(windowMgr->FindByClass(WindowClass::scenery));
         if (w == nullptr)
             return false;
-        return w->ScanWallZDownPublic(cursorTileNw, maxSteps);
+        return w->ScanWallZPublic(cursorTileNw, direction, includeStart, maxSteps);
     }
 
     // OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31): tell the
