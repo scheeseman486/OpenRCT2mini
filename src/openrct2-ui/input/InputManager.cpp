@@ -2383,6 +2383,21 @@ namespace
         // accumulator gSceneryShiftPressZOffset semantics.
         Disposition onRaise() override
         {
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up
+            // (2026-06-01): Wall Z adjustment. Unlike SmallScenery's
+            // terrain-relative offset, walls use absolute Z stored
+            // directly in gSceneryPlaceZ. Mirrors the mouse path's
+            // gSceneryPlaceZ += 8 retry-loop step (Scenery.cpp:1980).
+            const auto sel = Windows::WindowSceneryGetTabSelection();
+            if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL)
+            {
+                constexpr int32_t kPlaceZMax = (255 - 4) * kCoordsZStep;
+                gSceneryPlaceZ = static_cast<int16_t>(
+                    std::min<int32_t>(gSceneryPlaceZ + kCoordsZStep, kPlaceZMax));
+                _zAdjustedDuringHold = true;
+                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+                return Disposition::Consumed;
+            }
             if (!Windows::WindowSceneryCurrentItemIsStackable())
                 return Disposition::Consumed;
             // Cap the offset at the same headroom the mouse path uses
@@ -2399,6 +2414,16 @@ namespace
 
         Disposition onLower() override
         {
+            // Wall branch — see onRaise.
+            const auto sel = Windows::WindowSceneryGetTabSelection();
+            if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL)
+            {
+                gSceneryPlaceZ = static_cast<int16_t>(
+                    std::max<int32_t>(gSceneryPlaceZ - kCoordsZStep, 0));
+                _zAdjustedDuringHold = true;
+                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+                return Disposition::Consumed;
+            }
             if (!Windows::WindowSceneryCurrentItemIsStackable())
                 return Disposition::Consumed;
             gSceneryShiftPressZOffset = static_cast<int16_t>(std::max<int32_t>(
