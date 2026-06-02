@@ -2264,10 +2264,54 @@ namespace OpenRCT2::Ui::Windows
                 return;
             }
 
-            // Steps G-H scope: Wall / LargeScenery still to wire.
-            // Clear any stale ghost so tab-switching to those types in
-            // grid cursor mode doesn't leave a previous-type ghost
-            // stuck.
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G (2026-06-01):
+            // Wall branch. Walls attach to one edge of a tile (N/E/S/W)
+            // — the direction picker IS the rotation. Direction comes
+            // from gWindowSceneryRotation - GetCurrentRotation() (same
+            // screen→world conversion as Banner). Z is the user-set
+            // gSceneryPlaceZ (Shift+D-pad Z-stack gesture sets it,
+            // defaults to 0 = surface). Mirrors mouse path's
+            // updatePlacementWall + onToolUpdateWall (Scenery.cpp:1929,
+            // 3083). Highlight uses MapSelectType::edge0..edge3 so the
+            // user sees which side of the tile the wall will land on.
+            if (selection.SceneryType == SCENERY_TYPE_WALL)
+            {
+                const CoordsXY mapTile = cursorTileNw;
+
+                uint8_t edge = gWindowSceneryRotation;
+                edge -= GetCurrentRotation();
+                edge &= 0x3;
+
+                // Highlight the chosen edge of the cursor tile.
+                gMapSelectFlags.set(MapSelectFlag::enable);
+                gMapSelectPositionA.x = mapTile.x;
+                gMapSelectPositionA.y = mapTile.y;
+                gMapSelectPositionB.x = mapTile.x;
+                gMapSelectPositionB.y = mapTile.y;
+                gMapSelectType = getMapSelectEdge(edge);
+
+                // No-change shortcut — matches mouse path
+                // (Scenery.cpp:1953-1958).
+                if ((gSceneryGhostType & SCENERY_GHOST_FLAG_2) && mapTile == gSceneryGhostPosition
+                    && edge == gSceneryGhostWallRotation && gSceneryPlaceZ == _unkF64F0A)
+                {
+                    return;
+                }
+
+                SceneryRemoveGhostToolPlacement();
+                gSceneryGhostWallRotation = edge;
+                _unkF64F0A = gSceneryPlaceZ;
+
+                money64 cost = TryPlaceGhostWall(
+                    { mapTile, gSceneryPlaceZ }, edge, selection.EntryIndex, _sceneryPrimaryColour,
+                    _scenerySecondaryColour, _sceneryTertiaryColour);
+                gSceneryPlaceCost = cost;
+                return;
+            }
+
+            // Step H scope: LargeScenery still to wire. Clear any stale
+            // ghost so tab-switching to that type in grid cursor mode
+            // doesn't leave a previous-type ghost stuck.
             if (selection.SceneryType != SCENERY_TYPE_SMALL)
             {
                 SceneryRemoveGhostToolPlacement();
@@ -4103,8 +4147,38 @@ namespace OpenRCT2::Ui::Windows
             return;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step G (2026-06-01):
+        // Wall PAD A → dispatch WallPlaceAction at the cursor tile +
+        // edge derived from gWindowSceneryRotation. Mirrors the mouse
+        // path's onToolDownWall (Scenery.cpp:3471-3526) minus the
+        // drag-extend mode (which is a separate later feature). The
+        // mouse path retries Z increments up to 20 times when shift is
+        // held; for grid cursor v1 we do a single attempt at the
+        // user-set gSceneryPlaceZ — the Shift+D-pad Z-stack gesture
+        // already gives the user explicit Z control.
+        if (selection.SceneryType == SCENERY_TYPE_WALL)
+        {
+            const CoordsXY tile{ gMapSelectPositionA.x, gMapSelectPositionA.y };
+
+            uint8_t edge = gWindowSceneryRotation;
+            edge -= GetCurrentRotation();
+            edge &= 0x3;
+
+            auto wallPlaceAction = GameActions::WallPlaceAction(
+                selection.EntryIndex, { tile, gSceneryPlaceZ }, edge, _sceneryPrimaryColour,
+                _scenerySecondaryColour, _sceneryTertiaryColour);
+            wallPlaceAction.SetCallback([](const GameActions::GameAction* ga, const GameActions::Result* result) {
+                if (result->error == GameActions::Status::ok)
+                {
+                    Audio::Play3D(Audio::SoundId::placeItem, result->position);
+                }
+            });
+            GameActions::Execute(&wallPlaceAction, getGameState());
+            return;
+        }
+
         if (selection.SceneryType != SCENERY_TYPE_SMALL)
-            return; // Steps G-H: Wall / LargeScenery not yet wired
+            return; // Step H: LargeScenery not yet wired
 
         const auto* sceneryEntry = ObjectEntryManager::GetObjectEntry<SmallSceneryEntry>(selection.EntryIndex);
         if (sceneryEntry == nullptr)
