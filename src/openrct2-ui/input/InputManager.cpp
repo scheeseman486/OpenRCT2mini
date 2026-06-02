@@ -2263,8 +2263,58 @@ namespace
         // picks up the new quadrant for both the visible ghost and the
         // PAD-A dispatch. Drops the Step B precision-picker pathway —
         // no modifier needed anymore for quadrant selection.
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up (2026-06-01):
+        // Wall drag-extend gesture. The base default returns true (PAD A
+        // held + D-pad → diverted to onRaise/onLower); for walls we want
+        // PAD A held + D-pad to step the cursor along the edge axis and
+        // place a wall on each step (paint-mode chain pattern, same as
+        // Land paint + LandRights + ClearScenery). Return false only
+        // when a wall is the current selection; everything else keeps
+        // the base divert behaviour so Z-stack via PAD A held still
+        // works for stackable SmallScenery.
+        bool consumeDirectionalsWhenCursorClickHeld() const override
+        {
+            const auto sel = Windows::WindowSceneryGetTabSelection();
+            if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL)
+                return false;
+            return true;
+        }
+
         Disposition onStep(::Direction dpad) override
         {
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up
+            // (2026-06-01): Wall drag-extend. While PAD A is held with
+            // a wall selected, only allow D-pad steps along the edge's
+            // axis (walls on N/S edges extend E/W; walls on E/W edges
+            // extend N/S). After a valid step, dispatch a wall place at
+            // the new cursor tile so the chain extends. Perpendicular
+            // presses are dropped (no cursor movement, no place).
+            // Mirrors mouse path's dragWallSetEndPos onXAxis constraint
+            // (Scenery.cpp:3539).
+            const auto sel = Windows::WindowSceneryGetTabSelection();
+            if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL && isCursorClickHeldInTool())
+            {
+                const uint8_t rot = OpenRCT2::GetCurrentRotation() & 3;
+                const uint8_t worldDir = (static_cast<uint8_t>(dpad) + 4 - rot) & 3;
+                const uint8_t worldEdge = (Windows::gWindowSceneryRotation - rot) & 3;
+                // Edges 0/2 (N/S) extend along the E/W axis (worldDir
+                // 1/3); edges 1/3 (E/W) extend along N/S (worldDir
+                // 0/2). Axis match iff `(worldEdge & 1) != (worldDir & 1)`.
+                if ((worldEdge & 1) == (worldDir & 1))
+                {
+                    // Perpendicular press — drop. Cursor stays, no
+                    // place dispatched. Consumed so the event doesn't
+                    // fall through to onRaise/onLower.
+                    return Disposition::Consumed;
+                }
+                const auto result = ToolContext::onStep(dpad);
+                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+                // Chain the place at the new cursor position so the
+                // drag extends one wall per step.
+                Windows::WindowSceneryPlaceAtCursor();
+                return result;
+            }
+
             if (!Windows::WindowSceneryCurrentItemIsNonFullTileSmall())
             {
                 const auto result = ToolContext::onStep(dpad);
