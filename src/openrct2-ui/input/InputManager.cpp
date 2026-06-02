@@ -2168,6 +2168,20 @@ namespace
                 Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
                 return Disposition::Consumed;
             }
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up
+            // (2026-06-03): walls behave the same way as banners —
+            // precision + D-pad direction picks which edge the wall
+            // attaches to (the edge IS the rotation, per Step G).
+            // No validity gate up front: walls can attach to almost
+            // any edge, and the place action's own validation will
+            // make the ghost vanish on bad picks (same UX as banner
+            // when validEdges == 0).
+            if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL)
+            {
+                Windows::gWindowSceneryRotation = static_cast<uint8_t>(dpad) & 3;
+                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+                return Disposition::Consumed;
+            }
             return ToolContext::onPrecisionDpad(dpad);
         }
 
