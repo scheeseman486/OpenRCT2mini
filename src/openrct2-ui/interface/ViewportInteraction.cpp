@@ -843,7 +843,16 @@ namespace OpenRCT2::Ui
                 if (elZ < cursorZ - kPathHeightStep || elZ > cursorZ + kPathHeightStep)
                     continue;
             }
-            if (!best[p].has_value())
+            // OPENRCT2MINI grid-cursor-deletion-plan §3.5 follow-up
+            // (2026-06-03): walls delete TOP-DOWN. Tile element list
+            // is in ascending Z; the default "earliest wins" picks
+            // the lowest-Z wall, which feels unintuitive when the
+            // user is standing at the top of a stack and presses
+            // delete. Override for walls only: keep updating so we
+            // end on the LAST wall in the list (highest Z + latest
+            // placed at the same Z). Other bands keep first-wins.
+            const bool isWall = el->GetType() == TileElementType::Wall;
+            if (!best[p].has_value() || isWall)
                 best[p] = Candidate{ el, order };
             // else: earlier-in-list within band already chosen
         }
