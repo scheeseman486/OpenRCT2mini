@@ -2508,7 +2508,7 @@ namespace
         {
             ToolContext::processFrame(nowMs);
 
-            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v3
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v4
             // (2026-06-01): Wall shift-state sync. The wall ghost
             // branch in RefreshGhostAtCursorPublic gates its retry-up
             // scan on gSceneryShiftPressed, which is the mouse path's
@@ -2516,7 +2516,9 @@ namespace
             // For grid cursor we keep it in sync with the shift
             // modifier here, and refresh the ghost on every edge so
             // the user immediately sees the auto-snapped Z when they
-            // first hold shift (or it returns to ground on release).
+            // first hold shift. On release the ghost stays at the
+            // snapped Z (offset persists) — matches Footpath/Land/
+            // mouse-path persistence semantics.
             const auto sel = Windows::WindowSceneryGetTabSelection();
             const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
             if (isWall)
