@@ -650,6 +650,20 @@ namespace OpenRCT2::Ui::Windows
     // and reading it back as "centre" caused the rect to drift NW on
     // every refresh.
     void WindowSceneryRefreshGhostAtCursor(CoordsXY cursorTileNw);
+
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v5 (2026-06-02):
+    // Scan wall placement Z DOWNWARD from current gSceneryShiftPressZOffset
+    // to find the next valid lower placement. Steps in 8-unit decrements
+    // up to maxSteps times. On the first valid offset found, updates
+    // gSceneryShiftPressZOffset and refreshes the ghost. Returns true on
+    // success. Uses GameActions::Query so the scan has no side effects.
+    //
+    // Required because the per-frame up-scan in RefreshGhostAtCursorPublic
+    // would otherwise fight a D-pad-down move and re-snap upward. Caller
+    // (SceneryContextImpl::onLower) uses this to land the offset on a
+    // valid lower Z, so the subsequent per-frame up-scan sees a valid
+    // placement and doesn't move it.
+    bool WindowSceneryScanWallZDown(CoordsXY cursorTileNw, int maxSteps);
     // OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31): does the
     // currently-selected SmallScenery item support Z stacking? Gates
     // the grid cursor's shift+D-pad-Z gesture so it no-ops on non-

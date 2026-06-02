@@ -2688,6 +2688,76 @@ namespace OpenRCT2::Ui::Windows
             return res.cost;
         }
 
+    public:
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v5
+        // (2026-06-02): Scan wall placement Z downward from the current
+        // gSceneryShiftPressZOffset to find the next valid lower
+        // placement. Steps in 8-unit decrements up to maxSteps times.
+        // Uses GameActions::Query so the scan has no side effects
+        // (no temporary ghosts created during the scan).
+        //
+        // On the first valid offset found: updates
+        // gSceneryShiftPressZOffset to that value and refreshes the
+        // ghost (rendered at the new Z). Returns true.
+        //
+        // On no valid offset below current (or stepped past 0 without
+        // finding one): leaves gSceneryShiftPressZOffset unchanged,
+        // does not refresh. Returns false.
+        //
+        // Convention: when target offset == 0, the Z queried is 0
+        // (mouse-path "let the action figure out surface attachment").
+        // For target > 0, Z = (surfaceZ & 0xFFF0) + target.
+        //
+        // Called from SceneryContextImpl::onLower when wall is the
+        // selected tab so D-pad down can skip blocked Zs to reach the
+        // next valid slot — without this, the per-frame up-scan in
+        // RefreshGhostAtCursorPublic would fight the down move and
+        // re-snap upward.
+        bool ScanWallZDownPublic(CoordsXY tile, int maxSteps)
+        {
+            const auto sel = getTabSelection();
+            if (sel.IsUndefined() || sel.SceneryType != SCENERY_TYPE_WALL)
+                return false;
+
+            auto* surfaceElement = MapGetSurfaceElementAt(tile);
+            if (surfaceElement == nullptr)
+                return false;
+            const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+
+            uint8_t edge = gWindowSceneryRotation;
+            edge -= GetCurrentRotation();
+            edge &= 0x3;
+
+            constexpr int16_t kStep = static_cast<int16_t>(kCoordsZStep);
+            constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
+
+            int32_t target = static_cast<int32_t>(gSceneryShiftPressZOffset) - kStep;
+            for (int i = 0; i < maxSteps; i++)
+            {
+                if (target < 0)
+                    break;
+
+                int16_t z = (target == 0)
+                    ? static_cast<int16_t>(0)
+                    : std::clamp<int16_t>(surfZ + static_cast<int16_t>(target), 16, kZMax);
+
+                auto action = GameActions::WallPlaceAction(
+                    sel.EntryIndex, CoordsXYZ{ tile.x, tile.y, z }, edge,
+                    _sceneryPrimaryColour, _scenerySecondaryColour, _sceneryTertiaryColour);
+                action.SetFlags({ CommandFlag::ghost, CommandFlag::allowDuringPaused, CommandFlag::noSpend });
+                auto res = GameActions::Query(&action, getGameState());
+                if (res.error == GameActions::Status::ok)
+                {
+                    gSceneryShiftPressZOffset = static_cast<int16_t>(target);
+                    RefreshGhostAtCursorPublic(tile);
+                    return true;
+                }
+                target -= kStep;
+            }
+            return false;
+        }
+
+    private:
         money64 TryPlaceGhostLargeScenery(
             CoordsXYZD loc, ObjectEntryIndex entryIndex, Colour primaryColour, Colour secondaryColour, Colour tertiaryColour)
         {
@@ -4369,6 +4439,20 @@ namespace OpenRCT2::Ui::Windows
         if (w == nullptr)
             return;
         w->RefreshGhostAtCursorPublic(cursorTileNw);
+    }
+
+    // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v5 (2026-06-02):
+    // Free-function wrapper for SceneryWindow::ScanWallZDownPublic. Called
+    // from SceneryContextImpl::onLower when wall is selected to skip
+    // blocked Zs and find the next valid lower placement. Returns true on
+    // success (offset updated and ghost refreshed).
+    bool WindowSceneryScanWallZDown(CoordsXY cursorTileNw, int maxSteps)
+    {
+        auto* windowMgr = GetWindowManager();
+        auto* w = static_cast<SceneryWindow*>(windowMgr->FindByClass(WindowClass::scenery));
+        if (w == nullptr)
+            return false;
+        return w->ScanWallZDownPublic(cursorTileNw, maxSteps);
     }
 
     // OPENRCT2MINI grid-cursor-plan §11.4 Step C (2026-05-31): tell the

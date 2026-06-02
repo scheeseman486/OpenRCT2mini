@@ -2464,13 +2464,24 @@ namespace
 
         Disposition onLower() override
         {
-            // Walls share the same shift-press offset mechanism (see
-            // onRaise). Step is kCoordsZStep (8) for both walls and
-            // SmallScenery — walls need 8-unit alignment because of
-            // varied wall heights.
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v5
+            // (2026-06-02): Wall D-pad down uses an explicit downscan
+            // helper that finds the next valid lower placement,
+            // skipping blocked Zs. Without this, simply decrementing
+            // the offset would land at a blocked Z and the per-frame
+            // up-scan in RefreshGhostAtCursorPublic would immediately
+            // re-snap upward, fighting the down move. The downscan
+            // uses GameActions::Query (no side effects) and updates
+            // the offset to the first valid Z below current.
             const auto sel = Windows::WindowSceneryGetTabSelection();
             const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
-            if (!isWall && !Windows::WindowSceneryCurrentItemIsStackable())
+            if (isWall)
+            {
+                Windows::WindowSceneryScanWallZDown(currentCursorTileNw(), 20);
+                _zAdjustedDuringHold = true;
+                return Disposition::Consumed;
+            }
+            if (!Windows::WindowSceneryCurrentItemIsStackable())
                 return Disposition::Consumed;
             const int16_t step = static_cast<int16_t>(kCoordsZStep);
             gSceneryShiftPressZOffset = static_cast<int16_t>(std::max<int32_t>(
