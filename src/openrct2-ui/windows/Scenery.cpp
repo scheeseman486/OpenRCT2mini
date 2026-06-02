@@ -2333,9 +2333,85 @@ namespace OpenRCT2::Ui::Windows
                 return;
             }
 
-            // Step H scope: LargeScenery still to wire. Clear any stale
-            // ghost so tab-switching to that type in grid cursor mode
-            // doesn't leave a previous-type ghost stuck.
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step H (2026-06-03):
+            // LargeScenery branch. Multi-tile footprint (one entry can
+            // occupy several tiles); the LargeSceneryEntry::tiles array
+            // lists per-cell offsets that get rotated by the placement
+            // direction. Mirrors mouse path's onToolUpdateLargeScenery
+            // (Scenery.cpp:1986) + updatePlacementLargeScenery
+            // (Scenery.cpp:3305).
+            //
+            // Direction: gWindowSceneryRotation - GetCurrentRotation()
+            // (standard screen→world conversion). Z: surface + offset
+            // when offset > 0, else 0 — same shape as Wall.
+            // Highlight: MapSelection::addSelectedTile() for each
+            // rotated tile offset, with MapSelectFlag::enableConstruct
+            // for the multi-tile preview.
+            if (selection.SceneryType == SCENERY_TYPE_LARGE)
+            {
+                const auto* sceneryEntry = ObjectEntryManager::GetObjectEntry<LargeSceneryEntry>(selection.EntryIndex);
+                if (sceneryEntry == nullptr)
+                {
+                    SceneryRemoveGhostToolPlacement();
+                    return;
+                }
+
+                const CoordsXY mapTile = cursorTileNw;
+
+                Direction direction = gWindowSceneryRotation;
+                direction -= GetCurrentRotation();
+                direction &= 0x3;
+
+                // Z computation (mirrors Wall + mouse path's
+                // updatePlacementLargeScenery): offset > 0 →
+                // (surfZ & 0xFFF0) + offset; else 0.
+                int16_t placeZ = 0;
+                if (gSceneryShiftPressZOffset > 0)
+                {
+                    auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
+                    if (surfaceElement != nullptr)
+                    {
+                        const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+                        constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
+                        placeZ = std::clamp<int16_t>(
+                            surfZ + gSceneryShiftPressZOffset, 16, kZMax);
+                    }
+                }
+                gSceneryPlaceZ = placeZ;
+
+                // Multi-tile highlight: each entry tile's offset
+                // rotated by direction → added to selected-tiles set.
+                gMapSelectFlags.set(MapSelectFlag::enableConstruct);
+                MapSelection::clearSelectedTiles();
+                for (auto& tile : sceneryEntry->tiles)
+                {
+                    MapSelection::addSelectedTile(mapTile + tile.offset.Rotate(direction));
+                }
+
+                // No-change shortcut — matches mouse path
+                // (Scenery.cpp:2003-2009).
+                if ((gSceneryGhostType & SCENERY_GHOST_FLAG_3) && mapTile == gSceneryGhostPosition
+                    && placeZ == _unkF64F0A && gSceneryPlaceObject.SceneryType == SCENERY_TYPE_LARGE
+                    && gSceneryPlaceObject.EntryIndex == selection.EntryIndex)
+                {
+                    return;
+                }
+
+                SceneryRemoveGhostToolPlacement();
+                gSceneryPlaceObject.SceneryType = SCENERY_TYPE_LARGE;
+                gSceneryPlaceObject.EntryIndex = selection.EntryIndex;
+                _unkF64F0A = placeZ;
+
+                money64 cost = TryPlaceGhostLargeScenery(
+                    { mapTile, placeZ, direction }, selection.EntryIndex, _sceneryPrimaryColour,
+                    _scenerySecondaryColour, _sceneryTertiaryColour);
+                gSceneryPlaceCost = cost;
+                return;
+            }
+
+            // Other types (none left at Step H): clear stale ghost so
+            // tab-switching in grid cursor mode doesn't leave a
+            // previous-type ghost stuck.
             if (selection.SceneryType != SCENERY_TYPE_SMALL)
             {
                 SceneryRemoveGhostToolPlacement();
@@ -4271,8 +4347,37 @@ namespace OpenRCT2::Ui::Windows
             return;
         }
 
+        // OPENRCT2MINI grid-cursor-plan §11.4 Step H (2026-06-03):
+        // LargeScenery PAD A → dispatch LargeSceneryPlaceAction at the
+        // cursor tile + direction derived from gWindowSceneryRotation.
+        // Mirrors onToolDownLargeScenery (Scenery.cpp:3885-3946) minus
+        // the +8 Z-retry loop (we use the Shift+D-pad Z-stack gesture
+        // for explicit Z control instead). Sound + ride-context window
+        // pop are part of the action's callback in the mouse path; we
+        // reproduce just the place-item sound here.
+        if (selection.SceneryType == SCENERY_TYPE_LARGE)
+        {
+            const CoordsXY tile{ gMapSelectPositionA.x, gMapSelectPositionA.y };
+
+            Direction direction = gWindowSceneryRotation;
+            direction -= GetCurrentRotation();
+            direction &= 0x3;
+
+            CoordsXYZD loc{ tile, gSceneryPlaceZ, direction };
+            auto sceneryPlaceAction = GameActions::LargeSceneryPlaceAction(
+                loc, selection.EntryIndex, _sceneryPrimaryColour, _scenerySecondaryColour, _sceneryTertiaryColour);
+            sceneryPlaceAction.SetCallback([](const GameActions::GameAction* ga, const GameActions::Result* result) {
+                if (result->error == GameActions::Status::ok)
+                {
+                    Audio::Play3D(Audio::SoundId::placeItem, result->position);
+                }
+            });
+            GameActions::Execute(&sceneryPlaceAction, getGameState());
+            return;
+        }
+
         if (selection.SceneryType != SCENERY_TYPE_SMALL)
-            return; // Step H: LargeScenery not yet wired
+            return;
 
         const auto* sceneryEntry = ObjectEntryManager::GetObjectEntry<SmallSceneryEntry>(selection.EntryIndex);
         if (sceneryEntry == nullptr)

@@ -2168,15 +2168,14 @@ namespace
                 Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
                 return Disposition::Consumed;
             }
-            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up
-            // (2026-06-03): walls behave the same way as banners —
-            // precision + D-pad direction picks which edge the wall
-            // attaches to (the edge IS the rotation, per Step G).
-            // No validity gate up front: walls can attach to almost
-            // any edge, and the place action's own validation will
-            // make the ghost vanish on bad picks (same UX as banner
-            // when validEdges == 0).
-            if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL)
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G/H follow-up
+            // (2026-06-03): walls and LargeScenery use the precision
+            // modifier the same way banners do — D-pad direction
+            // picks the rotation/edge/orientation. The place action's
+            // own validation handles bad picks (ghost just doesn't
+            // render).
+            if (!sel.IsUndefined()
+                && (sel.SceneryType == SCENERY_TYPE_WALL || sel.SceneryType == SCENERY_TYPE_LARGE))
             {
                 Windows::gWindowSceneryRotation = static_cast<uint8_t>(dpad) & 3;
                 Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
@@ -2456,10 +2455,25 @@ namespace
             // semantics are different).
             const auto sel = Windows::WindowSceneryGetTabSelection();
             const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
+            const bool isLargeScenery = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_LARGE;
             if (isWall)
             {
                 Windows::WindowSceneryScanWallZ(currentCursorTileNw(), +1, /*includeStart=*/false, 20);
                 _wallZAdjustedDuringHold = true;
+                return Disposition::Consumed;
+            }
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step H (2026-06-03):
+            // LargeScenery uses the same offset accumulator. No scan
+            // helper yet (would need a LargeSceneryPlaceAction Query
+            // analogue to ScanWallZ); plain offset bump + refresh is
+            // enough for initial Step H wire.
+            if (isLargeScenery)
+            {
+                constexpr int16_t kOffsetMax = (255 - 4) * kCoordsZStep;
+                gSceneryShiftPressZOffset = static_cast<int16_t>(std::min<int32_t>(
+                    gSceneryShiftPressZOffset + kCoordsZStep, kOffsetMax));
+                gSceneryShiftPressed = true;
+                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
                 return Disposition::Consumed;
             }
             if (!Windows::WindowSceneryCurrentItemIsStackable())
@@ -2480,10 +2494,20 @@ namespace
             // until valid (or hits 0). Symmetric to onRaise's upscan.
             const auto sel = Windows::WindowSceneryGetTabSelection();
             const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
+            const bool isLargeScenery = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_LARGE;
             if (isWall)
             {
                 Windows::WindowSceneryScanWallZ(currentCursorTileNw(), -1, /*includeStart=*/false, 20);
                 _wallZAdjustedDuringHold = true;
+                return Disposition::Consumed;
+            }
+            // LargeScenery: plain offset bump down (see onRaise note).
+            if (isLargeScenery)
+            {
+                gSceneryShiftPressZOffset = static_cast<int16_t>(std::max<int32_t>(
+                    gSceneryShiftPressZOffset - kCoordsZStep, 0));
+                gSceneryShiftPressed = gSceneryShiftPressZOffset > 0;
+                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
                 return Disposition::Consumed;
             }
             if (!Windows::WindowSceneryCurrentItemIsStackable())
