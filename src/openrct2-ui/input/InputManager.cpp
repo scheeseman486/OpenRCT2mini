@@ -2433,29 +2433,26 @@ namespace
         // accumulator gSceneryShiftPressZOffset semantics.
         Disposition onRaise() override
         {
-            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up
-            // (2026-06-01): Wall Z adjustment. Unlike SmallScenery's
-            // terrain-relative offset, walls use absolute Z stored
-            // directly in gSceneryPlaceZ. Mirrors the mouse path's
-            // gSceneryPlaceZ += 8 retry-loop step (Scenery.cpp:1980).
+            // OPENRCT2MINI grid-cursor-plan §11.4 Step G follow-up v2
+            // (2026-06-01): Wall Z adjustment via the same shift-press
+            // offset mechanism SmallScenery uses. Walls AND SmallScenery
+            // share gSceneryShiftPressZOffset; the wall ghost branch in
+            // RefreshGhostAtCursorPublic computes absolute Z =
+            // (surfaceZ & 0xFFF0) + offset (mirrors mouse path
+            // Scenery.cpp:3124-3129). Step is kLandHeightStep (16) for
+            // a one-wall-height bump per press — the mouse path's +8
+            // retry is for Z-fit on placement, not for user gestures.
             const auto sel = Windows::WindowSceneryGetTabSelection();
-            if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL)
-            {
-                constexpr int32_t kPlaceZMax = (255 - 4) * kCoordsZStep;
-                gSceneryPlaceZ = static_cast<int16_t>(
-                    std::min<int32_t>(gSceneryPlaceZ + kCoordsZStep, kPlaceZMax));
-                _zAdjustedDuringHold = true;
-                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+            const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
+            if (!isWall && !Windows::WindowSceneryCurrentItemIsStackable())
                 return Disposition::Consumed;
-            }
-            if (!Windows::WindowSceneryCurrentItemIsStackable())
-                return Disposition::Consumed;
+            const int16_t step = isWall ? static_cast<int16_t>(kLandHeightStep) : static_cast<int16_t>(kCoordsZStep);
             // Cap the offset at the same headroom the mouse path uses
             // for maxPossibleHeight; the place action will reject
             // anything that overshoots for the particular item.
             constexpr int16_t kOffsetMax = (255 - 4) * kCoordsZStep;
             gSceneryShiftPressZOffset = static_cast<int16_t>(std::min<int32_t>(
-                gSceneryShiftPressZOffset + kCoordsZStep, kOffsetMax));
+                gSceneryShiftPressZOffset + step, kOffsetMax));
             gSceneryShiftPressed = true;
             _zAdjustedDuringHold = true;
             Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
@@ -2464,20 +2461,16 @@ namespace
 
         Disposition onLower() override
         {
-            // Wall branch — see onRaise.
+            // Walls share the same shift-press offset mechanism (see
+            // onRaise). Step is kLandHeightStep for walls; kCoordsZStep
+            // for SmallScenery.
             const auto sel = Windows::WindowSceneryGetTabSelection();
-            if (!sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL)
-            {
-                gSceneryPlaceZ = static_cast<int16_t>(
-                    std::max<int32_t>(gSceneryPlaceZ - kCoordsZStep, 0));
-                _zAdjustedDuringHold = true;
-                Windows::WindowSceneryRefreshGhostAtCursor(currentCursorTileNw());
+            const bool isWall = !sel.IsUndefined() && sel.SceneryType == SCENERY_TYPE_WALL;
+            if (!isWall && !Windows::WindowSceneryCurrentItemIsStackable())
                 return Disposition::Consumed;
-            }
-            if (!Windows::WindowSceneryCurrentItemIsStackable())
-                return Disposition::Consumed;
+            const int16_t step = isWall ? static_cast<int16_t>(kLandHeightStep) : static_cast<int16_t>(kCoordsZStep);
             gSceneryShiftPressZOffset = static_cast<int16_t>(std::max<int32_t>(
-                gSceneryShiftPressZOffset - kCoordsZStep, 0));
+                gSceneryShiftPressZOffset - step, 0));
             // Drop the shift-pressed flag when the offset returns to 0
             // so the ghost helper takes the "Z=0, action places at
             // terrain" branch instead of "terrain + 0" (which is

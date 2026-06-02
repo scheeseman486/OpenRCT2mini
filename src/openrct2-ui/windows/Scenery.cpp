@@ -2268,12 +2268,20 @@ namespace OpenRCT2::Ui::Windows
             // Wall branch. Walls attach to one edge of a tile (N/E/S/W)
             // — the direction picker IS the rotation. Direction comes
             // from gWindowSceneryRotation - GetCurrentRotation() (same
-            // screen→world conversion as Banner). Z is the user-set
-            // gSceneryPlaceZ (Shift+D-pad Z-stack gesture sets it,
-            // defaults to 0 = surface). Mirrors mouse path's
+            // screen→world conversion as Banner). Mirrors mouse path's
             // updatePlacementWall + onToolUpdateWall (Scenery.cpp:1929,
             // 3083). Highlight uses MapSelectType::edge0..edge3 so the
             // user sees which side of the tile the wall will land on.
+            //
+            // Z computation (v2 2026-06-01): when the user has bumped
+            // the Shift+D-pad Z offset (gSceneryShiftPressZOffset),
+            // gSceneryPlaceZ = (surfaceZ & 0xFFF0) + offset. Otherwise
+            // gSceneryPlaceZ = 0 (let WallPlaceAction figure out the
+            // actual surface attachment point). Exact mirror of mouse
+            // path updatePlacementWall Scenery.cpp:3114-3151. Earlier
+            // attempts wrote gSceneryPlaceZ as raw offset — that put
+            // the wall below the surface, so the place action rejected
+            // and the ghost vanished.
             if (selection.SceneryType == SCENERY_TYPE_WALL)
             {
                 const CoordsXY mapTile = cursorTileNw;
@@ -2281,6 +2289,30 @@ namespace OpenRCT2::Ui::Windows
                 uint8_t edge = gWindowSceneryRotation;
                 edge -= GetCurrentRotation();
                 edge &= 0x3;
+
+                // Compute placement Z from the surface + offset, the
+                // same way updatePlacementWall does. Offset == 0 means
+                // "at the surface" so we set gSceneryPlaceZ = 0 and let
+                // the action figure it out.
+                if (gSceneryShiftPressed && gSceneryShiftPressZOffset != 0)
+                {
+                    auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
+                    if (surfaceElement != nullptr)
+                    {
+                        const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+                        constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
+                        gSceneryPlaceZ = std::clamp<int16_t>(
+                            surfZ + gSceneryShiftPressZOffset, 16, kZMax);
+                    }
+                    else
+                    {
+                        gSceneryPlaceZ = 0;
+                    }
+                }
+                else
+                {
+                    gSceneryPlaceZ = 0;
+                }
 
                 // Highlight the chosen edge of the cursor tile.
                 gMapSelectFlags.set(MapSelectFlag::enable);
