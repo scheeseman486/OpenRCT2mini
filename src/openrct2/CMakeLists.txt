@@ -310,6 +310,14 @@ target_compile_definitions(libopenrct2 PUBLIC
         $<$<BOOL:${DISABLE_TTF}>:DISABLE_TTF>
         $<$<BOOL:${DISABLE_VERSION_CHECKER}>:DISABLE_VERSION_CHECKER>
         $<$<BOOL:${ENABLE_SCRIPTING}>:ENABLE_SCRIPTING>
+        # OPENRCT2MINI: src/openrct2-ui/CMakeLists.txt sets this on the UI
+        # target so PerformanceProfilerWindow can use the Sampler /
+        # SnapshotWriter symbols. The producer files (Sampler.cpp /
+        # SnapshotWriter.cpp) live in libopenrct2 and ALSO need the flag
+        # — without it they compile to empty .o and the UI build link
+        # fails on undefined references. Upstream's libopenrct2 CMake
+        # was missing this; rediscovered during the v0.5.2 merge.
+        $<$<BOOL:${ENABLE_PERFORMANCE_PROFILER}>:ENABLE_PERFORMANCE_PROFILER>
 )
 
 target_compile_options(libopenrct2 PUBLIC $<$<BOOL:${ENABLE_ASAN}>:-fsanitize=address>)
