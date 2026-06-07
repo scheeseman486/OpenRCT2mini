@@ -1,3 +1,13 @@
+OpenRCT2mini fork notes — upstream merge v0.5.2 (2026-06-08)
+------------------------------------------------------------------------
+- Merged upstream OpenRCT2 v0.5.2 (see the upstream entries below).
+- Improved: Ride music channel cap (3 streams + priority eviction + 200-unit hysteresis) now compiles only on the Miyoo Mini target. Host / Windows / AppImage builds use upstream's 32-channel FCFS.
+- Improved: News-item severity classification cached at queue-insert time now drives both the DualShock lightbar fade and the critical-news rumble pulse through the merged code.
+- Fix: OPENRCT2MINI preprocessor macro now propagated to libopenrct2 as a C++ compile definition. Latent CMake bug — sites like Ui.cpp's mallopt(M_ARENA_MAX, 2) had been silently dead on the Miyoo build for the lifetime of the gate.
+- Fix: Windows mingw-w64 (jammy GCC 10) cross-build: explicit std::span construction at the one sfl::static_vector call site in Guest.cpp; -fstack-protector-strong scoped to C/C++ via add_compile_options + COMPILE_LANGUAGE generator expression (no longer leaks into windres and breaks resource compile).
+- Fix: AppImage build: added a fork-specific PRIVACY.md (upstream v0.5.2 made the install step unconditional; OpenRCT2mini's privacy story is much simpler — no network, no telemetry, no crash reporter, all compiled out).
+- Build: cmake 3.24+ now installed from the Kitware apt repo in both the Windows and AppImage Docker images (upstream v0.5.2 raised cmake_minimum_required from 3.21 to 3.24; jammy ships 3.22).
+
 0.5.2 (2026-06-07)
 ------------------------------------------------------------------------
 - Improved: [#26322] [Plugin] Add footpath flags to FootpathSurfaceObject in the plugin API.
