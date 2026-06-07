@@ -34,8 +34,17 @@
     #define MAX_PATH 260
 #endif
 
+// OPENRCT2MINI: std::endian is C++20 (lives in <bit> behind __cpp_lib_endian).
+// On Buildroot GCC 8.3 the header doesn't exist; fall back to the GCC built-in
+// __BYTE_ORDER__ macro which is available everywhere we care about.
+#if defined(__cpp_lib_endian)
 static_assert(
     std::endian::native == std::endian::little, "OpenRCT2 is known to be broken on big endian. Proceed with caution!");
+#elif defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__)
+static_assert(
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__,
+    "OpenRCT2 is known to be broken on big endian. Proceed with caution!");
+#endif
 
 enum class SpecialFolder
 {

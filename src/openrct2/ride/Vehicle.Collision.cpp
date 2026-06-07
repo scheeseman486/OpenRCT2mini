@@ -168,7 +168,11 @@ bool Vehicle::UpdateMotionCollisionDetection(const CoordsXYZ& loc, EntityId* oth
             const int32_t dotProduct = (directionVector.x * directionVectorToVehicle2.x)
                 + (directionVector.y * directionVectorToVehicle2.y);
 
-            static constexpr int32_t threshold = []() consteval {
+            // OPENRCT2MINI: was `consteval` (C++20). `constexpr` is the
+            // closest C++17 equivalent and what GCC 8.3 (Buildroot)
+            // accepts. Loses compile-time-only enforcement but the
+            // static_assert below still pins the value.
+            static constexpr int32_t threshold = []() constexpr {
                 const constexpr float originalThreshold = 0.35f;
                 const constexpr float directionVectorLength = 256.0f;
                 const constexpr float thresholdLength = originalThreshold * directionVectorLength;

@@ -9,7 +9,9 @@
 
 #include "Window.h"
 
+#include "../UiContext.h"
 #include "../UiStringIds.h"
+#include "../input/InputManager.h"
 #include "Theme.h"
 #include "Widget.h"
 
@@ -145,15 +147,18 @@ namespace OpenRCT2::Ui
      *
      *  rct2: 0x006E79FB
      */
-    static void WindowViewportWheelInput(WindowBase& w, int32_t wheel)
+    static void WindowViewportWheelInput(WindowBase& /*w*/, int32_t /*wheel*/)
     {
-        if (gLegacyScene == LegacyScene::trackDesignsManager || gLegacyScene == LegacyScene::titleSequence)
-            return;
-
-        if (wheel < 0)
-            Windows::WindowZoomIn(w, true);
-        else if (wheel > 0)
-            Windows::WindowZoomOut(w, true);
+        // OPENRCT2MINI mouse-input refactor: wheel-over-viewport
+        // hardcoded zoom is gone. The SDL_MOUSEWHEEL handler now
+        // emits "MOUSE WHEEL UP / DOWN" shortcut input events that
+        // dispatch through ShortcutManager. Defaults bind those to
+        // kViewGeneralZoomIn / kViewGeneralZoomOut, so the user-
+        // facing behaviour matches what was here before — but the
+        // user can rebind the wheel to anything. The
+        // _cursorState.wheel feed in UiContext still drives in-
+        // widget scroll handling (WindowScrollWheelInput) below
+        // for scroll widgets.
     }
 
     static bool isSpinnerGroup(WindowBase& w, WidgetIndex index, WidgetType buttonType)
@@ -526,7 +531,28 @@ namespace OpenRCT2::Ui
 
     ScreenCoordsXY WindowGetViewportSoundIconPos(WindowBase& w)
     {
-        const uint8_t buttonOffset = (Config::Get().interface.windowButtonsOnTheLeft) ? kCloseButtonSize + 2 : 0;
+        // OPENRCT2MINI W5: the title bar's left edge is now occupied
+        // either by the close button (when windowButtonsOnTheLeft is set)
+        // OR by the shade button (when close is on the right and the
+        // window has the standard caption+closeBox prefix → resizeFrame
+        // appends a shadeBox on the opposite side from close, i.e. left).
+        // Either way, the ear icon needs to clear that left-edge button.
+        // Shift it inward by closeButtonSize+2 if we know there's a
+        // shadeBox present, otherwise fall back to the original logic.
+        bool hasShadeOnLeft = false;
+        if (!Config::Get().interface.windowButtonsOnTheLeft)
+        {
+            for (const auto& wgt : w.widgets)
+            {
+                if (wgt.type == WidgetType::shadeBox)
+                {
+                    hasShadeOnLeft = true;
+                    break;
+                }
+            }
+        }
+        const uint8_t buttonOffset
+            = (Config::Get().interface.windowButtonsOnTheLeft || hasShadeOnLeft) ? kCloseButtonSize + 2 : 0;
         return w.windowPos + ScreenCoordsXY{ 2 + buttonOffset, 2 };
     }
 } // namespace OpenRCT2::Ui
@@ -1014,6 +1040,15 @@ namespace OpenRCT2::Ui::Windows
     void InvalidateAllWindowsAfterInput()
     {
         WindowVisitEach([](WindowBase* w) { WindowUpdateScrollWidgets(*w); });
+        // OPENRCT2MINI list-focus-plan flicker fix: after upstream
+        // WindowUpdateScrollWidgets has cleared per-window hover state
+        // for the input frame (StaffList/GuestList reset _highlighted-
+        // Index in onScrollGetSize, etc.), re-synthesise the hover for
+        // the focused list-mode scroll item so the focus ring's
+        // associated row highlight survives. Mouse-driven hovers
+        // re-establish themselves naturally each frame; focus-driven
+        // hovers don't, so they need this nudge.
+        OpenRCT2::Ui::GetInputManager().restoreFocusedListHover();
     }
 
     /**

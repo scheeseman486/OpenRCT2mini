@@ -26,7 +26,9 @@ namespace OpenRCT2
         uint8_t boundingBoxPrecisionShift = Entity::Yaw::kPrecisionOffset[EnumValue(Entity::Yaw::SpritePrecision::sprites16)];
     };
 
-    constexpr const std::array<PitchInfo, EnumValue(VehiclePitch::pitchCount)> kPitchInfos = []() consteval {
+    // OPENRCT2MINI: was `consteval` (C++20). `constexpr` is the C++17
+    // equivalent and what GCC 8.3 (Buildroot) accepts.
+    constexpr const std::array<PitchInfo, EnumValue(VehiclePitch::pitchCount)> kPitchInfos = []() constexpr {
         std::array<PitchInfo, EnumValue(VehiclePitch::pitchCount)> pitchInfo;
         namespace Yaw = OpenRCT2::Entity::Yaw;
         const uint8_t reverse = Yaw::kBaseRotation / 2;
