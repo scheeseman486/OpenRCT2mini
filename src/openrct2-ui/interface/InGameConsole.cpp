@@ -197,20 +197,40 @@ void InGameConsole::ClearLine()
     RefreshCaret();
 }
 
-// OPENRCT2MINI v0.5.2 merge stubs: OSK ⇄ console integration. The full
-// implementations got clobbered in the safe-apply; these no-op stubs
-// keep the link clean while the OSK calls through. The console still
-// works fine via the standard text-input path; only the OSK overlay's
-// live-mirror buffer + submit-on-Return path is dormant until restored.
+// OPENRCT2MINI: live mirror from OSK. Called every frame while the OSK
+// is up over a console session. Updates _consoleCurrentLine and the
+// caret position so the prompt line in the console region renders
+// what the user is typing on the OSK.
 void InGameConsole::OskMirrorBuffer(std::string_view text, size_t caret)
 {
-    (void)text;
-    (void)caret;
+    _consoleCurrentLine.assign(text);
+    if (caret > _consoleCurrentLine.size())
+        caret = _consoleCurrentLine.size();
+    RefreshCaret(caret);
+    if (_consoleTextInputSession != nullptr)
+    {
+        _consoleTextInputSession->SelectionStart = caret;
+        _consoleTextInputSession->Length = UTF8Length(_consoleCurrentLine.c_str());
+    }
 }
 
+// OPENRCT2MINI: OSK Start submitted a line. Behave as if the user hit
+// Enter on a real keyboard: install the typed text and run
+// LineExecute, which appends to history, runs the command, scrolls
+// the output, and clears the input via ClearInput().
 void InGameConsole::OskSubmitLine(std::string_view text)
 {
-    (void)text;
+    _consoleCurrentLine.assign(text);
+    RefreshCaret(_consoleCurrentLine.size());
+    Input(ConsoleInput::lineExecute);
+    // ClearInput inside LineExecute re-calls ContextStartTextInput so
+    // the keyboard-driven path can keep typing. The OSK is driving
+    // input here, not the keyboard, and the OSK already disables SDL
+    // text-input on open — so re-arm the disable, otherwise SDL
+    // resumes feeding TEXTINPUT events into _consoleCurrentLine and
+    // every subsequent device-button press briefly flashes raw chars
+    // in the prompt before the OSK frame mirror overwrites them.
+    ContextStopTextInput();
 }
 
 void InGameConsole::Open()
