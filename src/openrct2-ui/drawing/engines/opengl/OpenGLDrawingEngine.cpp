@@ -605,11 +605,11 @@ private:
         _screenFramebuffer = std::make_unique<OpenGLFramebuffer>(_window);
         _smoothScaleFramebuffer.reset();
         _scaleFramebuffer.reset();
-        if (GetContext()->GetUiContext().GetScaleQuality() != ScaleQuality::NearestNeighbour)
+        if (GetContext()->GetUiContext().GetScaleQuality() != ScaleQuality::nearestNeighbour)
         {
             _scaleFramebuffer = std::make_unique<OpenGLFramebuffer>(_width, _height, false, false);
         }
-        if (GetContext()->GetUiContext().GetScaleQuality() == ScaleQuality::SmoothNearestNeighbour)
+        if (GetContext()->GetUiContext().GetScaleQuality() == ScaleQuality::smoothNearestNeighbour)
         {
             uint32_t scale = std::ceil(Config::Get().general.windowScale);
             _smoothScaleFramebuffer = std::make_unique<OpenGLFramebuffer>(_width * scale, _height * scale, false, false);
@@ -853,10 +853,7 @@ void OpenGLDrawingContext::DrawLine(RenderTarget& rt, PaletteIndex colour, const
     command.depth = _drawCount++;
 }
 
-// OPENRCT2MINI: cut 33. `auto` parameters (abbreviated function templates) are
-// C++20; spell out as a function template for C++17 compat.
-template<typename A, typename B>
-static auto EuclideanRemainder(const A a, const B b)
+static auto EuclideanRemainder(const auto a, const auto b)
 {
     const auto r = a % b;
     return r >= 0 ? r : r + b;

@@ -57,7 +57,7 @@ namespace OpenRCT2::Ui::Windows
         optionsTab,
     };
 
-    static const auto makeNewsWidgets = [](StringId title) {
+    static constexpr auto makeNewsWidgets = [](StringId title) {
         return makeWidgets(
             makeWindowShim(title, kWindowSize),
             makeWidget({  0, 43 }, { kWindowSize.width, 257 }, WidgetType::resize, WindowColour::secondary),
@@ -66,12 +66,12 @@ namespace OpenRCT2::Ui::Windows
         );
     };
 
-    static const auto kNewsTabWidgets = makeWidgets(
+    static constexpr auto kNewsTabWidgets = makeWidgets(
         makeNewsWidgets(STR_RECENT_MESSAGES),
         makeWidget({  4, 44 }, { 392, 252 }, WidgetType::scroll,  WindowColour::secondary, SCROLL_VERTICAL)
     );
 
-    static const auto kOptionsTabWidgets = makeWidgets(
+    static constexpr auto kOptionsTabWidgets = makeWidgets(
         makeNewsWidgets(STR_NOTIFICATION_SETTINGS),
         makeWidget({ 10, 49 }, { 380,  14 }, WidgetType::checkbox, WindowColour::secondary)
     );
@@ -363,12 +363,12 @@ namespace OpenRCT2::Ui::Windows
             _pressedNewsItemIndex = -1;
             auto& gameState = getGameState();
 
-            if (j >= gameState.newsItems.GetArchived().size())
+            if (j >= gameState.newsItems.getArchived().size())
             {
                 return;
             }
 
-            const auto& newsItem = gameState.newsItems.GetArchived()[j];
+            const auto& newsItem = gameState.newsItems.getArchived()[j];
             if (newsItem.hasButton())
             {
                 return;
@@ -410,37 +410,10 @@ namespace OpenRCT2::Ui::Windows
 
         ScreenSize onScrollGetSize(int32_t scrollIndex) override
         {
-            int32_t scrollHeight = static_cast<int32_t>(getGameState().newsItems.GetArchived().size())
+            int32_t scrollHeight = static_cast<int32_t>(getGameState().newsItems.getArchived().size())
                     * CalculateNewsItemHeight()
                 - kItemSeparatorHeight;
             return { kWindowSize.width, scrollHeight };
-        }
-
-        // OPENRCT2MINI list-focus-plan §3.12: 1D list opt-in. Items
-        // are archived news entries; each row is CalculateNewsItemHeight()
-        // tall. First-pass behaviour: each focus item is one news
-        // row. Activation falls back to the default scrollFocusActivate
-        // which synthesises onScrollMouseDown at the row centre — that
-        // hit-tests for subject / location embedded buttons via the
-        // existing x-range checks and triggers the relevant action when
-        // the centre falls on a button. The plan's follow-up (per-button
-        // focus within a row) can be added later if users request it.
-        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
-        {
-            return static_cast<int32_t>(getGameState().newsItems.GetArchived().size());
-        }
-
-        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
-        {
-            const int32_t count = scrollFocusGetItemCount(scrollIndex);
-            if (itemIndex < 0 || itemIndex >= count)
-                return {};
-            const int32_t itemHeight = CalculateNewsItemHeight();
-            const int32_t y = itemIndex * itemHeight;
-            return ScreenRect{
-                { 0, y },
-                { kWindowSize.width - 1, y + itemHeight - kItemSeparatorHeight - 1 },
-            };
         }
 
         void onScrollMouseDown(int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override
@@ -449,7 +422,7 @@ namespace OpenRCT2::Ui::Windows
             int32_t i = 0;
             int32_t buttonIndex = 0;
             auto mutableScreenCoords = screenCoords;
-            for (const auto& newsItem : getGameState().newsItems.GetArchived())
+            for (const auto& newsItem : getGameState().newsItems.getArchived())
             {
                 if (mutableScreenCoords.y < itemHeight)
                 {
@@ -496,7 +469,7 @@ namespace OpenRCT2::Ui::Windows
             const bool scrollbarVisible = scrolls[0].contentHeight > widgets[WIDX_SCROLL].height() - 1;
             const auto scrollbarFill = scrollbarVisible ? 0 : kScrollBarWidth;
 
-            for (const auto& newsItem : getGameState().newsItems.GetArchived())
+            for (const auto& newsItem : getGameState().newsItems.getArchived())
             {
                 if (y >= rt.y + rt.height)
                     break;
@@ -571,7 +544,7 @@ namespace OpenRCT2::Ui::Windows
                             // If normal peep set sprite to normal (no food)
                             // If staff set sprite to staff sprite
                             auto spriteType = PeepAnimationGroup::normal;
-                            if (auto* staff = peep->As<Staff>(); staff != nullptr)
+                            if (auto* staff = peep->as<Staff>(); staff != nullptr)
                             {
                                 spriteType = staff->AnimationGroup;
                                 if (staff->isEntertainer())

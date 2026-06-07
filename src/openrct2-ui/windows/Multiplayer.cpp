@@ -73,7 +73,7 @@ namespace OpenRCT2::Ui::Windows
     static constexpr ScreenSize kWindowSize = { 340, 240 };
     // clang-format off
 
-    static const auto kMainMultiplayerWidgets = makeWidgets(
+    static constexpr auto kMainMultiplayerWidgets = makeWidgets(
         makeWindowShim(kStringIdNone, kWindowSize),
         makeWidget({  0, 43}, {340, 197}, WidgetType::resize, WindowColour::secondary                          ),
         makeTab   ({  3, 17},                                                          STR_SHOW_SERVER_INFO_TIP),
@@ -82,11 +82,11 @@ namespace OpenRCT2::Ui::Windows
         makeTab   ({ 96, 17},                                                          STR_OPTIONS_TIP         )
     );
 
-    static const auto window_multiplayer_information_widgets = makeWidgets(
+    static constexpr auto window_multiplayer_information_widgets = makeWidgets(
         kMainMultiplayerWidgets
     );
 
-    static const auto window_multiplayer_players_widgets = makeWidgets(
+    static constexpr auto window_multiplayer_players_widgets = makeWidgets(
         kMainMultiplayerWidgets,
         makeWidget({  3, 46}, {173,  15}, WidgetType::tableHeader, WindowColour::primary  , STR_PLAYER     ), // Player name
         makeWidget({176, 46}, { 83,  15}, WidgetType::tableHeader, WindowColour::primary  , STR_GROUP      ), // Player name
@@ -95,7 +95,7 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({  3, 60}, {334, 177}, WidgetType::scroll,      WindowColour::secondary, SCROLL_VERTICAL) // list
     );
 
-    static const auto window_multiplayer_groups_widgets = makeWidgets(
+    static constexpr auto window_multiplayer_groups_widgets = makeWidgets(
         kMainMultiplayerWidgets,
         makeWidget({141, 46}, {175,  12}, WidgetType::dropdownMenu, WindowColour::secondary                    ), // default group
         makeWidget({305, 47}, { 11,  10}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH),
@@ -107,7 +107,7 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({  3, 94}, {314, 207}, WidgetType::scroll,       WindowColour::secondary, SCROLL_VERTICAL   ) // permissions list
     );
 
-    static const auto window_multiplayer_options_widgets = makeWidgets(
+    static constexpr auto window_multiplayer_options_widgets = makeWidgets(
         kMainMultiplayerWidgets,
         makeWidget({3, 50}, {295, 12}, WidgetType::checkbox, WindowColour::secondary, STR_LOG_CHAT,              STR_LOG_CHAT_TIP             ),
         makeWidget({3, 64}, {295, 12}, WidgetType::checkbox, WindowColour::secondary, STR_LOG_SERVER_ACTIONS,    STR_LOG_SERVER_ACTIONS_TIP   ),
@@ -553,14 +553,14 @@ namespace OpenRCT2::Ui::Windows
                         case WIDX_ADD_GROUP:
                         {
                             auto networkModifyGroup = GameActions::NetworkModifyGroupAction(
-                                GameActions::ModifyGroupType::AddGroup);
+                                GameActions::ModifyGroupType::addGroup);
                             GameActions::Execute(&networkModifyGroup, gameState);
                             break;
                         }
                         case WIDX_REMOVE_GROUP:
                         {
                             auto networkModifyGroup = GameActions::NetworkModifyGroupAction(
-                                GameActions::ModifyGroupType::RemoveGroup, _selectedGroup);
+                                GameActions::ModifyGroupType::removeGroup, _selectedGroup);
                             GameActions::Execute(&networkModifyGroup, gameState);
                             break;
                         }
@@ -729,7 +729,7 @@ namespace OpenRCT2::Ui::Windows
                         case WIDX_DEFAULT_GROUP_DROPDOWN:
                         {
                             auto networkModifyGroup = GameActions::NetworkModifyGroupAction(
-                                GameActions::ModifyGroupType::SetDefault, Network::GetGroupID(selectedIndex));
+                                GameActions::ModifyGroupType::setDefault, Network::GetGroupID(selectedIndex));
                             GameActions::Execute(&networkModifyGroup, getGameState());
                             break;
                         }
@@ -758,7 +758,7 @@ namespace OpenRCT2::Ui::Windows
                         return;
 
                     auto networkModifyGroup = GameActions::NetworkModifyGroupAction(
-                        GameActions::ModifyGroupType::SetName, _selectedGroup, std::string(text));
+                        GameActions::ModifyGroupType::setName, _selectedGroup, std::string(text));
                     GameActions::Execute(&networkModifyGroup, getGameState());
                     break;
                 }
@@ -859,8 +859,8 @@ namespace OpenRCT2::Ui::Windows
                     invalidate();
 
                     auto networkModifyGroup = GameActions::NetworkModifyGroupAction(
-                        GameActions::ModifyGroupType::SetPermissions, _selectedGroup, "", index,
-                        GameActions::PermissionState::Toggle);
+                        GameActions::ModifyGroupType::setPermissions, _selectedGroup, "", index,
+                        GameActions::PermissionState::toggle);
                     GameActions::Execute(&networkModifyGroup, getGameState());
                     break;
                 }

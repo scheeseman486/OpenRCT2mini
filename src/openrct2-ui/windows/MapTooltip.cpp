@@ -22,7 +22,7 @@
 namespace OpenRCT2::Ui::Windows
 {
     // clang-format off
-    static const Widget window_map_tooltip_widgets[] = {
+    static constexpr Widget window_map_tooltip_widgets[] = {
         makeWidget({0, 0}, {200, 30}, WidgetType::imgBtn, WindowColour::primary),
     };
     // clang-format on
@@ -88,7 +88,7 @@ namespace OpenRCT2::Ui::Windows
         // Check for cursor movement
         _cursorHoldDuration++;
         if (abs(cursorChange.x) > 5 || abs(cursorChange.y) > 5 || gInputFlags.has(InputFlag::rightMousePressed)
-            || InputGetState() == InputState::ViewportRight)
+            || InputGetState() == InputState::viewportRight)
             _cursorHoldDuration = 0;
 
         _lastCursor = cursor;
@@ -99,20 +99,8 @@ namespace OpenRCT2::Ui::Windows
 
         auto& im = GetInputManager();
         auto* wm = GetWindowManager();
-        // OPENRCT2MINI cursor-selector-modal-plan: hide the map
-        // tooltip whenever the selector is active (cursor hidden by
-        // focus mode). The tooltip is anchored to the cursor —
-        // letting it spawn while the cursor is invisible would leave
-        // a free-floating "ride name" / "guest name" popup over the
-        // viewport with no apparent anchor. ProcessMouseOver is
-        // suppressed in the same mode, but the tooltip string was
-        // already populated by the previous frame's hover; this
-        // guard closes the window so the lingering popup goes away
-        // on the first frame after the selector wakes.
-        const bool selectorActive = im.getSelectorMode() == InputManager::SelectorMode::active;
-        if (selectorActive || _cursorHoldDuration < 25 || stringId == kStringIdNone
-            || im.isModifierKeyPressed(ModifierKey::ctrl) || im.isModifierKeyPressed(ModifierKey::shift)
-            || wm->FindByClass(WindowClass::error) != nullptr)
+        if (_cursorHoldDuration < 25 || stringId == kStringIdNone || im.isModifierKeyPressed(ModifierKey::ctrl)
+            || im.isModifierKeyPressed(ModifierKey::shift) || wm->FindByClass(WindowClass::error) != nullptr)
         {
             auto* windowMgr = GetWindowManager();
             windowMgr->CloseByClass(WindowClass::mapTooltip);

@@ -55,7 +55,6 @@
 #include "../object/ObjectRepository.h"
 #include "../object/PeepAnimationsObject.h"
 #include "../platform/Platform.h"
-#include "../profiling/Bench.h"
 #include "../profiling/Profiling.h"
 #include "../ride/Ride.h"
 #include "../ride/RideData.h"
@@ -201,7 +200,7 @@ static void ConsoleCommandRides(InteractiveConsole& console, const arguments_t& 
                 else
                 {
                     auto res = SetOperatingSetting(
-                        RideId::FromUnderlying(ride_index), GameActions::RideSetSetting::RideType, type);
+                        RideId::FromUnderlying(ride_index), GameActions::RideSetSetting::rideType, type);
                     if (res == kMoney64Undefined)
                     {
                         if (!gameState.cheats.allowArbitraryRideTypeChanges)
@@ -315,7 +314,7 @@ static void ConsoleCommandRides(InteractiveConsole& console, const arguments_t& 
                     else
                     {
                         auto rideAction = GameActions::RideFreezeRatingAction(
-                            rideIndex, GameActions::RideRatingType::Excitement, excitement);
+                            rideIndex, GameActions::RideRatingType::excitement, excitement);
                         GameActions::Execute(&rideAction, gameState);
                     }
                 }
@@ -349,7 +348,7 @@ static void ConsoleCommandRides(InteractiveConsole& console, const arguments_t& 
                     else
                     {
                         auto rideAction = GameActions::RideFreezeRatingAction(
-                            rideIndex, GameActions::RideRatingType::Intensity, intensity);
+                            rideIndex, GameActions::RideRatingType::intensity, intensity);
                         GameActions::Execute(&rideAction, gameState);
                     }
                 }
@@ -383,7 +382,7 @@ static void ConsoleCommandRides(InteractiveConsole& console, const arguments_t& 
                     else
                     {
                         auto rideAction = GameActions::RideFreezeRatingAction(
-                            rideIndex, GameActions::RideRatingType::Nausea, nausea);
+                            rideIndex, GameActions::RideRatingType::nausea, nausea);
                         GameActions::Execute(&rideAction, gameState);
                     }
                 }
@@ -467,7 +466,7 @@ static void ConsoleCommandStaff(InteractiveConsole& console, const arguments_t& 
             {
                 auto name = peep->GetName();
                 console.WriteFormatLine(
-                    "staff id %03d type: %02u energy %03u name %s", peep->Id, peep->AssignedStaffType, peep->Energy,
+                    "staff id %03d type: %02u energy %03u name %s", peep->id, peep->assignedStaffType, peep->Energy,
                     name.c_str());
             }
         }
@@ -808,7 +807,7 @@ static void ConsoleCommandSet(InteractiveConsole& console, const arguments_t& ar
         else if (varName == "scenario_initial_cash" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::InitialCash,
+                console, varName, GameActions::ScenarioSetSetting::initialCash,
                 std::clamp(ToMoney64FromGBP(int_val[0]), 0.00_GBP, 1000000.00_GBP));
         }
         else if (varName == "current_loan" && InvalidArguments(&invalidArgs, int_valid[0]))
@@ -816,68 +815,68 @@ static void ConsoleCommandSet(InteractiveConsole& console, const arguments_t& ar
             auto amount = std::clamp(
                 ToMoney64FromGBP(int_val[0]) - ToMoney64FromGBP(int_val[0] % 1000), 0.00_GBP, gameState.park.maxBankLoan);
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::InitialLoan, amount);
+                console, varName, GameActions::ScenarioSetSetting::initialLoan, amount);
         }
         else if (varName == "max_loan" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             auto amount = std::clamp(
                 ToMoney64FromGBP(int_val[0]) - ToMoney64FromGBP(int_val[0] % 1000), 0.00_GBP, 5000000.00_GBP);
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::MaximumLoanSize, amount);
+                console, varName, GameActions::ScenarioSetSetting::maximumLoanSize, amount);
         }
         else if (varName == "guest_initial_cash" && InvalidArguments(&invalidArgs, double_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::AverageCashPerGuest,
+                console, varName, GameActions::ScenarioSetSetting::averageCashPerGuest,
                 std::clamp(ToMoney64FromGBP(double_val[0]), 0.00_GBP, 1000.00_GBP));
         }
         else if (varName == "guest_initial_happiness" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::GuestInitialHappiness,
+                console, varName, GameActions::ScenarioSetSetting::guestInitialHappiness,
                 Park::CalculateGuestInitialHappiness(static_cast<uint8_t>(int_val[0])));
         }
         else if (varName == "guest_initial_hunger" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::GuestInitialHunger,
+                console, varName, GameActions::ScenarioSetSetting::guestInitialHunger,
                 (std::clamp(int_val[0], 1, 84) * 255 / 100 - 255) * -1);
         }
         else if (varName == "guest_initial_thirst" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::GuestInitialThirst,
+                console, varName, GameActions::ScenarioSetSetting::guestInitialThirst,
                 (std::clamp(int_val[0], 1, 84) * 255 / 100 - 255) * -1);
         }
         else if (varName == "guest_prefer_less_intense_rides" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::GuestsPreferLessIntenseRides, int_val[0]);
+                console, varName, GameActions::ScenarioSetSetting::guestsPreferLessIntenseRides, int_val[0]);
         }
         else if (varName == "guest_prefer_more_intense_rides" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::GuestsPreferMoreIntenseRides, int_val[0]);
+                console, varName, GameActions::ScenarioSetSetting::guestsPreferMoreIntenseRides, int_val[0]);
         }
         else if (varName == "forbid_marketing_campaigns" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::ForbidMarketingCampaigns, int_val[0]);
+                console, varName, GameActions::ScenarioSetSetting::forbidMarketingCampaigns, int_val[0]);
         }
         else if (varName == "forbid_landscape_changes" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::ForbidLandscapeChanges, int_val[0]);
+                console, varName, GameActions::ScenarioSetSetting::forbidLandscapeChanges, int_val[0]);
         }
         else if (varName == "forbid_tree_removal" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::ForbidTreeRemoval, int_val[0]);
+                console, varName, GameActions::ScenarioSetSetting::forbidTreeRemoval, int_val[0]);
         }
         else if (varName == "forbid_high_construction" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::ForbidHighConstruction, int_val[0]);
+                console, varName, GameActions::ScenarioSetSetting::forbidHighConstruction, int_val[0]);
         }
         else if (varName == "pay_for_rides" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
@@ -891,28 +890,28 @@ static void ConsoleCommandSet(InteractiveConsole& console, const arguments_t& ar
         else if (varName == "difficult_park_rating" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::ParkRatingHigherDifficultyLevel, int_val[0]);
+                console, varName, GameActions::ScenarioSetSetting::parkRatingHigherDifficultyLevel, int_val[0]);
         }
         else if (varName == "difficult_guest_generation" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::GuestGenerationHigherDifficultyLevel, int_val[0]);
+                console, varName, GameActions::ScenarioSetSetting::guestGenerationHigherDifficultyLevel, int_val[0]);
         }
         else if (varName == "park_open" && InvalidArguments(&invalidArgs, int_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ParkSetParameterAction>(
-                console, varName, (int_val[0] == 1) ? GameActions::ParkParameter::Open : GameActions::ParkParameter::Close);
+                console, varName, (int_val[0] == 1) ? GameActions::ParkParameter::open : GameActions::ParkParameter::close);
         }
         else if (varName == "land_rights_cost" && InvalidArguments(&invalidArgs, double_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::CostToBuyLand,
+                console, varName, GameActions::ScenarioSetSetting::costToBuyLand,
                 std::clamp(ToMoney64FromGBP(double_val[0]), 0.00_GBP, 200.00_GBP));
         }
         else if (varName == "construction_rights_cost" && InvalidArguments(&invalidArgs, double_valid[0]))
         {
             ConsoleSetVariableAction<GameActions::ScenarioSetSettingAction>(
-                console, varName, GameActions::ScenarioSetSetting::CostToBuyConstructionRights,
+                console, varName, GameActions::ScenarioSetSetting::costToBuyConstructionRights,
                 std::clamp(ToMoney64FromGBP(double_val[0]), 0.00_GBP, 200.00_GBP));
         }
         else if (varName == "game_speed" && InvalidArguments(&invalidArgs, int_valid[0]))
@@ -1137,7 +1136,7 @@ static void ConsoleCommandLoadObject(InteractiveConsole& console, const argument
     console.WriteLine("Object file loaded.");
 }
 
-constexpr auto _objectTypeNames = std::array<StringId, 21>{{
+constexpr auto _objectTypeNames = std::to_array<StringId>({
     STR_OBJECT_SELECTION_RIDE_VEHICLES_ATTRACTIONS,
     STR_OBJECT_SELECTION_SMALL_SCENERY,
     STR_OBJECT_SELECTION_LARGE_SCENERY,
@@ -1159,7 +1158,7 @@ constexpr auto _objectTypeNames = std::array<StringId, 21>{{
     STR_OBJECT_SELECTION_PEEP_NAMES,
     STR_OBJECT_SELECTION_PEEP_ANIMATIONS,
     STR_OBJECT_SELECTION_CLIMATE,
-}};
+});
 static_assert(_objectTypeNames.size() == EnumValue(ObjectType::count));
 
 static void ConsoleCommandCountObjects(InteractiveConsole& console, [[maybe_unused]] const arguments_t& argv)
@@ -1584,7 +1583,7 @@ static void ConsoleCommandMpDesync(InteractiveConsole& console, const arguments_
                 if (guests.size() > 1)
                     guest = guests[UtilRand() % guests.size() - 1];
                 guest->TshirtColour = static_cast<Drawing::Colour>(UtilRand() % Drawing::kColourNumNormal);
-                guest->Invalidate();
+                guest->invalidate();
             }
             break;
         }
@@ -1756,66 +1755,6 @@ static void ConsoleCommandProfilerStop([[maybe_unused]] InteractiveConsole& cons
     }
 }
 
-// OPENRCT2MINI rev 95: timedemo-style benchmark. Uses the title sequence
-// as the deterministic scene driver; forces 1 tick / frame and uncaps the
-// framerate so frame count is the only variable that gets fixed across
-// runs (Quake/Doom timedemo model — frame-count target, not wall-time).
-static void ConsoleCommandBench(InteractiveConsole& console, const arguments_t& argv)
-{
-    if (Profiling::Bench::isActive())
-    {
-        console.WriteLineError("bench: already running");
-        return;
-    }
-
-    uint32_t targetFrames = 3000;
-    if (!argv.empty())
-    {
-        const long parsed = std::strtol(argv[0].c_str(), nullptr, 10);
-        if (parsed <= 0 || parsed > 1'000'000)
-        {
-            console.WriteLineError("bench: frame count must be between 1 and 1,000,000");
-            return;
-        }
-        targetFrames = static_cast<uint32_t>(parsed);
-    }
-
-    if (!Profiling::Bench::start(targetFrames))
-    {
-        console.WriteLineError("bench: failed to start (already running, or no context)");
-        return;
-    }
-
-    console.WriteFormatLine(
-        "bench: %u frames after 60-frame warm-up; reloading title-sequence demo. Discards any unsaved park.",
-        targetFrames);
-    // Hide the console so the title-sequence demo renders unobstructed
-    // and the bench captures pure scene-render cost (no console pixels
-    // composited). InGameConsole::Update polls Bench::hasPendingReport()
-    // each frame and pops itself back open with the result line when
-    // the run finishes.
-    console.Hide();
-}
-
-static void ConsoleCommandBenchStatus(InteractiveConsole& console, [[maybe_unused]] const arguments_t& argv)
-{
-    if (Profiling::Bench::isActive())
-    {
-        console.WriteLine("bench: running");
-        return;
-    }
-
-    const auto& report = Profiling::Bench::getLastReport();
-    if (report.empty())
-    {
-        console.WriteLine("bench: idle (no run yet)");
-    }
-    else
-    {
-        console.WriteLine(report.c_str());
-    }
-}
-
 static void ConsoleSpawnBalloon(InteractiveConsole& console, const arguments_t& argv)
 {
     if (argv.size() < 3)
@@ -1944,18 +1883,6 @@ static constexpr ConsoleCommand console_command_table[] = {
       "profiler_stop [<file.csv|file.json>]" },
     { "profiler_export", ConsoleCommandProfilerExport, "Exports profiler data (format from extension, default CSV).",
       "profiler_export <file.csv|file.json>" },
-    // OPENRCT2MINI rev 95c: timedemo-style benchmark. Frame-count
-    // target, not time, so device slowdowns don't truncate the run.
-    // Reloads the title-sequence demo from position 0 — works from any
-    // scene. Discards unsaved work because the scene switch goes
-    // through TitleScene::Load → gameStateInitAll.
-    { "bench", ConsoleCommandBench,
-      "Runs a timedemo-style benchmark for the given frame count (default 3000). Reloads the title-sequence "
-      "demo from frame zero, forces 1 tick per frame, uncaps framerate, and resets RNG so runs are deterministic. "
-      "Discards any unsaved park.",
-      "bench [frames=3000]" },
-    { "bench_status", ConsoleCommandBenchStatus, "Shows whether a benchmark is running, or the last result line.",
-      "bench_status" },
 };
 
 static void ConsoleCommandWindows(InteractiveConsole& console, [[maybe_unused]] const arguments_t& argv)
@@ -2098,20 +2025,17 @@ void InteractiveConsole::WriteFormatLine(const char* format, ...)
     WriteLine(buffer);
 }
 
-// OPENRCT2MINI: cut 36. std::atomic<bool>::test()/test_and_set()/clear() are
-// C++20 (P1135). On C++17 / GCC 8.3 they don't exist on std::atomic. Use the
-// atomic<bool> primitives in C++17: exchange / store / load.
 void InteractiveConsole::BeginAsyncExecution()
 {
-    Guard::Assert(!_commandExecuting.exchange(true), "Command already executing asynchronously");
+    Guard::Assert(!_commandExecuting.test_and_set(), "Command already executing asynchronously");
 }
 
 void InteractiveConsole::EndAsyncExecution()
 {
-    _commandExecuting.store(false);
+    _commandExecuting.clear();
 }
 
 bool InteractiveConsole::IsExecuting()
 {
-    return _commandExecuting.load();
+    return _commandExecuting.test();
 }

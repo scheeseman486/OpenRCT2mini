@@ -74,19 +74,6 @@ public:
                 return openView(WindowView::changelog);
             case WindowClass::cheats:
                 return CheatsOpen();
-#ifdef ENABLE_PERFORMANCE_PROFILER
-            case WindowClass::performanceProfiler:
-                return PerformanceProfilerOpen();
-#endif
-            // OPENRCT2MINI gamepad-plan 1.11: haptics control window.
-            case WindowClass::haptics:
-                return HapticsOpen();
-            // OPENRCT2MINI gamepad-plan 1.11b: rumble editor.
-            case WindowClass::rumbleEditor:
-                return RumbleEditorOpen();
-            // OPENRCT2MINI input-plan Track 2 §4.2: LED Options panel.
-            case WindowClass::led:
-                return LedOpen();
             case WindowClass::clearScenery:
                 return ClearSceneryOpen();
             case WindowClass::customCurrencyConfig:
@@ -698,30 +685,11 @@ public:
         return true;
     }
 
-    // OPENRCT2MINI: cut 29. The top toolbar can wrap to a second row at narrow
-    // screen widths (≤640), so other windows placed below it must use the
-    // actual toolbar height, not the kTopToolbarHeight constant (which is the
-    // single-row value). Returns the live toolbar window's height when present.
-    static int32_t GetEffectiveToolbarHeight()
-    {
-        if (gLegacyScene == LegacyScene::titleSequence)
-            return 0;
-
-        auto* windowMgr = Ui::GetWindowManager();
-        if (windowMgr != nullptr)
-        {
-            auto* toolbar = windowMgr->FindByClass(WindowClass::topToolbar);
-            if (toolbar != nullptr && toolbar->height > 0)
-                return toolbar->height;
-        }
-        return kTopToolbarHeight + 1;
-    }
-
     static bool WindowFitsWithinSpace(const ScreenCoordsXY& loc, ScreenSize windowSize)
     {
         if (loc.x < 0)
             return false;
-        if (loc.y <= GetEffectiveToolbarHeight() && gLegacyScene != LegacyScene::titleSequence)
+        if (loc.y <= kTopToolbarHeight && gLegacyScene != LegacyScene::titleSequence)
             return false;
         if (loc.x + windowSize.width > ContextGetWidth())
             return false;
@@ -742,7 +710,7 @@ public:
         unk = screenWidth + (unk * 2);
         if (loc.x > unk)
             return false;
-        if (loc.y <= GetEffectiveToolbarHeight() && gLegacyScene != LegacyScene::titleSequence)
+        if (loc.y <= kTopToolbarHeight && gLegacyScene != LegacyScene::titleSequence)
             return false;
         unk = screenHeight - (windowSize.height / 4);
         if (loc.y > unk)
@@ -759,7 +727,7 @@ public:
         else if (screenPos.x + windowSize.width > screenSize.width)
             screenPos.x = screenSize.width - windowSize.width;
 
-        auto toolbarAllowance = GetEffectiveToolbarHeight();
+        auto toolbarAllowance = gLegacyScene == LegacyScene::titleSequence ? 0 : (kTopToolbarHeight + 1);
         if (windowSize.height - toolbarAllowance > screenSize.height || screenPos.y < toolbarAllowance)
             screenPos.y = toolbarAllowance;
         else if (screenPos.y + windowSize.height - toolbarAllowance > screenSize.height)
@@ -1082,7 +1050,7 @@ public:
 
         if (gLegacyScene == LegacyScene::scenarioEditor)
         {
-            if (getGameState().editorStep != EditorStep::LandscapeEditor)
+            if (getGameState().editorStep != EditorStep::landscapeEditor)
                 return;
         }
 
@@ -1106,14 +1074,7 @@ public:
     {
         CloseByClass(WindowClass::dropdown);
         CloseByCondition([cls](WindowBase* w) -> bool {
-            // OPENRCT2MINI: spare sceneInvariant alongside stickToBack /
-            // stickToFront. CloseAllExceptClass fires from the savegame
-            // load path (Game.cpp), the file browser, and editor object
-            // selection — all transition-adjacent, so the same survival
-            // contract as WindowInitAll applies.
-            return w->classification != cls
-                && !w->flags.hasAny(
-                    WindowFlag::stickToBack, WindowFlag::stickToFront, WindowFlag::sceneInvariant);
+            return w->classification != cls && !w->flags.hasAny(WindowFlag::stickToBack, WindowFlag::stickToFront);
         });
     }
 
@@ -1397,17 +1358,7 @@ public:
 
                 if (itSourcePos != itDestPos)
                 {
-                    // OPENRCT2MINI: BOTH swapped windows change z-order.
-                    // The previously-frontmost window (at itDestPos before
-                    // the swap) gets demoted — its pixels in the area
-                    // beyond `w`'s footprint must be redrawn or they leak
-                    // through (most visible when the demoted window has a
-                    // viewport that was actively repainting). Capture its
-                    // pointer before the swap and invalidate it too.
-                    WindowBase* const demoted = itDestPos->get();
                     std::iter_swap(itSourcePos, itDestPos);
-                    if (demoted != nullptr && demoted != &w)
-                        demoted->invalidate();
                 }
                 w.invalidate();
 

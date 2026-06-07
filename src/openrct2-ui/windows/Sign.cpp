@@ -50,7 +50,7 @@ namespace OpenRCT2::Ui::Windows
 
     // clang-format off
     // 0x9AEE00
-    static const auto _signWidgets = makeWidgets(
+    static constexpr auto _signWidgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
         makeWidget({                     3,                      17}, {85, 60}, WidgetType::viewport,  WindowColour::secondary                                                        ), // Viewport
         makeWidget({kWindowSize.width - 25,                      19}, {24, 24}, WidgetType::flatBtn,   WindowColour::secondary, ImageId(SPR_RENAME),   STR_CHANGE_SIGN_TEXT_TIP       ), // change sign button
@@ -106,12 +106,12 @@ namespace OpenRCT2::Ui::Windows
             if (tileElement == nullptr)
                 return false;
 
-            int32_t viewZ = tileElement->GetBaseZ();
+            int32_t viewZ = tileElement->getBaseZ();
             currentFrame = viewZ;
 
             if (_isSmall)
             {
-                auto* wallElement = tileElement->AsWall();
+                auto* wallElement = tileElement->asWall();
                 if (wallElement == nullptr)
                 {
                     return false;
@@ -122,7 +122,7 @@ namespace OpenRCT2::Ui::Windows
             }
             else
             {
-                auto* sceneryElement = tileElement->AsLargeScenery();
+                auto* sceneryElement = tileElement->asLargeScenery();
                 if (sceneryElement == nullptr)
                 {
                     return false;
@@ -171,15 +171,15 @@ namespace OpenRCT2::Ui::Windows
 
                     if (_isSmall)
                     {
-                        CoordsXYZD wallLocation = { bannerCoords, tileElement->GetBaseZ(), tileElement->GetDirection() };
+                        CoordsXYZD wallLocation = { bannerCoords, tileElement->getBaseZ(), tileElement->getDirection() };
                         auto wallRemoveAction = GameActions::WallRemoveAction(wallLocation);
                         GameActions::Execute(&wallRemoveAction, gameState);
                     }
                     else
                     {
                         auto sceneryRemoveAction = GameActions::LargeSceneryRemoveAction(
-                            { bannerCoords, tileElement->GetBaseZ(), tileElement->GetDirection() },
-                            tileElement->AsLargeScenery()->GetSequenceIndex());
+                            { bannerCoords, tileElement->getBaseZ(), tileElement->getDirection() },
+                            tileElement->asLargeScenery()->GetSequenceIndex());
                         GameActions::Execute(&sceneryRemoveAction, gameState);
                     }
                     break;

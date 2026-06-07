@@ -9,9 +9,7 @@
 
 #include "Window.h"
 
-#include "../UiContext.h"
 #include "../UiStringIds.h"
-#include "../input/InputManager.h"
 #include "Theme.h"
 #include "Widget.h"
 
@@ -147,18 +145,15 @@ namespace OpenRCT2::Ui
      *
      *  rct2: 0x006E79FB
      */
-    static void WindowViewportWheelInput(WindowBase& /*w*/, int32_t /*wheel*/)
+    static void WindowViewportWheelInput(WindowBase& w, int32_t wheel)
     {
-        // OPENRCT2MINI mouse-input refactor: wheel-over-viewport
-        // hardcoded zoom is gone. The SDL_MOUSEWHEEL handler now
-        // emits "MOUSE WHEEL UP / DOWN" shortcut input events that
-        // dispatch through ShortcutManager. Defaults bind those to
-        // kViewGeneralZoomIn / kViewGeneralZoomOut, so the user-
-        // facing behaviour matches what was here before — but the
-        // user can rebind the wheel to anything. The
-        // _cursorState.wheel feed in UiContext still drives in-
-        // widget scroll handling (WindowScrollWheelInput) below
-        // for scroll widgets.
+        if (gLegacyScene == LegacyScene::trackDesignsManager || gLegacyScene == LegacyScene::titleSequence)
+            return;
+
+        if (wheel < 0)
+            Windows::WindowZoomIn(w, true);
+        else if (wheel > 0)
+            Windows::WindowZoomOut(w, true);
     }
 
     static bool isSpinnerGroup(WindowBase& w, WidgetIndex index, WidgetType buttonType)
@@ -347,15 +342,6 @@ namespace OpenRCT2::Ui
         widgetDraw(rt, *this, widgetIndex);
     }
 
-    void Window::drawShadedChrome(RenderTarget& rt)
-    {
-        // OPENRCT2MINI W5: WindowDrawWidgets skips widgets that have
-        // WidgetFlag::shadeHidden, which resizeFrame() sets on every body
-        // widget when isShaded is true. So this single call paints frame +
-        // caption + closeBox + shadeBox and nothing else.
-        Windows::WindowDrawWidgets(*this, rt);
-    }
-
     void Window::initScrollWidgets()
     {
         Windows::WindowInitScrollWidgets(*this);
@@ -531,28 +517,7 @@ namespace OpenRCT2::Ui
 
     ScreenCoordsXY WindowGetViewportSoundIconPos(WindowBase& w)
     {
-        // OPENRCT2MINI W5: the title bar's left edge is now occupied
-        // either by the close button (when windowButtonsOnTheLeft is set)
-        // OR by the shade button (when close is on the right and the
-        // window has the standard caption+closeBox prefix → resizeFrame
-        // appends a shadeBox on the opposite side from close, i.e. left).
-        // Either way, the ear icon needs to clear that left-edge button.
-        // Shift it inward by closeButtonSize+2 if we know there's a
-        // shadeBox present, otherwise fall back to the original logic.
-        bool hasShadeOnLeft = false;
-        if (!Config::Get().interface.windowButtonsOnTheLeft)
-        {
-            for (const auto& wgt : w.widgets)
-            {
-                if (wgt.type == WidgetType::shadeBox)
-                {
-                    hasShadeOnLeft = true;
-                    break;
-                }
-            }
-        }
-        const uint8_t buttonOffset
-            = (Config::Get().interface.windowButtonsOnTheLeft || hasShadeOnLeft) ? kCloseButtonSize + 2 : 0;
+        const uint8_t buttonOffset = (Config::Get().interface.windowButtonsOnTheLeft) ? kCloseButtonSize + 2 : 0;
         return w.windowPos + ScreenCoordsXY{ 2 + buttonOffset, 2 };
     }
 } // namespace OpenRCT2::Ui
@@ -564,9 +529,6 @@ namespace OpenRCT2::Ui::Windows
     static bool _usingWidgetTextBox = false;
     static TextInputSession* _textInput;
     static WidgetIdentifier _currentTextBox = { { WindowClass::null, 0 }, 0 };
-    // OPENRCT2MINI gamepad-plan 1.6c.6: token from pushModalHooks in
-    // WindowStartTextbox, passed to popModalHooks in WindowCancelTextbox.
-    static OpenRCT2::Ui::InputManager::ModalHooksToken _textBoxModalHooksToken = 0;
 
     WindowBase* WindowGetListening()
     {
@@ -593,8 +555,7 @@ namespace OpenRCT2::Ui::Windows
         return window.classification;
     }
 
-    void WindowStartTextbox(
-        const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength, OskMode oskMode)
+    void WindowStartTextbox(const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength)
     {
         if (_usingWidgetTextBox)
             WindowCancelTextbox();
@@ -611,58 +572,12 @@ namespace OpenRCT2::Ui::Windows
         _textBoxInput = existingText;
 
         _textInput = ContextStartTextInput(_textBoxInput, maxLength);
-
-        // OPENRCT2MINI gamepad-plan 1.6c.6: route kInterfaceDismiss /
-        // kInterfaceConfirm to WindowCancelTextbox (which commits the
-        // current edit and ends the in-place textbox session). Both
-        // dismiss and confirm collapse to the same call site because
-        // the existing textbox model has no separate "discard
-        // typed-but-uncommitted text" path — pressing Escape today
-        // does nothing for textbox edits, while pressing Return
-        // commits via TextComposition's hardcoded SDLK_RETURN switch.
-        // After 1.6c.6 / 1.6c.7 both keys flow through this hook
-        // instead. Stack-based, so the OSK that OskOpenForTextbox
-        // spawns below installs ITS hooks on top — OSK Commit /
-        // Cancel handles the typed-buffer state and ends the
-        // textbox session itself; ours fires only when the OSK has
-        // been dismissed but the textbox session is still active.
-        _textBoxModalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
-            /*dismiss=*/ [](const OpenRCT2::Ui::InputEvent&) {
-                WindowCancelTextbox();
-                return true;
-            },
-            /*confirm=*/ [](const OpenRCT2::Ui::InputEvent&) {
-                WindowCancelTextbox();
-                return true;
-            },
-        });
-
-        // OPENRCT2MINI: spawn the on-screen keyboard. The OSK has its
-        // own buffer; on Start it fires the parent's onTextInput and
-        // ends this textbox session.
-        // osk-overhaul §8: only spawn when the user has the on-screen
-        // keyboard enabled. When off, the ContextStartTextInput call
-        // above keeps SDL_TEXTINPUT flowing into TextComposition, so
-        // a hardware keyboard can drive the textbox directly.
-        if (Config::Get().interface.onScreenKeyboard)
-        {
-            OskOpenForTextbox(
-                const_cast<WindowBase*>(&callW), callWidget, existingText, static_cast<size_t>(maxLength), oskMode);
-        }
     }
 
     void WindowCancelTextbox()
     {
         if (_usingWidgetTextBox)
         {
-            // OPENRCT2MINI gamepad-plan 1.6c.6: pop the textbox modal
-            // hooks. Done first so a re-entrant call (e.g. via OSK
-            // Cancel which itself calls WindowCancelTextbox) idem-
-            // potently leaves the stack with no stale slot. Token is
-            // then reset so the next Start can push fresh.
-            OpenRCT2::Ui::GetInputManager().popModalHooks(_textBoxModalHooksToken);
-            _textBoxModalHooksToken = 0;
-
             auto* windowMgr = GetWindowManager();
             WindowBase* w = windowMgr->FindByNumber(_currentTextBox.window.classification, _currentTextBox.window.number);
             _currentTextBox.window.classification = WindowClass::null;
@@ -674,10 +589,6 @@ namespace OpenRCT2::Ui::Windows
                 windowMgr->InvalidateWidget(*w, _currentTextBox.widgetIndex);
             }
             _currentTextBox.widgetIndex = kWidgetIndexNull;
-            // OPENRCT2MINI: tear down the OSK if it's up. CloseByClass
-            // is idempotent — safe even if our own Commit just called
-            // WindowCancelTextbox after OSK::close().
-            OskClose();
         }
     }
 
@@ -1093,15 +1004,6 @@ namespace OpenRCT2::Ui::Windows
     void InvalidateAllWindowsAfterInput()
     {
         WindowVisitEach([](WindowBase* w) { WindowUpdateScrollWidgets(*w); });
-        // OPENRCT2MINI list-focus-plan flicker fix: after upstream
-        // WindowUpdateScrollWidgets has cleared per-window hover state
-        // for the input frame (StaffList/GuestList reset _highlighted-
-        // Index in onScrollGetSize, etc.), re-synthesise the hover for
-        // the focused list-mode scroll item so the focus ring's
-        // associated row highlight survives. Mouse-driven hovers
-        // re-establish themselves naturally each frame; focus-driven
-        // hovers don't, so they need this nudge.
-        OpenRCT2::Ui::GetInputManager().restoreFocusedListHover();
     }
 
     /**
@@ -1182,7 +1084,7 @@ namespace OpenRCT2::Ui::Windows
         if (gLegacyScene == LegacyScene::titleSequence)
             return;
 
-        if (gLegacyScene == LegacyScene::scenarioEditor && getGameState().editorStep != EditorStep::LandscapeEditor)
+        if (gLegacyScene == LegacyScene::scenarioEditor && getGameState().editorStep != EditorStep::landscapeEditor)
             return;
 
         if (gLegacyScene == LegacyScene::trackDesignsManager)
@@ -1192,40 +1094,5 @@ namespace OpenRCT2::Ui::Windows
             WindowZoomIn(*mainWindow, atCursor);
         else
             WindowZoomOut(*mainWindow, atCursor);
-    }
-
-    // OPENRCT2MINI mouse-input refactor: context-sensitive wheel
-    // dispatch. Mirrors the cursor-position dispatch tree that
-    // WindowAllWheelInput uses for the per-frame _cursorState.wheel
-    // accumulator. We only ZOOM when the cursor is over a viewport-
-    // class window (mainWindow / viewport). For windows that have a
-    // scroll widget or other wheel-handling widget under the cursor,
-    // we no-op and defer to the existing wheel feed — that path
-    // already scrolls the widget, and firing zoom on top would cause
-    // the "wheel over scroll widget zooms AND scrolls" double-fire.
-    void FireZoomOrScrollWheel(bool zoomIn)
-    {
-        // Match WindowAllWheelInput's right-mouse gate — wheel is
-        // suppressed while a right-click drag is active so the user's
-        // camera-pan gesture doesn't double up with zoom.
-        if (gInputFlags.has(InputFlag::rightMousePressed))
-            return;
-
-        auto* windowMgr = GetWindowManager();
-        auto cursorState = ContextGetCursorState();
-        WindowBase* w = windowMgr->FindFromPoint(cursorState->position);
-        if (w == nullptr)
-            return; // empty area — no zoom (matches WindowAllWheelInput)
-
-        if (w->classification == WindowClass::mainWindow || w->classification == WindowClass::viewport)
-        {
-            // Wheel-over-viewport: zoom main, centred on cursor.
-            MainWindowZoom(zoomIn, /*atCursor=*/true);
-            return;
-        }
-
-        // Window has a widget-handler under the cursor — no-op so the
-        // _cursorState.wheel feed (WindowScrollWheelInput / Window-
-        // OtherWheelInput / WindowWheelInput) handles it.
     }
 } // namespace OpenRCT2::Ui::Windows

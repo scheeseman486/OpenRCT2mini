@@ -268,7 +268,7 @@ STR_0892    :Screenshot opgeslagen als ‘{STRINGID}’
 STR_0893    :Screenshot maken mislukt!
 STR_0894    :‘Landscape data area’ zit vol!
 STR_0895    :Kan niet gedeeltelijk onder en boven de grond bouwen
-STR_0896    :Constructie {STRINGID}
+STR_0896    :Constructie {STRING}
 STR_0897    :Richting
 STR_0898    :Bocht naar links
 STR_0899    :Bocht naar rechts
@@ -1784,6 +1784,10 @@ STR_2483    :{WINDOW_COLOUR_2}Wekelijkse winst: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Wekelijkse winst: {RED}{CURRENCY2DP}
 STR_2487    :‘Echte’ namen van bezoekers tonen
 STR_2488    :Wissel tussen het tonen van ‘echte’ namen van bezoekers en bezoekernummers.
+STR_2489    :Sneltoetsen…
+STR_2490    :Sneltoetsen
+STR_2491    :Toetsen herstellen
+STR_2492    :Alle sneltoetsen terugzetten op de standaardinstellingen
 STR_2493    :Sluit bovenste venster
 STR_2494    :Sluit alle openstaande vensters
 STR_2495    :Bouwmodus annuleren
@@ -1929,6 +1933,9 @@ STR_2780    :Extra kijkvenster
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
+STR_2784    :Sneltoets wijzigen
+STR_2785    :{WINDOW_COLOUR_2}Voer een nieuwe sneltoets in voor:{NEWLINE}‘{STRINGID}’
+STR_2786    :Klik op de beschrijving om een nieuwe sneltoets in te stellen
 STR_2787    :{WINDOW_COLOUR_2}Parkwaarde: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Gefeliciteerd!{NEWLINE}{BLACK}Je hebt je doelstelling bereikt met een bedrijfswaarde van {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Je hebt je doelstelling niet bereikt!
@@ -1941,6 +1948,7 @@ STR_2795    :Sorteren
 STR_2796    :Sorteer de lijst met attracties op basis van het aangegeven informatietype
 STR_2797    :Beeld verschuiven als aanwijzer op de rand staat
 STR_2798    :Selecteer of het beeld moet verschuiven als de muisaanwijzer op de rand van het beeld staat
+STR_2799    :Instellingen voor sneltoetsen bekijken of aanpassen
 STR_2800    :{WINDOW_COLOUR_2}Totale bezoeken: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Entree-inkomsten: {BLACK}{CURRENCY2DP}
 STR_2802    :Kaart
@@ -2415,6 +2423,8 @@ STR_5216    :Lijst baanontwerpbeheer
 STR_5217    :Cheats
 STR_5218    :Thema’s
 STR_5219    :Opties
+STR_5220    :Sneltoetsen
+STR_5221    :Sneltoets aanpassen
 STR_5222    :Laden/opslaan
 STR_5223    :Opslagbevestiging
 STR_5224    :Afbraakbevestiging
@@ -3563,13 +3573,15 @@ STR_6577    :Snelh. blokremmen
 STR_6578    :Stelt de doorlaatsnelheid van de blokrem in. Deze snelheid geldt ook voor de remmen die voor deze blokrem geplaatst zijn (als de blokrem open staat).
 STR_6579    :De snelheden van de blokremmen zullen niet worden opgeslagen in het baanontwerp.
 STR_6580    :Toetsen herstellen
+STR_6581    :Weet je zeker dat je alle sneltoetsen op dit tabblad weer wilt terugzetten op de standaardwaarden?
+STR_6582    :Sneltoetsen openen
 STR_6583    :{WINDOW_COLOUR_2}Achterstevoren
 STR_6584    :Keert de trein om, zodat hij achterstevoren over de baan rijdt.
 STR_6585    :Kan dit niet wijzigen…
 STR_6586    :OpenRCT2
 STR_6587    :De titelmuziek van OpenRCT2 is gemaakt door Allister Brimble,{NEWLINE}en beschikbaar gemaakt onder de CC BY-SA 4.0-licentie.
 STR_6588    :Met dank aan Herman Riddering, die ons toestemming gaf om zijn 35er Voigt op te nemen.
-STR_6589    :Vensterknoppen omwisselen
+STR_6589    :Vensterknoppen aan de linkerkant
 STR_6590    :Verplaatst de vensterknoppen (o.a. voor het sluiten van het venster), die normaal gesproken rechts staan, naar de linkerkant van de titelbalk.
 STR_6591    :Deze werknemer is momenteel bezig met het repareren van een attractie en kan daarom niet worden ontslagen.
 STR_6592    :Deze werknemer is momenteel bezig met het inspecteren van een attractie en kan daarom niet worden ontslagen.
@@ -3765,13 +3777,13 @@ STR_6781    :Screenshots
 STR_6782    :Park
 STR_6783    :Attracties
 STR_6784    :Bezoekers
-STR_6785    :Virtuele muis
-STR_6786    :Versnelling:
-STR_6787    :Hoe snel het D-pad de maximumsnelheid van de virtuele muis bereikt
-STR_6788    :Snelheid:
-STR_6789    :Snelheidsvermenigvuldiger van de virtuele muis
-STR_6790    :Versnelling: {COMMA32}%
-STR_6791    :Snelheid: {COMMA32}%
+STR_6785    :Gamepad
+STR_6786    :Dode zone:
+STR_6787    :Dode zone voor de analoge stick (minimaal vereiste beweging voordat het spel reageert)
+STR_6788    :Gevoeligheid:
+STR_6789    :Gevoeligheidsfactor voor de analoge stick
+STR_6790    :Dode zone: {COMMA32}%
+STR_6791    :Gevoeligheid: {COMMA32}%
 STR_6792    :Ingangen
 STR_6793    :Bezoekers en werknemers
 STR_6794    :Decor en thema’s
@@ -3805,17 +3817,3 @@ STR_7026    :Hele attractie zichtbaar maken
 STR_7028    :Kwartspiraal omhoog
 STR_7029    :Kwartspiraal omlaag
 
-STR_7030    :Cursors
-STR_7031    :Cursorstijl:
-STR_7032    :Kies hoe de cursor op het scherm wordt getekend
-STR_7033    :Standaard
-STR_7034    :Hoog contrast
-STR_7035    :Klassiek
-STR_7036    :(geen)
-STR_7037    :Dit park overschrijdt de ondersteunde limieten van OpenRCT2mini (kaartgrootte, attracties of entiteiten) en kan niet op dit apparaat worden geladen.
-# OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
-STR_7038    :Slagschaduw
-STR_7039    :Render een doorzichtige schaduw onder de cursor zodat deze beter opvalt tegen drukke achtergronden
-# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
-STR_7040    :Windows
-STR_7041    :Venster oprollen

@@ -25,27 +25,13 @@ namespace OpenRCT2::Platform
 {
     std::string GetFolderPath(SpecialFolder folder)
     {
-        // OPENRCT2MINI: self-contained user data on host. Config / saves /
-        // cache live next to the binary in <exeDir>/save, matching the
-        // Mini's $APPDIR/save layout. Used to write to ~/Library/
-        // Application Support/OpenRCT2 — host build no longer touches
-        // ~/Library so the project tree is fully portable.
-        // PlatformEnvironment skips the "OpenRCT2" subdirectory append on
-        // host, so the result is exactly <exeDir>/save.
+        // macOS stores everything in ~/Library/Application Support/OpenRCT2
         switch (folder)
         {
             case SpecialFolder::userCache:
             case SpecialFolder::userConfig:
             case SpecialFolder::userData:
             {
-                auto exePath = Platform::GetCurrentExecutablePath();
-                auto exeDir = Path::GetDirectory(exePath);
-                if (!exeDir.empty())
-                {
-                    return Path::Combine(exeDir, "save");
-                }
-                // Fallback to historical path if exe path can't be
-                // resolved.
                 auto home = GetFolderPath(SpecialFolder::userHome);
                 return Path::Combine(home, "Library/Application Support");
             }
@@ -235,10 +221,10 @@ namespace OpenRCT2::Platform
 
             if (metricSystem.boolValue)
             {
-                return MeasurementFormat::Metric;
+                return MeasurementFormat::metric;
             }
 
-            return MeasurementFormat::Imperial;
+            return MeasurementFormat::imperial;
         }
     }
 

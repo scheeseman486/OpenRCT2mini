@@ -68,7 +68,7 @@ namespace OpenRCT2::Ui::Windows
     VALIDATE_GLOBAL_WIDX(WC_EDITOR_PARK_ENTRANCE, WIDX_ROTATE_ENTRANCE_BUTTON);
 
     // clang-format off
-    static const auto _widgets = makeWidgets(
+    static constexpr auto _widgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
         makeWidget     ({                      0, 43 }, { kWindowSize.width, kWindowSize.height - 43 }, WidgetType::resize,  WindowColour::secondary                                                   ),
         makeTab        ({                      3, 17 },                                                                                               kStringIdNone                                    ),
@@ -155,7 +155,7 @@ namespace OpenRCT2::Ui::Windows
             parkEntranceMapPosition.z = surfaceElement->GetWaterHeight();
             if (parkEntranceMapPosition.z == 0)
             {
-                parkEntranceMapPosition.z = surfaceElement->GetBaseZ();
+                parkEntranceMapPosition.z = surfaceElement->getBaseZ();
                 if ((surfaceElement->GetSlope() & kTileSlopeRaisedCornersMask) != 0)
                 {
                     parkEntranceMapPosition.z += 16;

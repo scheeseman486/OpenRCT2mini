@@ -196,7 +196,7 @@ static void FixGuestsHeadingToParkCount()
 
     for (auto* peep : EntityList<Guest>())
     {
-        if (peep->OutsideOfPark && peep->State != PeepState::leavingPark)
+        if (peep->outsideOfPark && peep->State != PeepState::leavingPark)
         {
             guestsHeadingToPark++;
         }
@@ -219,7 +219,7 @@ static void FixGuestCount()
 
     for (auto guest : EntityList<Guest>())
     {
-        if (!guest->OutsideOfPark)
+        if (!guest->outsideOfPark)
         {
             guestCount++;
         }
@@ -253,18 +253,18 @@ static void FixPeepsWithInvalidRideReference()
             Ride* ride = GetRide(rideIdx);
             if (ride == nullptr)
             {
-                LOG_WARNING("Couldn't find ride %u, resetting ride on peep %u", rideIdx, peep->Id);
+                LOG_WARNING("Couldn't find ride %u, resetting ride on peep %u", rideIdx, peep->id);
                 peep->CurrentRide = RideId::GetNull();
                 continue;
             }
             auto curName = peep->GetName();
             LOG_WARNING(
-                "Peep %u (%s) has invalid ride station = %u for ride %u.", peep->Id, curName.c_str(), srcStation.ToUnderlying(),
+                "Peep %u (%s) has invalid ride station = %u for ride %u.", peep->id, curName.c_str(), srcStation.ToUnderlying(),
                 rideIdx);
             auto station = RideGetFirstValidStationExit(*ride);
             if (station.IsNull())
             {
-                LOG_WARNING("Couldn't find station, removing peep %u", peep->Id);
+                LOG_WARNING("Couldn't find station, removing peep %u", peep->id);
                 peepsToRemove.push_back(peep);
             }
             else
@@ -314,8 +314,8 @@ static void FixInvalidSurfaces()
             auto& gameState = getGameState();
             if (x == 0 || x == gameState.mapSize.x - 1 || y == 0 || y == gameState.mapSize.y - 1)
             {
-                surfaceElement->SetBaseZ(kMinimumLandZ);
-                surfaceElement->SetClearanceZ(kMinimumLandZ);
+                surfaceElement->setBaseZ(kMinimumLandZ);
+                surfaceElement->setClearanceZ(kMinimumLandZ);
                 surfaceElement->SetSlope(0);
                 surfaceElement->SetWaterHeight(0);
             }
@@ -456,9 +456,9 @@ void ResetAllSpriteQuadrantPlacements()
     for (EntityId::UnderlyingType i = 0; i < kMaxEntities; i++)
     {
         auto* spr = getGameState().entities.GetEntity(EntityId::FromUnderlying(i));
-        if (spr != nullptr && spr->Type != EntityType::null)
+        if (spr != nullptr && spr->type != EntityType::null)
         {
-            spr->MoveTo(spr->GetLocation());
+            spr->moveTo(spr->getLocation());
         }
     }
 }
@@ -510,43 +510,6 @@ void SaveGameWithName(u8string_view name)
         gIsAutosaveLoaded = false;
         gScreenAge = 0;
     }
-}
-
-// OPENRCT2MINI: poweroff save flag. Async-signal-safe to set from a
-// signal handler. Actual save runs from the main loop via
-// HandlePowerOffSaveIfRequested(), see Game.h for the rationale.
-std::atomic<bool> gPowerOffSaveRequested{ false };
-
-void HandlePowerOffSaveIfRequested()
-{
-    // Atomic exchange so the rest of this function only runs once even if
-    // the signal fires repeatedly while we're saving.
-    if (!gPowerOffSaveRequested.exchange(false))
-        return;
-
-    LOG_INFO("OPENRCT2MINI: poweroff signal received; saving current park");
-
-    // No park to save while the title sequence is running — title parks
-    // are cycled showcases, not the user's work. Just exit cleanly.
-    if (gLegacyScene != LegacyScene::titleSequence)
-    {
-        try
-        {
-            auto& env = GetContext()->GetPlatformEnvironment();
-            const auto savesDir = env.GetDirectoryPath(DirBase::user, DirId::saves);
-            const auto savePath = Path::Combine(savesDir, u8"poweroff.park");
-            SaveGameWithName(savePath);
-        }
-        catch (const std::exception& e)
-        {
-            LOG_ERROR("OPENRCT2MINI: poweroff save failed: %s", e.what());
-        }
-    }
-
-    // Trigger graceful main-loop exit. Destructors will run normally; if
-    // the OS escalates to SIGKILL before they finish that's fine — the
-    // park file is already on disk by this point.
-    GetContext()->Finish();
 }
 
 std::unique_ptr<Intent> CreateSaveGameAsIntent()
@@ -727,7 +690,7 @@ void GameLoadOrQuitNoSavePrompt()
     {
         case PromptMode::saveBeforeLoad:
         {
-            auto loadOrQuitAction = GameActions::LoadOrQuitAction(GameActions::LoadOrQuitModes::CloseSavePrompt);
+            auto loadOrQuitAction = GameActions::LoadOrQuitAction(GameActions::LoadOrQuitModes::closeSavePrompt);
             GameActions::Execute(&loadOrQuitAction, gameState);
             ToolCancel();
             if (gLegacyScene == LegacyScene::scenarioEditor)
@@ -746,7 +709,7 @@ void GameLoadOrQuitNoSavePrompt()
         }
         case PromptMode::saveBeforeQuit:
         {
-            auto loadOrQuitAction = GameActions::LoadOrQuitAction(GameActions::LoadOrQuitModes::CloseSavePrompt);
+            auto loadOrQuitAction = GameActions::LoadOrQuitAction(GameActions::LoadOrQuitModes::closeSavePrompt);
             GameActions::Execute(&loadOrQuitAction, gameState);
             ToolCancel();
             if (gInputFlags.has(InputFlag::rightMousePressed))
@@ -767,7 +730,7 @@ void GameLoadOrQuitNoSavePrompt()
         }
         case PromptMode::saveBeforeNewGame:
         {
-            auto loadOrQuitAction = GameActions::LoadOrQuitAction(GameActions::LoadOrQuitModes::CloseSavePrompt);
+            auto loadOrQuitAction = GameActions::LoadOrQuitAction(GameActions::LoadOrQuitModes::closeSavePrompt);
             GameActions::Execute(&loadOrQuitAction, gameState);
             ToolCancel();
             auto intent = Intent(WindowClass::scenarioSelect);

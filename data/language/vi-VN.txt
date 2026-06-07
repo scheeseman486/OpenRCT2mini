@@ -270,7 +270,7 @@ STR_0892    :Ảnh chụp màn hình đã lưu vào đĩa dưới dạng ‘{STR
 STR_0893    :Ảnh chụp màn hình thất bại!
 STR_0894    :Vùng dữ liệu cảnh quan đầy!
 STR_0895    :Không thể xây dựng một phần trên và một phần dưới lòng đất
-STR_0896    :{STRINGID} Xây dựng
+STR_0896    :{STRING} Xây dựng
 STR_0897    :Hướng
 STR_0898    :Đường cong trái
 STR_0899    :Đường cong phải
@@ -1733,6 +1733,10 @@ STR_2483    :{WINDOW_COLOUR_2}Lợi nhuận hàng tuần: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Lợi nhuận hàng tuần: {RED}{CURRENCY2DP}
 STR_2487    :Hiện tên ‘thật’ của khách
 STR_2488    :Chuyển đổi giữa việc hiện tên ‘thật’ của khách và số khách
+STR_2489    :Phím tắt…
+STR_2490    :Phím tắt bàn phím
+STR_2491    :Đặt lại phím
+STR_2492    :Đặt lại tất cả các phím tắt bàn phím về cài đặt mặc định
 STR_2493    :Đóng cửa sổ trên cùng
 STR_2494    :Đóng tất cả các cửa sổ nổi
 STR_2495    :Hủy chế độ xây dựng
@@ -1878,6 +1882,9 @@ STR_2780    :Khung nhìn bổ sung
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT +
 STR_2783    :CTRL +
+STR_2784    :Thay đổi phím tắt bàn phím
+STR_2785    :{WINDOW_COLOUR_2}Nhấn phím tắt mới cho:{NEWLINE}“{STRINGID}”
+STR_2786    :Nhấp vào mô tả phím tắt để chọn phím mới
 STR_2787    :{WINDOW_COLOUR_2}Giá trị công viên: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Chúc mừng!{NEWLINE}{BLACK}Bạn đã đạt được mục tiêu với giá trị công ty là {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Bạn đã thất bại mục tiêu của mình!
@@ -1890,6 +1897,7 @@ STR_2795    :Sắp xếp
 STR_2796    :Sắp xếp danh sách trò chơi theo loại thông tin được hiển thị
 STR_2797    :Cuộn chế độ xem khi con trỏ ở cạnh màn hình
 STR_2798    :Cuộn chế độ xem khi con trỏ chuột ở cạnh màn hình
+STR_2799    :Xem hoặc thay đổi gán phím điều khiển
 STR_2800    :{WINDOW_COLOUR_2}Tổng số lượt vào cửa: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Thu nhập từ lượt vào cửa: {BLACK}{CURRENCY2DP}
 STR_2802    :Bản đồ
@@ -2360,6 +2368,8 @@ STR_5216    :Danh sách quản lý thiết kế đường ray
 STR_5217    :Gian lận
 STR_5218    :Chủ đề
 STR_5219    :Tùy chọn
+STR_5220    :Phím tắt bàn phím
+STR_5221    :Thay đổi phím tắt bàn phím
 STR_5222    :Tải/Lưu
 STR_5223    :Nhắc lưu
 STR_5224    :Nhắc phá hủy trò chơi
@@ -3506,6 +3516,8 @@ STR_6577    :Tốc độ phanh chặn
 STR_6578    :Đặt giới hạn tốc độ cho phanh chặn. Trong chế độ phân đoạn chặn, các phanh liền kề có tốc độ chậm hơn được liên kết với phanh chặn.
 STR_6579    :Phanh chặn sẽ được đặt về tốc độ mặc định khi lưu dưới dạng thiết kế đường ray
 STR_6580    :Đặt lại
+STR_6581    :Bạn có chắc chắn muốn đặt lại tất cả các phím tắt trên tab này không?
+STR_6582    :Mở cửa sổ phím tắt bàn phím
 STR_6583    :{WINDOW_COLOUR_2}Đoàn tàu đảo ngược
 STR_6584    :Chọn để chạy các đoàn tàu ngược
 STR_6585    :Không thể thực hiện thay đổi…

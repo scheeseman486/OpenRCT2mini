@@ -21,7 +21,6 @@
 #include <openrct2/Diagnostic.h>
 #include <openrct2/GameState.h>
 #include <openrct2/PlatformEnvironment.h>
-#include <openrct2/core/Path.hpp>  // OPENRCT2MINI cut 53c — auto-detect RCT1 path
 #include <openrct2/SpriteIds.h>
 #include <openrct2/actions/GameActionRunner.h>
 #include <openrct2/actions/general/ScenarioSetSettingAction.h>
@@ -29,10 +28,6 @@
 #include <openrct2/audio/AudioContext.h>
 #include <openrct2/audio/AudioMixer.h>
 #include <openrct2/config/Config.h>
-// OPENRCT2MINI disabled-settings: per-build UI gate manifest. Replaces
-// the scattered #ifdef OPENRCT2MINI blocks in onPrepare hooks below.
-// See src/openrct2/ui/DisabledSettings.h and config/<build>/disabled_settings.json.
-#include <openrct2/ui/DisabledSettings.h>
 #include <openrct2/core/EnumUtils.hpp>
 #include <openrct2/core/File.h>
 #include <openrct2/core/String.hpp>
@@ -73,28 +68,6 @@ using namespace OpenRCT2::Drawing;
 
 namespace OpenRCT2::Ui::Windows
 {
-    // OPENRCT2MINI: hide languages the build can't render. Cut 34
-    // dropped ICU and we don't ship TTF fallback fonts (CJK + Vietnamese
-    // need them for combining marks / glyph shaping; Arabic also needs
-    // BiDi shaping). The strings still ship in the data tarball — we
-    // just keep them off the dropdown so the user can't pick a setting
-    // that produces empty boxes.
-    //
-    // OPENRCT2MINI disabled-settings refactor: the hide-list lived as a
-    // hardcoded switch here; it now consults DisabledSettings::is-
-    // LanguageRemoved which reads from the per-build manifest at
-    // config/<build>/disabled_settings.json. Behaviour is unchanged
-    // for both builds (both manifests currently list the same six
-    // locales because ICU is disabled in both); the indirection lets
-    // a future build that ships TTF fallbacks enable a subset by
-    // editing the JSON instead of recompiling this file.
-    static bool IsLanguageHiddenFromDropdown(size_t langId)
-    {
-        if (langId >= std::size(LanguagesDescriptors))
-            return false;
-        return DisabledSettings::isLanguageRemoved(LanguagesDescriptors[langId].locale);
-    }
-
     enum WindowOptionsPage
     {
         WINDOW_OPTIONS_PAGE_DISPLAY,
@@ -223,13 +196,6 @@ namespace OpenRCT2::Ui::Windows
         WIDX_TOOLBAR_SHOW_CHAT,
         WIDX_TOOLBAR_SHOW_ZOOM,
         WIDX_TOOLBAR_SHOW_ROTATE_ANTI_CLOCKWISE,
-        // OPENRCT2MINI revision 59: Cursors group (Cursor style dropdown).
-        WIDX_CURSORS_GROUP,
-        WIDX_CURSOR_STYLE_LABEL,
-        WIDX_CURSOR_STYLE,
-        WIDX_CURSOR_STYLE_DROPDOWN,
-        // OPENRCT2MINI: optional drop shadow under the software cursor.
-        WIDX_CURSOR_DROP_SHADOW,
 
         // Controls
         WIDX_CONTROLS_GROUP = WIDX_PAGE_START,
@@ -240,10 +206,6 @@ namespace OpenRCT2::Ui::Windows
         WIDX_WINDOW_BUTTONS_ON_THE_LEFT,
         WIDX_ENLARGED_UI,
         WIDX_TOUCH_ENHANCEMENTS,
-        // OPENRCT2MINI osk-overhaul §8: gate OSK spawn from all
-        // textbox / TextInput / console paths. Sits between Touch
-        // enhancements and the Input Bindings button.
-        WIDX_ON_SCREEN_KEYBOARD,
         WIDX_HOTKEY_DROPDOWN,
 
         // Gamepad
@@ -252,13 +214,6 @@ namespace OpenRCT2::Ui::Windows
         WIDX_GAMEPAD_DEADZONE,
         WIDX_GAMEPAD_SENSITIVITY_LABEL,
         WIDX_GAMEPAD_SENSITIVITY,
-        // OPENRCT2MINI focus-mode-plan / Phase F.7: checkbox bound
-        // to Config::General::widgetFocusAlwaysOn. Lives in the
-        // Gamepad group because it's a gamepad-ergonomics knob
-        // (the focus ring is what makes D-pad navigation visible).
-        // Mouse-only users on the host build can untick it to
-        // suppress the ring everywhere.
-        WIDX_GAMEPAD_FOCUS_ALWAYS_ON,
 
         // Misc
         WIDX_TITLE_SEQUENCE_GROUP = WIDX_PAGE_START,
@@ -304,9 +259,6 @@ namespace OpenRCT2::Ui::Windows
         WIDX_EXPORT_EMSCRIPTEN_DATA,
         WIDX_IMPORT_EMSCRIPTEN_DATA,
 #endif
-#ifdef ENABLE_PERFORMANCE_PROFILER
-        WIDX_START_PROFILER,
-#endif
         WIDX_ASSET_PACKS,
     };
 
@@ -314,7 +266,7 @@ namespace OpenRCT2::Ui::Windows
     static constexpr StringId kWindowTitle = STR_OPTIONS_TITLE;
     static constexpr ScreenSize kWindowSize = { 310, 332 };
 
-    static const auto kMainOptionsWidgets = makeWidgets(
+    static constexpr auto kMainOptionsWidgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
         makeWidget({   0, 43 }, { kWindowSize.width, 289 }, WidgetType::resize, WindowColour::secondary),
         makeTab   ({   3, 17 }, STR_OPTIONS_DISPLAY_TIP),
@@ -327,7 +279,7 @@ namespace OpenRCT2::Ui::Windows
         makeTab   ({ 220, 17 }, STR_OPTIONS_ADVANCED)
     );
 
-    static const auto window_options_display_widgets = makeWidgets(
+    static constexpr auto window_options_display_widgets = makeWidgets(
         kMainOptionsWidgets,
         makeWidget        ({  5,  53}, {300,  70}, WidgetType::groupbox,     WindowColour::secondary, STR_GROUP_WINDOW                                                                ), // Window group
         makeWidget        ({ 10,  69}, {145,  12}, WidgetType::label,        WindowColour::secondary, STR_FULLSCREEN_MODE,                   STR_FULLSCREEN_MODE_TIP                  ), // Fullscreen
@@ -357,7 +309,7 @@ namespace OpenRCT2::Ui::Windows
     constexpr int32_t kFrameRenderingStart = 53;
     constexpr int32_t kFrameEffectStart = 165;
 
-    static const auto window_options_rendering_widgets = makeWidgets(
+    static constexpr auto window_options_rendering_widgets = makeWidgets(
         kMainOptionsWidgets,
         makeWidget({  5,  kFrameRenderingStart + 0}, {300, 110}, WidgetType::groupbox,     WindowColour::secondary, STR_RENDERING_GROUP                                       ), // Rendering group
         makeWidget({ 10, kFrameRenderingStart + 15}, {281,  12}, WidgetType::checkbox,     WindowColour::secondary, STR_TILE_SMOOTHING,         STR_TILE_SMOOTHING_TIP        ), // Landscape smoothing
@@ -377,7 +329,7 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({25, kFrameEffectStart + 75}, {266, 12}, WidgetType::checkbox, WindowColour::secondary, STR_DISABLE_LIGHTNING_EFFECT, STR_DISABLE_LIGHTNING_EFFECT_TIP)  // Disable lightning effect
     );
 
-    static const auto window_options_culture_widgets = makeWidgets(
+    static constexpr auto window_options_culture_widgets = makeWidgets(
         kMainOptionsWidgets,
         makeWidget({ 10,  54}, {145, 12}, WidgetType::label,        WindowColour::secondary, STR_OPTIONS_LANGUAGE,   STR_LANGUAGE_TIP           ), // language
         makeWidget({155,  53}, {145, 14}, WidgetType::dropdownMenu, WindowColour::secondary, kStringIdEmpty                                         ),
@@ -399,7 +351,7 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({288, 139}, { 11, 12}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH,     STR_DATE_FORMAT_TIP        )
     );
 
-    static const auto window_options_audio_widgets = makeWidgets(
+    static constexpr auto window_options_audio_widgets = makeWidgets(
         kMainOptionsWidgets,
         makeWidget({ 10,  53}, {290, 14}, WidgetType::dropdownMenu, WindowColour::secondary                                                ), // Audio device
         makeWidget({288,  54}, { 11, 12}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH,      STR_AUDIO_DEVICE_TIP ),
@@ -416,14 +368,11 @@ namespace OpenRCT2::Ui::Windows
     );
 
     constexpr int32_t kControlsGroupStart = 53;
-    // OPENRCT2MINI osk-overhaul §8: Controls group grew by one row
-    // (+15 px) to fit the on-screen keyboard checkbox before the
-    // Input Bindings button. Gamepad group offset bumped to match.
-    constexpr int32_t kGamepadGroupStart = kControlsGroupStart + 157;
+    constexpr int32_t kGamepadGroupStart = kControlsGroupStart + 142;
 
-    static const auto window_options_controls_widgets = makeWidgets(
+    static constexpr auto window_options_controls_widgets = makeWidgets(
         kMainOptionsWidgets,
-        makeWidget({  5, kControlsGroupStart +  0},  {300,154}, WidgetType::groupbox, WindowColour::secondary, STR_CONTROLS_GROUP                                                ), // Controls group
+        makeWidget({  5, kControlsGroupStart +  0},  {300,139}, WidgetType::groupbox, WindowColour::secondary, STR_CONTROLS_GROUP                                                ), // Controls group
         makeWidget({ 10, kControlsGroupStart + 13},  {290, 14}, WidgetType::checkbox, WindowColour::tertiary,  STR_SCREEN_EDGE_SCROLLING,      STR_SCREEN_EDGE_SCROLLING_TIP     ), // Edge scrolling
         makeWidget({ 10, kControlsGroupStart + 30},  {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_TRAP_MOUSE,                 STR_TRAP_MOUSE_TIP                ), // Trap mouse
         makeWidget({ 10, kControlsGroupStart + 45},  {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_INVERT_RIGHT_MOUSE_DRAG,    STR_INVERT_RIGHT_MOUSE_DRAG_TIP   ), // Invert right mouse dragging
@@ -431,30 +380,20 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({ 10, kControlsGroupStart + 75},  {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_WINDOW_BUTTONS_ON_THE_LEFT, STR_WINDOW_BUTTONS_ON_THE_LEFT_TIP), // Window buttons on the left
         makeWidget({ 10, kControlsGroupStart + 90},  {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_ENLARGED_UI,                STR_ENLARGED_UI_TIP               ),
         makeWidget({ 25, kControlsGroupStart + 105}, {275, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_TOUCH_ENHANCEMENTS,         STR_TOUCH_ENHANCEMENTS_TIP        ),
-        makeWidget({ 10, kControlsGroupStart + 120}, {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_ON_SCREEN_KEYBOARD,         STR_ON_SCREEN_KEYBOARD_TIP        ), // OPENRCT2MINI osk-overhaul §8
-        makeWidget({155, kControlsGroupStart + 135}, {144, 13}, WidgetType::button,   WindowColour::secondary, STR_HOTKEY,                     STR_HOTKEY_TIP                    ), // Set hotkeys buttons
+        makeWidget({155, kControlsGroupStart + 120}, {144, 13}, WidgetType::button,   WindowColour::secondary, STR_HOTKEY,                     STR_HOTKEY_TIP                    ), // Set hotkeys buttons
 
-        // Gamepad group — expanded from 46 px to 62 px to fit the
-        // OPENRCT2MINI Phase F.7 widgetFocusAlwaysOn checkbox at +45.
-        // The deadzone/sensitivity rows stay where they were so users
-        // who memorised their positions don't have to relearn.
-        makeWidget({  5, kGamepadGroupStart +  0},   {300, 62}, WidgetType::groupbox, WindowColour::secondary, STR_GAMEPAD_GROUP                                                 ), // Gamepad group
+        // Gamepad group
+        makeWidget({  5, kGamepadGroupStart +  0},   {300, 46}, WidgetType::groupbox, WindowColour::secondary, STR_GAMEPAD_GROUP                                                 ), // Gamepad group
         makeWidget({ 10, kGamepadGroupStart + 13},   { 90, 12}, WidgetType::label,    WindowColour::secondary, STR_GAMEPAD_DEADZONE_LABEL,     STR_GAMEPAD_DEADZONE_TIP          ), // Deadzone label
         makeWidget({105, kGamepadGroupStart + 13},   {190, 13}, WidgetType::scroll,   WindowColour::secondary, SCROLL_HORIZONTAL,              STR_GAMEPAD_DEADZONE_TOOLTIP_FORMAT), // Deadzone slider
         makeWidget({ 10, kGamepadGroupStart + 28},   { 90, 12}, WidgetType::label,    WindowColour::secondary, STR_GAMEPAD_SENSITIVITY_LABEL,  STR_GAMEPAD_SENSITIVITY_TIP       ), // Sensitivity label
-        makeWidget({105, kGamepadGroupStart + 28},   {190, 13}, WidgetType::scroll,   WindowColour::secondary, SCROLL_HORIZONTAL,              STR_GAMEPAD_SENSITIVITY_TOOLTIP_FORMAT), // Sensitivity slider
-        // OPENRCT2MINI focus-mode-plan / Phase F.7: focus mode toggle.
-        makeWidget({ 10, kGamepadGroupStart + 45},   {290, 12}, WidgetType::checkbox, WindowColour::tertiary,  STR_WIDGET_FOCUS_ALWAYS_ON,     STR_WIDGET_FOCUS_ALWAYS_ON_TIP    )  // Focus mode always on
+        makeWidget({105, kGamepadGroupStart + 28},   {190, 13}, WidgetType::scroll,   WindowColour::secondary, SCROLL_HORIZONTAL,              STR_GAMEPAD_SENSITIVITY_TOOLTIP_FORMAT)  // Sensitivity slider
     );
 
     constexpr int32_t kThemesGroupStart = 53;
     constexpr int32_t kToolbarGroupStart = kThemesGroupStart + 53;
-    // OPENRCT2MINI revision 59: Cursors group sits 3 px below the Toolbar group
-    // (which is 107 px tall). Single-row dropdown for now; sized for one
-    // future expansion (drop shadow toggle) without redoing the layout.
-    constexpr int32_t kCursorsGroupStart = kToolbarGroupStart + 110;
 
-    static const auto window_options_interface_widgets = makeWidgets(
+    static constexpr auto window_options_interface_widgets = makeWidgets(
         kMainOptionsWidgets,
         makeWidget({  5, kThemesGroupStart +  0}, {300, 50}, WidgetType::groupbox,     WindowColour::secondary, STR_THEMES_GROUP                                          ), // Themes group
         makeWidget({ 10, kThemesGroupStart + 14}, {145, 12}, WidgetType::label,        WindowColour::secondary, STR_THEMES_LABEL_CURRENT_THEME, STR_CURRENT_THEME_TIP     ), // Themes
@@ -472,23 +411,14 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({ 24, kToolbarGroupStart + 76}, {162, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_MUTE_BUTTON_ON_TOOLBAR,          STR_MUTE_BUTTON_ON_TOOLBAR_TIP               ), // Mute
         makeWidget({155, kToolbarGroupStart + 76}, {145, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_CHAT_BUTTON_ON_TOOLBAR,          STR_CHAT_BUTTON_ON_TOOLBAR_TIP               ), // Chat
         makeWidget({ 24, kToolbarGroupStart + 91}, {122, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_ZOOM_BUTTON_ON_TOOLBAR,          STR_ZOOM_BUTTON_ON_TOOLBAR_TIP               ), // Zoom
-        makeWidget({155, kToolbarGroupStart + 91}, {145, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_ROTATE_ANTI_CLOCKWISE,           STR_ROTATE_VIEW_ANTI_CLOCKWISE_IN_TOOLBAR_TIP),  // Rotate anti-clockwise
-
-        // OPENRCT2MINI revision 59: Cursors group with Cursor Style dropdown.
-        // OPENRCT2MINI: drop-shadow checkbox added below the dropdown — group
-        // height grew from 32 to 47 px to fit the new row at +30.
-        makeWidget({  5, kCursorsGroupStart +  0}, {300, 47}, WidgetType::groupbox,     WindowColour::secondary, STR_OPTIONS_CURSORS_GROUP                                                ),
-        makeWidget({ 10, kCursorsGroupStart + 14}, { 90, 12}, WidgetType::label,        WindowColour::secondary, STR_OPTIONS_CURSOR_STYLE_LABEL,  STR_OPTIONS_CURSOR_STYLE_TIP            ),
-        makeWidget({105, kCursorsGroupStart + 14}, {190, 14}, WidgetType::dropdownMenu, WindowColour::secondary, kStringIdEmpty,                  STR_OPTIONS_CURSOR_STYLE_TIP            ),
-        makeWidget({283, kCursorsGroupStart + 15}, { 11, 12}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH,              STR_OPTIONS_CURSOR_STYLE_TIP            ),
-        makeWidget({ 10, kCursorsGroupStart + 30}, {285, 12}, WidgetType::checkbox,     WindowColour::tertiary,  STR_OPTIONS_CURSOR_DROP_SHADOW,  STR_OPTIONS_CURSOR_DROP_SHADOW_TIP      )
+        makeWidget({155, kToolbarGroupStart + 91}, {145, 12}, WidgetType::checkbox, WindowColour::tertiary , STR_ROTATE_ANTI_CLOCKWISE,           STR_ROTATE_VIEW_ANTI_CLOCKWISE_IN_TOOLBAR_TIP)  // Rotate anti-clockwise
     );
 
     constexpr int32_t kTitleSequenceStart = 53;
     constexpr int32_t kScenarioOptionsGroupStart = kTitleSequenceStart + 39;
     constexpr int32_t kTweaksStart = kScenarioOptionsGroupStart + 72;
 
-    static const auto window_options_misc_widgets = makeWidgets(
+    static constexpr auto window_options_misc_widgets = makeWidgets(
         kMainOptionsWidgets,
         makeWidget(         {  5, kTitleSequenceStart +  0}, {300, 35}, WidgetType::groupbox,     WindowColour::secondary, STR_OPTIONS_TITLE_SEQUENCE                              ),
         makeDropdownWidgets({ 10, kTitleSequenceStart + 15}, {290, 14}, WidgetType::dropdownMenu, WindowColour::secondary, kStringIdEmpty,               STR_TITLE_SEQUENCE_TIP    ), // Title sequence dropdown
@@ -514,7 +444,7 @@ namespace OpenRCT2::Ui::Windows
     constexpr int32_t kSavingStart = kRCT1Start + 54;
     constexpr int32_t kAdvancedStart = kSavingStart + 84;
 
-    static const auto window_options_advanced_widgets = makeWidgets(
+    static constexpr auto window_options_advanced_widgets = makeWidgets(
         kMainOptionsWidgets,
         makeWidget        ({  5, kRCT1Start +  0}, {300, 50}, WidgetType::groupbox,     WindowColour::secondary, STR_GROUP_RCT1                                                                          ),
         makeWidget        ({ 10, kRCT1Start + 16}, {276, 12}, WidgetType::label,        WindowColour::secondary, STR_PATH_TO_RCT1,                          STR_PATH_TO_RCT1_TIP                         ), // RCT 1 path label
@@ -538,17 +468,10 @@ namespace OpenRCT2::Ui::Windows
         makeWidget        ({ 10, kAdvancedStart + 46}, {135, 14}, WidgetType::button,       WindowColour::secondary, STR_EXPORT_EMSCRIPTEN,                     kStringIdNone                                ), // Emscripten data export
         makeWidget        ({150, kAdvancedStart + 46}, {150, 14}, WidgetType::button,       WindowColour::secondary, STR_IMPORT_EMSCRIPTEN,                     kStringIdNone                                ), // Emscripten data import
 #endif
-#ifdef ENABLE_PERFORMANCE_PROFILER
-        // OPENRCT2MINI: title-screen entry point for the Performance
-        // Profiler. Sits to the left of the asset-packs button. y is set
-        // dynamically alongside asset-packs in AdvancedPrepareDraw so both
-        // pin to the bottom of the group box.
-        makeWidget        ({ 10, kAdvancedStart + 64}, {135, 14}, WidgetType::button,       WindowColour::secondary, STR_PERFORMANCE_PROFILER_START_BUTTON,     STR_PERFORMANCE_PROFILER_START_BUTTON_TIP    ), // Start Profiler
-#endif
         makeWidget        ({150, kAdvancedStart + 64}, {150, 14}, WidgetType::button,       WindowColour::secondary, STR_EDIT_ASSET_PACKS_BUTTON,               kStringIdNone                                )  // Asset packs
     );
 
-    static const std::span<const Widget> window_options_page_widgets[] = {
+    static constexpr std::span<const Widget> window_options_page_widgets[] = {
         window_options_display_widgets,
         window_options_rendering_widgets,
         window_options_culture_widgets,
@@ -1078,61 +1001,6 @@ namespace OpenRCT2::Ui::Windows
             setCheckboxValue(WIDX_MINIMIZE_FOCUS_LOSS, Config::Get().general.minimizeFullscreenFocusLoss);
             setCheckboxValue(WIDX_DISABLE_SCREENSAVER_LOCK, Config::Get().general.disableScreensaver);
 
-            // OPENRCT2MINI: a chunk of the Display section is moot on a
-            // 640x480 fullscreen device. Disable everything that doesn't
-            // make sense; keep Show FPS active because that still tells
-            // the user something useful.
-            //
-            //   Window section: fullscreen mode (we can't switch), resolution
-            //     (panel is fixed), window scale (no point on 640x480).
-            //   Drawing Engine: software is the only path on this build
-            //     (DISABLE_OPENGL).
-            //   Frame rate limit: tied to the drawing pipeline; vsync /
-            //     uncapped variants don't apply.
-            //   Multi-threaded rendering: a net regression on the Miyoo
-            //     Mini's single-issue ARM core — force-disabled in
-            //     Config.cpp so the checkbox is grey + unticked.
-            //   Behaviour: minimize-on-focus-loss (we never lose focus on
-            //     OnionUI) and disable-screensaver (the device is always-on
-            //     while powered).
-            // host-restoration-plan §2a: Mini-only disable. On host the
-            // user owns the display, so they get the upstream interactive
-            // controls (fullscreen/resolution/scale/drawing-engine/frame-
-            // rate-limit/multi-threading/focus-loss/screensaver). The
-            // multi-threading config force-off in Config.cpp is gated
-            // the same way so the checkbox honours saved state on host.
-            // OPENRCT2MINI disabled-settings: greying driven by the
-            // per-build manifest (config/<build>/disabled_settings.json).
-            // The old #ifdef OPENRCT2MINI block hand-listed every WIDX
-            // to grey on the Mini; that list now lives in the manifest's
-            // `disabled[]` array. We walk the same WIDX set here and
-            // ask the manifest per id so the host build naturally gets
-            // a no-op (its manifest's `disabled[]` is empty) without
-            // requiring two compile branches.
-            for (auto [idx, key] : { std::pair{ WIDX_FULLSCREEN_LABEL,        std::string_view{ "Options.WIDX_FULLSCREEN_LABEL" } },
-                                     std::pair{ WIDX_FULLSCREEN,              std::string_view{ "Options.WIDX_FULLSCREEN" } },
-                                     std::pair{ WIDX_FULLSCREEN_DROPDOWN,     std::string_view{ "Options.WIDX_FULLSCREEN_DROPDOWN" } },
-                                     std::pair{ WIDX_RESOLUTION_LABEL,        std::string_view{ "Options.WIDX_RESOLUTION_LABEL" } },
-                                     std::pair{ WIDX_RESOLUTION,              std::string_view{ "Options.WIDX_RESOLUTION" } },
-                                     std::pair{ WIDX_RESOLUTION_DROPDOWN,     std::string_view{ "Options.WIDX_RESOLUTION_DROPDOWN" } },
-                                     std::pair{ WIDX_SCALE_LABEL,             std::string_view{ "Options.WIDX_SCALE_LABEL" } },
-                                     std::pair{ WIDX_SCALE,                   std::string_view{ "Options.WIDX_SCALE" } },
-                                     std::pair{ WIDX_SCALE_UP,                std::string_view{ "Options.WIDX_SCALE_UP" } },
-                                     std::pair{ WIDX_SCALE_DOWN,              std::string_view{ "Options.WIDX_SCALE_DOWN" } },
-                                     std::pair{ WIDX_DRAWING_ENGINE_LABEL,    std::string_view{ "Options.WIDX_DRAWING_ENGINE_LABEL" } },
-                                     std::pair{ WIDX_DRAWING_ENGINE,          std::string_view{ "Options.WIDX_DRAWING_ENGINE" } },
-                                     std::pair{ WIDX_DRAWING_ENGINE_DROPDOWN, std::string_view{ "Options.WIDX_DRAWING_ENGINE_DROPDOWN" } },
-                                     std::pair{ WIDX_FRAME_RATE_LIMIT_LABEL,  std::string_view{ "Options.WIDX_FRAME_RATE_LIMIT_LABEL" } },
-                                     std::pair{ WIDX_FRAME_RATE_LIMIT,        std::string_view{ "Options.WIDX_FRAME_RATE_LIMIT" } },
-                                     std::pair{ WIDX_FRAME_RATE_LIMIT_DROPDOWN, std::string_view{ "Options.WIDX_FRAME_RATE_LIMIT_DROPDOWN" } },
-                                     std::pair{ WIDX_MULTITHREADING_CHECKBOX, std::string_view{ "Options.WIDX_MULTITHREADING_CHECKBOX" } },
-                                     std::pair{ WIDX_MINIMIZE_FOCUS_LOSS,     std::string_view{ "Options.WIDX_MINIMIZE_FOCUS_LOSS" } },
-                                     std::pair{ WIDX_DISABLE_SCREENSAVER_LOCK,std::string_view{ "Options.WIDX_DISABLE_SCREENSAVER_LOCK" } } })
-            {
-                if (DisabledSettings::isDisabled(key))
-                    widgetSetEnabled(*this, idx, false);
-            }
-
             // Dropdown captions for straightforward strings.
             widgets[WIDX_FULLSCREEN].text = FullscreenModeNames[Config::Get().general.fullscreenMode];
             widgets[WIDX_DRAWING_ENGINE].text = kDrawingEngineStringIds[EnumValue(Config::Get().general.drawingEngine)];
@@ -1156,17 +1024,9 @@ namespace OpenRCT2::Ui::Windows
         {
             auto ft = Formatter();
             ft.Add<int32_t>(static_cast<int32_t>(Config::Get().general.windowScale * 100));
-            // OPENRCT2MINI revision 66: when the spinner is disabled (always on
-            // OpenRCT2mini — the framebuffer is locked at 1.00× scale), match
-            // the disabled-style text colour the surrounding widget framework
-            // uses so the "1.00" reads as greyed-out rather than active.
-            // Pattern cribbed from EditorScenarioOptions.cpp:1675.
-            auto colour = !isWidgetDisabled(WIDX_SCALE)
-                ? colours[1]
-                : colours[1].withFlag(ColourFlag::inset, true);
             drawText(
                 rt, windowPos + ScreenCoordsXY{ widgets[WIDX_SCALE].left + 1, widgets[WIDX_SCALE].top + 1 },
-                STR_WINDOW_COLOUR_2_COMMA2DP32, ft, { colour });
+                STR_WINDOW_COLOUR_2_COMMA2DP32, ft, { colours[1] });
         }
 #pragma endregion
 
@@ -1374,29 +1234,13 @@ namespace OpenRCT2::Ui::Windows
                     gDropdown.items[static_cast<int32_t>(Config::Get().general.temperatureFormat)].setChecked(true);
                     break;
                 case WIDX_LANGUAGE_DROPDOWN:
-                {
-                    // OPENRCT2MINI: skip languages we can't render
-                    // properly (see IsLanguageHiddenFromDropdown). The
-                    // remapping also means dropdown index no longer
-                    // equals langId-1 — CultureDropdown reverses the
-                    // walk to recover the language id.
-                    int32_t visibleCount = 0;
-                    int32_t checkedIdx = -1;
-                    const auto current = LocalisationService_GetCurrentLanguage();
                     for (size_t i = 1; i < LANGUAGE_COUNT; i++)
                     {
-                        if (IsLanguageHiddenFromDropdown(i))
-                            continue;
-                        gDropdown.items[visibleCount] = Dropdown::MenuLabel(LanguagesDescriptors[i].native_name);
-                        if (static_cast<int32_t>(i) == current)
-                            checkedIdx = visibleCount;
-                        visibleCount++;
+                        gDropdown.items[i - 1] = Dropdown::MenuLabel(LanguagesDescriptors[i].native_name);
                     }
-                    ShowDropdown(widget, visibleCount);
-                    if (checkedIdx >= 0)
-                        gDropdown.items[checkedIdx].setChecked(true);
+                    ShowDropdown(widget, LANGUAGE_COUNT - 1);
+                    gDropdown.items[LocalisationService_GetCurrentLanguage() - 1].setChecked(true);
                     break;
-                }
                 case WIDX_DATE_FORMAT_DROPDOWN:
                     for (size_t i = 0; i < 4; i++)
                     {
@@ -1451,26 +1295,10 @@ namespace OpenRCT2::Ui::Windows
                     break;
                 case WIDX_LANGUAGE_DROPDOWN:
                 {
-                    // OPENRCT2MINI: walk the (filtered) dropdown to recover the
-                    // language id — dropdownIndex is dense over visible entries
-                    // only, no longer langId-1.
                     auto fallbackLanguage = LocalisationService_GetCurrentLanguage();
-                    int32_t targetLanguage = -1;
-                    int32_t visible = 0;
-                    for (size_t i = 1; i < LANGUAGE_COUNT; i++)
+                    if (dropdownIndex != LocalisationService_GetCurrentLanguage() - 1)
                     {
-                        if (IsLanguageHiddenFromDropdown(i))
-                            continue;
-                        if (visible == dropdownIndex)
-                        {
-                            targetLanguage = static_cast<int32_t>(i);
-                            break;
-                        }
-                        visible++;
-                    }
-                    if (targetLanguage > 0 && targetLanguage != LocalisationService_GetCurrentLanguage())
-                    {
-                        if (!LanguageOpen(targetLanguage))
+                        if (!LanguageOpen(dropdownIndex + 1))
                         {
                             // Failed to open language file, try to recover by falling
                             // back to previously used language
@@ -1484,7 +1312,7 @@ namespace OpenRCT2::Ui::Windows
                         }
                         else
                         {
-                            Config::Get().general.language = targetLanguage;
+                            Config::Get().general.language = dropdownIndex + 1;
                             Config::Save();
                             GfxInvalidateScreen();
                         }
@@ -1516,10 +1344,10 @@ namespace OpenRCT2::Ui::Windows
                 StringId stringId = kStringIdNone;
                 switch (Config::Get().general.measurementFormat)
                 {
-                    case MeasurementFormat::Imperial:
+                    case MeasurementFormat::imperial:
                         stringId = STR_IMPERIAL;
                         break;
-                    case MeasurementFormat::Metric:
+                    case MeasurementFormat::metric:
                         stringId = STR_METRIC;
                         break;
                     case MeasurementFormat::SI:
@@ -1533,7 +1361,7 @@ namespace OpenRCT2::Ui::Windows
             widgets[WIDX_DATE_FORMAT].text = DateFormatStringIDs[Config::Get().general.dateFormat];
 
             // Temperature: celsius/fahrenheit
-            widgets[WIDX_TEMPERATURE].text = Config::Get().general.temperatureFormat == TemperatureUnit::Fahrenheit
+            widgets[WIDX_TEMPERATURE].text = Config::Get().general.temperatureFormat == TemperatureUnit::fahrenheit
                 ? STR_FAHRENHEIT
                 : STR_CELSIUS;
 
@@ -1669,7 +1497,7 @@ namespace OpenRCT2::Ui::Windows
                     invalidate();
 
                     StopTitleMusic();
-                    if (Config::Get().sound.titleMusic != TitleMusicKind::None)
+                    if (Config::Get().sound.titleMusic != TitleMusicKind::none)
                     {
                         PlayTitleMusic();
                     }
@@ -1690,7 +1518,7 @@ namespace OpenRCT2::Ui::Windows
                 invalidateWidget(WIDX_MASTER_VOLUME);
             }
 
-            const auto& soundVolumeWidget = widgets[WIDX_MASTER_VOLUME];
+            const auto& soundVolumeWidget = widgets[WIDX_SOUND_VOLUME];
             const auto& soundVolumeScroll = scrolls[1];
             uint8_t soundVolume = GetScrollPercentage(soundVolumeWidget, soundVolumeScroll);
             if (soundVolume != Config::Get().sound.soundVolume)
@@ -1700,7 +1528,7 @@ namespace OpenRCT2::Ui::Windows
                 invalidateWidget(WIDX_SOUND_VOLUME);
             }
 
-            const auto& musicVolumeWidget = widgets[WIDX_MASTER_VOLUME];
+            const auto& musicVolumeWidget = widgets[WIDX_MUSIC_VOLUME];
             const auto& musicVolumeScroll = scrolls[2];
             uint8_t rideMusicVolume = GetScrollPercentage(musicVolumeWidget, musicVolumeScroll);
             if (rideMusicVolume != Config::Get().sound.rideMusicVolume)
@@ -1787,19 +1615,6 @@ namespace OpenRCT2::Ui::Windows
             setCheckboxValue(WIDX_AUDIO_FOCUS_CHECKBOX, Config::Get().sound.audioFocus);
             widgetSetEnabled(*this, WIDX_SOUND_CHECKBOX, Config::Get().sound.masterSoundEnabled);
             widgetSetEnabled(*this, WIDX_MUSIC_CHECKBOX, Config::Get().sound.masterSoundEnabled);
-            // OPENRCT2MINI: the Miyoo Mini has one mi_ao audio output and the
-            // app is always foreground (OnionUI doesn't multitask). Disable
-            // audio device selection (no choice to make) and the
-            // disable-audio-on-focus-loss checkbox (no focus loss).
-            // host-restoration-plan §2b: Mini-only.
-            // OPENRCT2MINI disabled-settings: data-driven per manifest.
-            for (auto [idx, key] : { std::pair{ WIDX_SOUND,                std::string_view{ "Options.WIDX_SOUND" } },
-                                     std::pair{ WIDX_SOUND_DROPDOWN,       std::string_view{ "Options.WIDX_SOUND_DROPDOWN" } },
-                                     std::pair{ WIDX_AUDIO_FOCUS_CHECKBOX, std::string_view{ "Options.WIDX_AUDIO_FOCUS_CHECKBOX" } } })
-            {
-                if (DisabledSettings::isDisabled(key))
-                    widgetSetEnabled(*this, idx, false);
-            }
 
             // Initialize only on first frame, otherwise the scrollbars won't be able to be modified
             if (currentFrame == 0)
@@ -1860,28 +1675,8 @@ namespace OpenRCT2::Ui::Windows
                     invalidate();
                     windowMgr->InvalidateAll();
                     break;
-                // OPENRCT2MINI osk-overhaul §8: when off, OSK is never
-                // spawned and SDL_TEXTINPUT flows straight to the
-                // active textbox via TextComposition.
-                case WIDX_ON_SCREEN_KEYBOARD:
-                    Config::Get().interface.onScreenKeyboard ^= 1;
-                    Config::Save();
-                    invalidate();
-                    break;
                 case WIDX_INVERT_DRAG:
                     Config::Get().general.invertViewportDrag ^= 1;
-                    Config::Save();
-                    invalidate();
-                    break;
-                // OPENRCT2MINI focus-mode-plan / Phase F.7: toggle
-                // Config::General::widgetFocusAlwaysOn. The flip takes
-                // effect on the next process() frame — bootstrap re-
-                // evaluates `shouldBeFocused` every tick and either
-                // snaps to the topmost focusable window (newly true)
-                // or lets the explicit-toggle path own activation
-                // (newly false).
-                case WIDX_GAMEPAD_FOCUS_ALWAYS_ON:
-                    Config::Get().general.widgetFocusAlwaysOn ^= 1;
                     Config::Save();
                     invalidate();
                     break;
@@ -1892,35 +1687,11 @@ namespace OpenRCT2::Ui::Windows
         {
             setCheckboxValue(WIDX_SCREEN_EDGE_SCROLLING, Config::Get().general.edgeScrolling);
             setCheckboxValue(WIDX_TRAP_CURSOR, Config::Get().general.trapCursor);
-            // OPENRCT2MINI: trap-mouse-cursor is meaningless on a 640x480
-            // fullscreen device with no real mouse. Disable the checkbox.
-            // host-restoration-plan §2c: Mini-only.
-            // OPENRCT2MINI disabled-settings: data-driven per manifest.
-            if (DisabledSettings::isDisabled("Options.WIDX_TRAP_CURSOR"))
-                widgetSetEnabled(*this, WIDX_TRAP_CURSOR, false);
-            // OPENRCT2MINI gamepad-plan 1.5/1.6: re-enable Shortcut
-            // Keys. The earlier disable rationale (gamepad controls
-            // were hardcoded in UiContext intercepts and the rebind UI
-            // didn't surface them) no longer applies — every cursor /
-            // click / cancel / shade / Z-lock / fast-modifier / shift
-            // / view-rotate / zoom / construction-rotate behaviour is
-            // now driven by user-rebindable shortcut bindings, and the
-            // ShortcutKeys window is the canonical entry point to
-            // change them. The window covers both keyboard (default
-            // device-friendly defaults via registerKeyboardDefault) and
-            // gamepad (PAD * tokens via registerPadDefault) bindings.
             setCheckboxValue(WIDX_INVERT_DRAG, Config::Get().general.invertViewportDrag);
             setCheckboxValue(WIDX_ZOOM_TO_CURSOR, Config::Get().general.zoomToCursor);
-            // OPENRCT2MINI focus-mode-plan / Phase F.7: reflect the
-            // current focus-mode toggle state. The bound config field
-            // is the source of truth — InputManager's process()
-            // bootstrap reads it every frame.
-            setCheckboxValue(WIDX_GAMEPAD_FOCUS_ALWAYS_ON, Config::Get().general.widgetFocusAlwaysOn);
             setCheckboxValue(WIDX_WINDOW_BUTTONS_ON_THE_LEFT, Config::Get().interface.windowButtonsOnTheLeft);
             setCheckboxValue(WIDX_ENLARGED_UI, Config::Get().interface.enlargedUi);
             setCheckboxValue(WIDX_TOUCH_ENHANCEMENTS, Config::Get().interface.touchEnhancements);
-            // OPENRCT2MINI osk-overhaul §8: on-screen keyboard toggle.
-            setCheckboxValue(WIDX_ON_SCREEN_KEYBOARD, Config::Get().interface.onScreenKeyboard);
 
             widgetSetEnabled(*this, WIDX_TOUCH_ENHANCEMENTS, Config::Get().interface.enlargedUi);
 
@@ -1986,15 +1757,6 @@ namespace OpenRCT2::Ui::Windows
                     ContextOpenWindow(WindowClass::themes);
                     invalidate();
                     break;
-                // OPENRCT2MINI: toggle the optional cursor drop shadow.
-                // SoftwareCursor::Composite re-reads the config flag every
-                // frame, so no explicit invalidation is needed beyond the
-                // checkbox redraw.
-                case WIDX_CURSOR_DROP_SHADOW:
-                    Config::Get().interface.cursorDropShadow ^= 1;
-                    Config::Save();
-                    invalidate();
-                    break;
             }
         }
 
@@ -2005,7 +1767,6 @@ namespace OpenRCT2::Ui::Windows
             switch (widgetIndex)
             {
                 case WIDX_THEMES_DROPDOWN:
-                {
                     uint32_t numItems = static_cast<uint32_t>(ThemeManagerGetNumAvailableThemes());
 
                     for (size_t i = 0; i < numItems; i++)
@@ -2020,26 +1781,6 @@ namespace OpenRCT2::Ui::Windows
                     gDropdown.items[static_cast<int32_t>(ThemeManagerGetAvailableThemeIndex())].setChecked(true);
                     invalidateWidget(WIDX_THEMES_DROPDOWN);
                     break;
-                }
-                // OPENRCT2MINI revision 59 / 61 / 77: cursor-style dropdown.
-                // Four themes — the dropdown index matches the
-                // CursorStyle enum value: 0=Classic, 1=Default,
-                // 2=HighContrast, 3=Windows.
-                case WIDX_CURSOR_STYLE_DROPDOWN:
-                {
-                    gDropdown.items[0] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_CLASSIC);
-                    gDropdown.items[1] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_DEFAULT);
-                    gDropdown.items[2] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_HIGH_CONTRAST);
-                    gDropdown.items[3] = Dropdown::MenuLabel(STR_OPTIONS_CURSOR_STYLE_WINDOWS);
-
-                    WindowDropdownShowTextCustomWidth(
-                        { windowPos.x + widget->left, windowPos.y + widget->top }, widget->height(), colours[1], 0,
-                        Dropdown::Flag::StayOpen, 4, widget->width() - 4);
-
-                    gDropdown.items[static_cast<int32_t>(Config::Get().interface.cursorStyle)].setChecked(true);
-                    invalidateWidget(WIDX_CURSOR_STYLE_DROPDOWN);
-                    break;
-                }
             }
         }
 
@@ -2053,24 +1794,6 @@ namespace OpenRCT2::Ui::Windows
                         ThemeManagerSetActiveAvailableTheme(dropdownIndex);
                     }
                     Config::Save();
-                    break;
-                // OPENRCT2MINI revision 59 / 61: persist new cursor style.
-                // Dropdown index matches the enum value (0=Classic, 1=Default,
-                // 2=HighContrast). HardwareDisplayDrawingEngine polls
-                // Config every frame and tells SoftwareCursor to flush
-                // the sprite cache — no explicit invalidation needed
-                // here.
-                case WIDX_CURSOR_STYLE_DROPDOWN:
-                    if (dropdownIndex == 0)
-                        Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::Classic;
-                    else if (dropdownIndex == 1)
-                        Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::Default;
-                    else if (dropdownIndex == 2)
-                        Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::HighContrast;
-                    else if (dropdownIndex == 3)
-                        Config::Get().interface.cursorStyle = OpenRCT2::Config::CursorStyle::Windows;
-                    Config::Save();
-                    invalidate();
                     break;
             }
         }
@@ -2090,29 +1813,6 @@ namespace OpenRCT2::Ui::Windows
             size_t activeAvailableThemeIndex = ThemeManagerGetAvailableThemeIndex();
             _dropdownCaption = ThemeManagerGetAvailableThemeName(activeAvailableThemeIndex);
             widgets[WIDX_THEMES].setString(_dropdownCaption.c_str());
-
-            // OPENRCT2MINI revision 59 / 61 / 77: cursor-style dropdown caption.
-            StringId cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_DEFAULT;
-            switch (Config::Get().interface.cursorStyle)
-            {
-                case OpenRCT2::Config::CursorStyle::Classic:
-                    cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_CLASSIC;
-                    break;
-                case OpenRCT2::Config::CursorStyle::HighContrast:
-                    cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_HIGH_CONTRAST;
-                    break;
-                case OpenRCT2::Config::CursorStyle::Windows:
-                    cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_WINDOWS;
-                    break;
-                case OpenRCT2::Config::CursorStyle::Default:
-                default:
-                    cursorStyleStr = STR_OPTIONS_CURSOR_STYLE_DEFAULT;
-                    break;
-            }
-            widgets[WIDX_CURSOR_STYLE].text = cursorStyleStr;
-
-            // OPENRCT2MINI: drop-shadow checkbox state.
-            setCheckboxValue(WIDX_CURSOR_DROP_SHADOW, Config::Get().interface.cursorDropShadow);
         }
 
 #pragma endregion
@@ -2159,7 +1859,7 @@ namespace OpenRCT2::Ui::Windows
                     if (Network::GetMode() == Network::Mode::server)
                     {
                         auto setAllowEarlyCompletionAction = GameActions::ScenarioSetSettingAction(
-                            GameActions::ScenarioSetSetting::AllowEarlyCompletion, Config::Get().general.allowEarlyCompletion);
+                            GameActions::ScenarioSetSetting::allowEarlyCompletion, Config::Get().general.allowEarlyCompletion);
                         GameActions::Execute(&setAllowEarlyCompletionAction, getGameState());
                     }
                     Config::Save();
@@ -2182,24 +1882,18 @@ namespace OpenRCT2::Ui::Windows
                         gDropdown.items[i] = Dropdown::MenuLabel(TitleSequenceManager::GetName(i));
                     }
 
-                    gDropdown.items[numItems++] = Dropdown::Separator();
-                    int32_t randomIndex = static_cast<int32_t>(numItems);
-                    gDropdown.items[numItems++] = Dropdown::MenuLabel(STR_TITLE_SEQUENCE_RANDOM);
-                    // OPENRCT2MINI revision 67: explicit "no title sequence" entry.
-                    int32_t noneIndex = static_cast<int32_t>(numItems);
-                    gDropdown.items[numItems++] = Dropdown::MenuLabel(STR_TITLE_SEQUENCE_NONE);
+                    gDropdown.items[numItems] = Dropdown::Separator();
+                    numItems++;
+                    gDropdown.items[numItems] = Dropdown::MenuLabel(STR_TITLE_SEQUENCE_RANDOM);
+                    numItems++;
 
                     WindowDropdownShowText(
                         { windowPos.x + widget->left, windowPos.y + widget->top }, widget->height(), colours[1],
                         Dropdown::Flag::StayOpen, numItems);
 
-                    int32_t selectedIndex;
-                    if (Config::Get().interface.noTitleSequence)
-                        selectedIndex = noneIndex;
-                    else if (Config::Get().interface.randomTitleSequence)
-                        selectedIndex = randomIndex;
-                    else
-                        selectedIndex = static_cast<int32_t>(TitleGetCurrentSequence());
+                    auto selectedIndex = Config::Get().interface.randomTitleSequence
+                        ? numItems - 1
+                        : static_cast<int32_t>(TitleGetCurrentSequence());
                     gDropdown.items[selectedIndex].setChecked(true);
                     break;
                 }
@@ -2236,40 +1930,17 @@ namespace OpenRCT2::Ui::Windows
             {
                 case WIDX_TITLE_SEQUENCE_DROPDOWN:
                 {
-                    // OPENRCT2MINI revision 67: dropdown layout is now
-                    //   [0..N-1]      file-backed sequences (RCT1/RCT2)
-                    //   [N]           separator
-                    //   [N+1]         Random
-                    //   [N+2]         (none) — explicit empty-park backdrop
                     auto numItems = static_cast<int32_t>(TitleSequenceManager::GetCount());
-                    int32_t randomIndex = numItems + 1;
-                    int32_t noneIndex = numItems + 2;
-                    // If the user is currently in random or no-sequence mode,
-                    // any pick of a file-backed sequence should switch out of
-                    // that mode — even if the picked sequence happens to be
-                    // the configured currentTitleSequencePreset.
-                    const bool wasSpecial = Config::Get().interface.randomTitleSequence
-                        || Config::Get().interface.noTitleSequence;
-                    if (dropdownIndex < numItems
-                        && (wasSpecial || dropdownIndex != static_cast<int32_t>(TitleGetCurrentSequence())))
+                    if (dropdownIndex < numItems && dropdownIndex != static_cast<int32_t>(TitleGetCurrentSequence()))
                     {
                         Config::Get().interface.randomTitleSequence = false;
-                        Config::Get().interface.noTitleSequence = false;
                         TitleSequenceChangePreset(static_cast<size_t>(dropdownIndex));
                         Config::Save();
                         invalidate();
                     }
-                    else if (dropdownIndex == randomIndex)
+                    else if (dropdownIndex == numItems + 1)
                     {
                         Config::Get().interface.randomTitleSequence = true;
-                        Config::Get().interface.noTitleSequence = false;
-                        Config::Save();
-                        invalidate();
-                    }
-                    else if (dropdownIndex == noneIndex)
-                    {
-                        Config::Get().interface.randomTitleSequence = false;
-                        Config::Get().interface.noTitleSequence = true;
                         Config::Save();
                         invalidate();
                     }
@@ -2298,22 +1969,13 @@ namespace OpenRCT2::Ui::Windows
 
         void MiscPrepareDraw()
         {
-            if (Config::Get().interface.noTitleSequence)
-            {
-                // OPENRCT2MINI revision 67: explicit "no title sequence" caption.
-                _dropdownCaption = LanguageGetString(STR_TITLE_SEQUENCE_NONE);
-            }
-            else if (Config::Get().interface.randomTitleSequence)
+            if (Config::Get().interface.randomTitleSequence)
             {
                 _dropdownCaption = LanguageGetString(STR_TITLE_SEQUENCE_RANDOM);
             }
             else
             {
-                // OPENRCT2MINI: GetName() returns nullptr if the configured sequence is missing
-                // (e.g. title-sequences not installed). Constructing std::string(nullptr) is UB,
-                // so guard with a fallback caption.
-                const utf8* name = TitleSequenceManager::GetName(TitleGetConfigSequence());
-                _dropdownCaption = (name != nullptr) ? name : "(no title sequences installed)";
+                _dropdownCaption = TitleSequenceManager::GetName(TitleGetConfigSequence());
             }
             widgets[WIDX_TITLE_SEQUENCE].setString(_dropdownCaption.c_str());
 
@@ -2383,45 +2045,36 @@ namespace OpenRCT2::Ui::Windows
                     break;
                 case WIDX_PATH_TO_RCT1_BROWSE:
                 {
-                    // OPENRCT2MINI cut 53c: don't shell out to ShowDirectoryDialog
-                    // (zenity / kdialog) — that path crashes on the Miyoo Mini
-                    // (no native picker available) and is intrusive on host.
-                    // Instead, re-run the auto-detect: look for an RCT1 install
-                    // alongside the RCT2 directory the engine already resolved.
-                    // If the user wants RCT1 from a different folder, they can
-                    // edit rct1Path in config.ini directly — but the standard
-                    // disc-install layout has RCT1 next to RCT2, so this is what
-                    // 99% of users actually need.
-                    auto& env = GetContext()->GetPlatformEnvironment();
-                    const auto rct2Dir = env.GetDirectoryPath(DirBase::rct2);
-                    const auto parent = Path::GetDirectory(rct2Dir);
-                    u8string found;
-                    if (!parent.empty())
+                    auto rct1path = GetContext()->GetUiContext().ShowDirectoryDialog(
+                        LanguageGetString(STR_PATH_TO_RCT1_BROWSER));
+                    if (!rct1path.empty())
                     {
-                        for (const char* name : { u8"rct1", u8"RCT1", u8"Rct1" })
+                        // Check if this directory actually contains RCT1
+                        if (Csg1datPresentAtLocation(rct1path))
                         {
-                            auto candidate = Path::Combine(parent, name);
-                            if (Csg1datPresentAtLocation(candidate)
-                                && Csg1idatPresentAtLocation(candidate)
-                                && CsgAtLocationIsUsable(candidate))
+                            if (Csg1idatPresentAtLocation(rct1path))
                             {
-                                found = candidate;
-                                break;
+                                if (CsgAtLocationIsUsable(rct1path))
+                                {
+                                    Config::Get().general.rct1Path = std::move(rct1path);
+                                    Config::Get().interface.scenarioSelectLastTab = 0;
+                                    Config::Save();
+                                    ContextShowError(STR_RESTART_REQUIRED, kStringIdNone, {});
+                                }
+                                else
+                                {
+                                    ContextShowError(STR_PATH_TO_RCT1_IS_WRONG_VERSION, kStringIdNone, {});
+                                }
+                            }
+                            else
+                            {
+                                ContextShowError(STR_PATH_TO_RCT1_DOES_NOT_CONTAIN_CSG1I_DAT, kStringIdNone, {});
                             }
                         }
-                    }
-                    if (!found.empty())
-                    {
-                        Config::Get().general.rct1Path = std::move(found);
-                        Config::Get().interface.scenarioSelectLastTab = 0;
-                        Config::Save();
-                        ContextShowError(STR_RESTART_REQUIRED, kStringIdNone, {});
-                    }
-                    else
-                    {
-                        // No detection match — surface the standard "wrong path"
-                        // error so the user knows we couldn't find anything.
-                        ContextShowError(STR_PATH_TO_RCT1_WRONG_ERROR, kStringIdNone, {});
+                        else
+                        {
+                            ContextShowError(STR_PATH_TO_RCT1_WRONG_ERROR, kStringIdNone, {});
+                        }
                     }
                     invalidate();
                     break;
@@ -2437,18 +2090,6 @@ namespace OpenRCT2::Ui::Windows
                 case WIDX_ASSET_PACKS:
                     ContextOpenWindow(WindowClass::assetPacks);
                     break;
-#ifdef ENABLE_PERFORMANCE_PROFILER
-                case WIDX_START_PROFILER:
-                    // sceneInvariant flag on the profiler window means it
-                    // survives the title -> park transition, so opening
-                    // from the title screen is the supported way to capture
-                    // park-load metrics (sprite cache hits, peak frame
-                    // times during ImageTable load, etc.). On a device
-                    // without an in-game toolbar route, this is also the
-                    // only way to surface the window.
-                    ContextOpenWindow(WindowClass::performanceProfiler);
-                    break;
-#endif
 #ifdef __EMSCRIPTEN__
                 case WIDX_EXPORT_EMSCRIPTEN_DATA:
                     ExportPersistentData();
@@ -2544,9 +2185,6 @@ namespace OpenRCT2::Ui::Windows
 
             setCheckboxValue(WIDX_DEBUGGING_TOOLS, Config::Get().general.debuggingTools);
             setCheckboxValue(WIDX_STAY_CONNECTED_AFTER_DESYNC, Config::Get().network.stayConnected);
-            // OPENRCT2MINI: multiplayer is compiled out (DISABLE_NETWORK), so
-            // there is no desync to stay connected through. Grey out.
-            widgetSetEnabled(*this, WIDX_STAY_CONNECTED_AFTER_DESYNC, false);
 
 #ifdef __EMSCRIPTEN__
             widgets[WIDX_GROUP_ADVANCED].bottom = kAdvancedStart + 84 + getTitleBarDiffNormal();
@@ -2556,12 +2194,6 @@ namespace OpenRCT2::Ui::Windows
 
             widgets[WIDX_ASSET_PACKS].top = widgets[WIDX_GROUP_ADVANCED].bottom - 20;
             widgets[WIDX_ASSET_PACKS].bottom = widgets[WIDX_GROUP_ADVANCED].bottom - 6;
-#ifdef ENABLE_PERFORMANCE_PROFILER
-            // Sit the Start Profiler button on the same baseline as Asset
-            // Packs — both are pinned to the bottom of the Advanced group.
-            widgets[WIDX_START_PROFILER].top = widgets[WIDX_ASSET_PACKS].top;
-            widgets[WIDX_START_PROFILER].bottom = widgets[WIDX_ASSET_PACKS].bottom;
-#endif
         }
 
         void AdvancedDraw(RenderTarget& rt)
@@ -2723,11 +2355,11 @@ namespace OpenRCT2::Ui::Windows
             TitleMusicKind Kind;
             StringId Name;
         } TitleThemeOptions[] = {
-            { TitleMusicKind::None, STR_OPTIONS_MUSIC_VALUE_NONE },
+            { TitleMusicKind::none, STR_OPTIONS_MUSIC_VALUE_NONE },
             { TitleMusicKind::OpenRCT2, STR_OPENRCT2_DROPDOWN },
             { TitleMusicKind::RCT1, STR_ROLLERCOASTER_TYCOON_1_DROPDOWN },
             { TitleMusicKind::RCT2, STR_ROLLERCOASTER_TYCOON_2_DROPDOWN },
-            { TitleMusicKind::Random, STR_OPTIONS_MUSIC_VALUE_RANDOM },
+            { TitleMusicKind::random, STR_OPTIONS_MUSIC_VALUE_RANDOM },
         };
 
         static constexpr StringId FullscreenModeNames[] = {

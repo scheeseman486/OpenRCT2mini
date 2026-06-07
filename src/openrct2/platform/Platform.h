@@ -13,7 +13,7 @@
 #include "../core/DateTime.h"
 #include "../core/StringTypes.h"
 
-#include "../core/Bit.hpp"
+#include <bit>
 #include <ctime>
 #include <optional>
 #include <sfl/static_vector.hpp>
@@ -34,12 +34,8 @@
     #define MAX_PATH 260
 #endif
 
-// OPENRCT2MINI: cut 33. std::endian is C++20-only. Use the GCC/Clang preprocessor
-// macro instead — same intent, available since GCC 4.6, works in both C++17
-// and C++20 modes.
 static_assert(
-    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__,
-    "OpenRCT2 is known to be broken on big endian. Proceed with caution!");
+    std::endian::native == std::endian::little, "OpenRCT2 is known to be broken on big endian. Proceed with caution!");
 
 enum class SpecialFolder
 {
@@ -67,9 +63,9 @@ namespace OpenRCT2::Platform
 {
     enum class AssetCheckResult
     {
-        NotApplicable,
-        Found,
-        NotFound,
+        notApplicable,
+        found,
+        notFound,
     };
 
     using AssetHandle = void*;
@@ -207,8 +203,8 @@ namespace OpenRCT2::Platform
 #ifdef __ANDROID__
     struct AssetInfo
     {
-        std::string Path;
-        uint64_t Size;
+        std::string path;
+        uint64_t size;
     };
     jclass AndroidFindClass(JNIEnv* env, std::string_view name);
     void* GetAssetManager();

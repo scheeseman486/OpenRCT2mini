@@ -265,7 +265,7 @@ STR_0892    :‘{STRINGID}’ لقطة شاشة حفظت للهارد بـ
 STR_0893    :!فشل لقطة الشاشة
 STR_0894    :!بيانات منطقة المشهد ممتلئة
 STR_0895    :لا يمكن البناء بجزء في الأعلي وجزء في الأسفل
-STR_0896    :{STRINGID} البناء
+STR_0896    :{STRING} البناء
 STR_0897    :الإتجاه
 STR_0898    :Left-hand curve
 STR_0899    :Right-hand curve
@@ -1780,6 +1780,10 @@ STR_2483    :{WINDOW_COLOUR_2}Weekly profit: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Weekly profit: {RED}{CURRENCY2DP}
 STR_2487    :Show ‘real’ names of guests
 STR_2488    :Toggle between showing ‘real’ names of guests and guest numbers
+STR_2489    :Shortcut keys…
+STR_2490    :Keyboard shortcuts
+STR_2491    :Reset keys
+STR_2492    :Set all keyboard shortcuts back to default settings
 STR_2493    :Close top-most window
 STR_2494    :Close all floating windows
 STR_2495    :Cancel construction mode
@@ -1927,6 +1931,9 @@ STR_2780    :Extra viewport
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT +
 STR_2783    :CTRL +
+STR_2784    :غير إختصار لوحة المفاتيح
+STR_2785    :{WINDOW_COLOUR_2}اضغط علي الإختصار الجديد لـ:{NEWLINE}“{STRINGID}”
+STR_2786    :Click on shortcut description to select new key
 STR_2787    :{WINDOW_COLOUR_2}Park value: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Congratulations !{NEWLINE}{BLACK}You achieved your objective with a company value of {CURRENCY} !
 STR_2789    :{WINDOW_COLOUR_2}You have failed your objective !
@@ -1939,6 +1946,7 @@ STR_2795    :ترتيب
 STR_2796    :Sort the ride list into order using the information type displayed
 STR_2797    :Scroll view when pointer at screen edge
 STR_2798    :Scroll the view when the mouse pointer is at the screen edge
+STR_2799    :View or change control key assignments
 STR_2800    :{WINDOW_COLOUR_2}Total admissions: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Income from admissions: {BLACK}{CURRENCY2DP}
 STR_2802    :خريطة
@@ -2413,6 +2421,8 @@ STR_5216    :Track Design Manager List
 STR_5217    :الشفرات
 STR_5218    :الثيمات
 STR_5219    :الإعدادات
+STR_5220    :إختصرات لوحة المفاتيح
+STR_5221    :تغيير إختصار لوحة المفاتيح
 STR_5222    :حفظ/تحميل
 STR_5223    :أذن الحفظ
 STR_5224    :Demolish Ride Prompt

@@ -28,7 +28,7 @@ set(LIBOPENRCT2_LINKAGE)
 if (APPLE)
     set(LIBOPENRCT2_LINKAGE STATIC)
 endif()
-add_library(libopenrct2 ${LIBOPENRCT2_LINKAGE} ${OPENRCT2_CORE_SOURCES} ${OPENRCT2_CORE_MM_SOURCES} ${OPENRCT2_QUICKJS_NG_SOURCES})
+add_library(libopenrct2 ${LIBOPENRCT2_LINKAGE} ${OPENRCT2_QUICKJS_NG_SOURCES} ${OPENRCT2_CORE_SOURCES} ${OPENRCT2_CORE_MM_SOURCES})
 add_library(OpenRCT2::libopenrct2 ALIAS libopenrct2)
 
 if (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13")
@@ -173,42 +173,10 @@ else ()
 endif ()
 
 if (MINGW)
-    # OPENRCT2MINI host-restoration / Windows-cross: the gnutls+iconv stack
-    # (crypto, tasn1, unistring, iconv, p11-kit, hogweed, gmp, nettle) is only
-    # needed when network/HTTP is enabled. Under our Windows cross-build
-    # profile (DISABLE_NETWORK=ON, DISABLE_HTTP=ON) none of these are present
-    # in the mingw-w64 cross-sysroot and linking against them would fail.
-    # ws2_32 is the platform crypto+winsock; only pulled when network is on.
-    if (NOT DISABLE_NETWORK OR NOT DISABLE_HTTP)
-        target_link_libraries(libopenrct2 crypto ws2_32 tasn1 unistring iconv p11-kit hogweed gmp nettle)
-    endif ()
-    # Link in libssp (stack protector runtime) — needed unconditionally
-    # since other CMake branches set -fstack-protector-strong globally.
-    #
-    # OPENRCT2MINI 2026-05-21: split out from upstream's -fstack-protector-
-    # strong (which the gcc driver expands at link time to -lssp + -lssp_
-    # nonshared in -Bdynamic mode, pulling libssp-0.dll into the import
-    # table). We need libssp linked STATICALLY so the binary doesn't depend
-    # on libssp-0.dll at runtime — there's a Wine + MinGW SEH bug where any
-    # dynamic libstdc++ / libgcc-adjacent DLL breaks C++ exception unwinding
-    # (typeinfo duplicated across EXE + DLL → catch handlers silently fail
-    # to match). See toolchain-mingw-w64-x86_64.cmake for the full diagnostic.
-    #
-    # Why both -lssp and -lssp_nonshared:
-    #   - libssp.a       provides __stack_chk_guard (the canary value)
-    #   - libssp_nonshared.a provides __stack_chk_fail (the trap fn)
-    # The toolchain file already pulls libssp.a via CMAKE_EXE_LINKER_FLAGS,
-    # but that happens BEFORE the .obj files on the link line so it'd be
-    # skipped if no symbols were undefined yet. Pulling here lands inside
-    # the --start-group block (after .objs) where it'll resolve refs from
-    # all openrct2 .o files. -Wl,-Bstatic on each makes ld prefer .a over
-    # .dll.a; -Bdynamic resets for anything after.
-    target_link_libraries(libopenrct2 -Wl,-Bstatic -lssp -lssp_nonshared -Wl,-Bdynamic)
-    # bcrypt: libzip's zip_crypto_win.c uses Windows BCrypt API for AES.
-    # Listed as a transitive dep so it lands adjacent to libzip in the
-    # link line; without this, ld processes -lbcrypt before libzip.a and
-    # fails to resolve __imp_BCryptHashData etc.
-    target_link_libraries(libopenrct2 bcrypt)
+    # Hardcode libraries used on mingw
+    target_link_libraries(libopenrct2 crypto ws2_32 tasn1 unistring iconv p11-kit hogweed gmp nettle)
+    # Link in libssp
+    target_link_libraries(libopenrct2 -fstack-protector-strong)
 endif()
 
 if (UNIX AND NOT HAIKU AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "BSD")
@@ -225,12 +193,7 @@ if (EMSCRIPTEN)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_FUNCTIONS=${EMSCRIPTEN_EXPORTED_FUNCTIONS} --js-library ${ROOT_DIR}/emscripten/deps.js")
 endif()
 
-# OPENRCT2MINI: cut 34. ICU made conditional. The only ICU functionality the
-# device actually needs is CP1252 → UTF-8 conversion for legacy RCT1/RCT2
-# scenario name imports — that's a 256-entry lookup table, not 30 MB of
-# locale support. With DISABLE_ICU, String.cpp and RTL.ICU.cpp fall back to
-# hand-rolled implementations covering only the codepages we ship for.
-if (NOT MINGW AND NOT MSVC AND NOT EMSCRIPTEN AND NOT DISABLE_ICU)
+if (NOT MINGW AND NOT MSVC AND NOT EMSCRIPTEN)
     if (APPLE AND NOT MACOS_USE_DEPENDENCIES)
         execute_process(COMMAND brew --prefix icu4c OUTPUT_VARIABLE HOMEBREW_PREFIX_ICU OUTPUT_STRIP_TRAILING_WHITESPACE)
         # Needed for linking with non-broken icu on Apple platforms
@@ -246,16 +209,6 @@ if (NOT MINGW AND NOT MSVC AND NOT EMSCRIPTEN AND NOT DISABLE_ICU)
     else ()
         target_link_libraries(libopenrct2 ${ICU_LIBRARIES})
     endif ()
-endif ()
-if (DISABLE_ICU)
-    target_compile_definitions(libopenrct2 PUBLIC DISABLE_ICU)
-endif ()
-
-# OPENRCT2MINI: performance profiler — see profiler-plan.md.
-if (ENABLE_PERFORMANCE_PROFILER)
-    target_compile_definitions(libopenrct2 PUBLIC
-        ENABLE_PERFORMANCE_PROFILER
-        PROFILER_HISTORY_SECONDS=${PROFILER_HISTORY_SECONDS})
 endif ()
 
 if (NOT DISABLE_TTF)
@@ -297,86 +250,6 @@ target_include_directories(libopenrct2 SYSTEM PRIVATE ${PNG_INCLUDE_DIRS}
         ${ZLIB_INCLUDE_DIRS})
 target_include_directories(libopenrct2 SYSTEM PRIVATE ${ZSTD_INCLUDE_DIRS})
 include_directories(libopenrct2 SYSTEM ${CMAKE_CURRENT_LIST_DIR}/../thirdparty)
-
-# OPENRCT2MINI defaults-export P3: embed per-build defaults into the
-# binary. The seed files under config/{appimage,miyoo_mini}/save/
-# (committed as the canonical source of truth — see P2) are
-# hex-included via cmake/EmbedFileAsArray.cmake. Choice of seed dir
-# is gated on the existing OPENRCT2MINI option, so the Mini build
-# embeds its own per-build defaults and the host/appimage build
-# embeds the appimage variants.
-#
-# The generated headers live under
-# ${CMAKE_CURRENT_BINARY_DIR}/embedded_defaults/ and are added to
-# libopenrct2's PUBLIC include path so both the openrct2 library
-# (Config.cpp / HapticEvent.cpp) and the openrct2-ui sources
-# (ShortcutManager.cpp) can include them.
-#
-# Driven via add_custom_command — editing a seed file (e.g. tweaking
-# a default in config/appimage/save/shortcuts.json) triggers a
-# regenerate of the matching header, which then triggers a recompile
-# of the TU that consumes it.
-include(${ROOT_DIR}/cmake/EmbedFileAsArray.cmake)
-
-if (OPENRCT2MINI)
-    set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/miyoo_mini/save")
-elseif (WIN32)
-    # Windows builds (mingw cross-compile or native MSVC CMake) get the
-    # config/windows/ seed dir. Byte-identical to config/appimage/ at the
-    # commit this branch was introduced; diverging later is a seed-file
-    # edit only (no source change).
-    set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/windows/save")
-else ()
-    set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/appimage/save")
-endif ()
-
-set(_OPENRCT2MINI_EMBED_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/embedded_defaults")
-file(MAKE_DIRECTORY "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}")
-
-embed_file_as_array(
-    "${_OPENRCT2MINI_DEFAULTS_SEED_DIR}/config.ini"
-    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ConfigIniDefault.h"
-    "kConfigIniDefault")
-embed_file_as_array(
-    "${_OPENRCT2MINI_DEFAULTS_SEED_DIR}/shortcuts.json"
-    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ShortcutsJsonDefault.h"
-    "kShortcutsJsonDefault")
-embed_file_as_array(
-    "${_OPENRCT2MINI_DEFAULTS_SEED_DIR}/rumble.json"
-    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/RumbleJsonDefault.h"
-    "kRumbleJsonDefault")
-
-# OPENRCT2MINI disabled-settings: a fourth per-build manifest, sibling
-# of the save/ defaults but living one level up under
-# config/<build>/disabled_settings.json. Lists widgets to grey out and
-# UI items to remove on a per-build basis (Options pane gates, etc.).
-# Consumed at runtime by src/openrct2/ui/DisabledSettings.cpp.
-if (OPENRCT2MINI)
-    set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/miyoo_mini/disabled_settings.json")
-elseif (WIN32)
-    set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/windows/disabled_settings.json")
-else ()
-    set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/appimage/disabled_settings.json")
-endif ()
-embed_file_as_array(
-    "${_OPENRCT2MINI_DISABLED_SETTINGS_SRC}"
-    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/DisabledSettingsDefault.h"
-    "kDisabledSettingsDefault")
-
-# An ALL-target depending on the three generated headers ensures the
-# custom commands actually run (a header that's nobody's `target_sources`
-# input would never be built otherwise). add_dependencies(libopenrct2 ...)
-# then hooks the generation into libopenrct2's build, so a clean build
-# always materialises the headers before any .cpp that #includes them.
-add_custom_target(openrct2mini_embedded_defaults ALL
-    DEPENDS
-        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ConfigIniDefault.h"
-        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ShortcutsJsonDefault.h"
-        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/RumbleJsonDefault.h"
-        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/DisabledSettingsDefault.h")
-add_dependencies(libopenrct2 openrct2mini_embedded_defaults)
-
-target_include_directories(libopenrct2 PUBLIC "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}")
 
 # To avoid unnecessary rebuilds set the current branch and
 # short sha1 only for the two files that use these

@@ -19,7 +19,7 @@ constexpr RideTypeDescriptor MotionSimulatorRTD =
 {
     .Category = RideCategory::thrill,
     .StartTrackPiece = TrackElemType::flatTrack2x2,
-    .TrackPaintFunctions = TrackDrawerDescriptor(TrackDrawerEntry{
+    .TrackPaintFunctions = TrackDrawerDescriptor({
         .trackStyle = TrackStyle::motionSimulator,
         .enabledTrackGroups = {},
         .extraTrackGroups = {},
@@ -73,7 +73,7 @@ constexpr RideTypeDescriptor MotionSimulatorRTD =
     .RideUpdate = nullptr,
     .UpdateMeasurementsSpecialElements = RideUpdateMeasurementsSpecialElements_Default,
     .MusicTrackOffsetLength = RideAudio::RideMusicGetTrackOffsetLength_Default,
-    .UpdateRideApproachVehicleWaypoints = UpdateRideApproachVehicleWaypointsMotionSimulator,
+    .UpdateRideApproachVehicleWaypoints = updateRideApproachVehicleWaypointsMotionSimulator,
     .specialType = RtdSpecialType::motionSimulator,
 };
 } // namespace OpenRCT2

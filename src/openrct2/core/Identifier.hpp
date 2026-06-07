@@ -9,8 +9,7 @@
 
 #pragma once
 
-// OPENRCT2MINI: cut 33. <compare> only needed for the defaulted spaceship
-// operator below — replaced with explicit relational ops for C++17 compat.
+#include <compare>
 #include <cstdint>
 #include <cstdio>
 
@@ -19,7 +18,7 @@ class TIdentifier
 {
     enum class ValueType : T
     {
-        Null = TNullValue,
+        null = TNullValue,
     } _handle;
 
 private:
@@ -40,7 +39,7 @@ public:
 
     static constexpr TIdentifier GetNull() noexcept
     {
-        return TIdentifier{ ValueType::Null };
+        return TIdentifier{ ValueType::null };
     }
 
     static constexpr TIdentifier FromUnderlying(const T val) noexcept
@@ -61,16 +60,8 @@ public:
 
     constexpr bool IsNull() const noexcept
     {
-        return _handle == ValueType::Null;
+        return _handle == ValueType::null;
     }
 
-    // OPENRCT2MINI: cut 33. Manual relational operators replacing C++20's
-    // defaulted operator<=>. Compares the underlying enum values directly,
-    // which is what the spaceship-on-_handle would do.
-    constexpr bool operator==(const TIdentifier& other) const noexcept { return _handle == other._handle; }
-    constexpr bool operator!=(const TIdentifier& other) const noexcept { return _handle != other._handle; }
-    constexpr bool operator<(const TIdentifier& other) const noexcept { return _handle < other._handle; }
-    constexpr bool operator<=(const TIdentifier& other) const noexcept { return _handle <= other._handle; }
-    constexpr bool operator>(const TIdentifier& other) const noexcept { return _handle > other._handle; }
-    constexpr bool operator>=(const TIdentifier& other) const noexcept { return _handle >= other._handle; }
+    auto operator<=>(const TIdentifier&) const = default;
 };

@@ -271,7 +271,7 @@ STR_0892    :S’ha desat la captura de pantalla com a «{STRINGID}».
 STR_0893    :La captura de pantalla no s’ha pogut fer.
 STR_0894    :L’àrea de dades de paisatge està plena.
 STR_0895    :No es pot construir part a sobre i part sota terra.
-STR_0896    :Construcció de {STRINGID}
+STR_0896    :Construcció de {STRING}
 STR_0897    :Direcció
 STR_0898    :Corba a l’esquerra
 STR_0899    :Corba a la dreta
@@ -1786,6 +1786,10 @@ STR_2483    :{WINDOW_COLOUR_2}Benefici setmanal: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Benefici setmanal: {RED}{CURRENCY2DP}
 STR_2487    :Mostra els noms «reals» dels visitants
 STR_2488    :Alterna entre mostrar els noms «reals» dels visitants o el nombre que se li ha assignat.
+STR_2489    :Dreceres de teclat…
+STR_2490    :Dreceres de teclat
+STR_2491    :Reinicia les tecles
+STR_2492    :Canvia totes les dreceres als seus valors predeterminats.
 STR_2493    :Tanca la finestra superior
 STR_2494    :Tanca totes les finestres
 STR_2495    :Cancel·la el mode de construcció
@@ -1933,6 +1937,9 @@ STR_2780    :Vista extra
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
+STR_2784    :Canvia la drecera de teclat
+STR_2785    :{WINDOW_COLOUR_2}Premeu la nova drecera de teclat per:{NEWLINE}«{STRINGID}»
+STR_2786    :Feu clic a la descripció d’una drecera per a canviar-ne les tecles assignades.
 STR_2787    :{WINDOW_COLOUR_2}Valoració del parc: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Felicitats!{NEWLINE}{BLACK}Heu aconseguit el vostre objectiu amb un valor d’empresa de {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}No heu aconseguit els vostres objectius!
@@ -1945,6 +1952,7 @@ STR_2795    :Ordena
 STR_2796    :Ordena la llista d’atraccions segons el criteri seleccionat
 STR_2797    :Desplaça la vista amb punter prop de la vora
 STR_2798    :Desplaça la vista quan el punter del ratolí estigui prop de la vora de la pantalla.
+STR_2799    :Mostra o canvia les dreceres de teclat assignades.
 STR_2800    :{WINDOW_COLOUR_2}Entrades totals: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Ingressos per entrades: {BLACK}{CURRENCY2DP}
 STR_2802    :Mapa
@@ -2419,6 +2427,8 @@ STR_5216    :Gestor del llistat de dissenys de via
 STR_5217    :Trampes
 STR_5218    :Temes
 STR_5219    :Opcions
+STR_5220    :Dreceres de teclat
+STR_5221    :Canvia la drecera de teclat
 STR_5222    :Carrega/Desa
 STR_5223    :Avís de desada
 STR_5224    :Avís de demolició
@@ -3569,13 +3579,15 @@ STR_6577    :Velocitat del fre de bloc
 STR_6578    :Estableix el límit de velocitat per als frens de bloc. En mode de secció de bloc, els frens adjacents amb una velocitat inferior es vinculen amb el fre de bloc.
 STR_6579    :Els frens de bloc s’establiran a la velocitat per defecte quan es desi el disseny de les vies
 STR_6580    :Restableix
+STR_6581    :Esteu segur que voleu restablir totes les dreceres de teclat d’aquesta pestanya?
+STR_6582    :Obre la finestra de dreceres de teclat
 STR_6583    :{WINDOW_COLOUR_2}Inverteix el sentit
 STR_6584    :Trieu-ho per a invertir el sentit de moviment dels cotxes
 STR_6585    :Els canvis no es poden fer…
 STR_6586    :OpenRCT2
 STR_6587    :El tema principal de l’OpenRCT2 és obra de l’Allister Brimble,{NEWLINE}amb llicència CC BY-SA 4.0.
 STR_6588    :Gràcies al Herman Riddering per permetre’ns gravar el 35er Voigt.
-STR_6589    :Intercanviar botons de finestra
+STR_6589    :Mostra els botons de les finestres a l’esquerra
 STR_6590    :Mostra els botons de les finestres (com ara el de tancar la finestra) a l’esquerra en lloc de mostrar-los a la dreta.
 STR_6591    :L’empleat ara mateix arregla una atracció i no se’l pot acomiadar.
 STR_6592    :L’empleat ara mateix fa una inspecció i no se’l pot acomiadar.
@@ -3771,13 +3783,13 @@ STR_6781    :Captures de pantalla
 STR_6782    :Notificacions de parc
 STR_6783    :Notificacions d’atraccions
 STR_6784    :Notificacions de visitants
-STR_6785    :Ratolí virtual
-STR_6786    :Acceleració:
-STR_6787    :Velocitat a què el D-pad assoleix la velocitat màxima del ratolí virtual
-STR_6788    :Velocitat:
-STR_6789    :Multiplicador de velocitat del ratolí virtual
-STR_6790    :Acceleració: {COMMA32}%
-STR_6791    :Velocitat: {COMMA32}%
+STR_6785    :Comandament de joc
+STR_6786    :Zona morta:
+STR_6787    :Zona morta del pal analògic (cal moviment mínim)
+STR_6788    :Sensitivitat:
+STR_6789    :Multiplicador de la sensivitat del pal analògic
+STR_6790    :Zona morta {COMMA32} %
+STR_6791    :Sensitivitat: {COMMA32} %
 STR_6792    :Entrades d’edificis
 STR_6793    :Visitants i treballadors
 STR_6794    :Decoracions i temes
@@ -3804,17 +3816,3 @@ STR_7014    :Tinc el joc a l’Steam, però no el tinc instal·lat.
 STR_7015    :Tanqueu l'Steam si està en execució i després premeu «D’acord».
 STR_7016    :L’OpenRCT2 ha intentat executar una descàrrega a l’Steam. Executeu l’Steam i deixeu que descarregui el joc. Quan hagi acabat, premeu «D’acord».
 STR_7017    :Surt
-STR_7030    :Cursors
-STR_7031    :Estil de cursor:
-STR_7032    :Tria com es dibuixa el cursor a la pantalla
-STR_7033    :Per defecte
-STR_7034    :Alt contrast
-STR_7035    :Clàssic
-STR_7036    :(cap)
-STR_7037    :Aquest parc supera els límits admesos per OpenRCT2mini (mida del mapa, atraccions o entitats) i no es pot carregar en aquest dispositiu.
-# OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
-STR_7038    :Ombra projectada
-STR_7039    :Mostra una ombra translúcida sota el cursor perquè destaqui contra fons carregats
-# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
-STR_7040    :Windows
-STR_7041    :Plega la finestra

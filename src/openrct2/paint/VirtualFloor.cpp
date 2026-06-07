@@ -12,7 +12,6 @@
 #include "../Cheats.h"
 #include "../Diagnostic.h"
 #include "../GameState.h"
-#include "../drawing/Drawing.h"
 #include "../Input.h"
 #include "../SpriteIds.h"
 #include "../config/Config.h"
@@ -47,25 +46,9 @@ bool VirtualFloorIsEnabled()
 
 void VirtualFloorSetHeight(const int16_t height)
 {
-    if (!VirtualFloorIsEnabled())
-        return;
-    // OPENRCT2MINI Z-plane flicker fix (2026-05-19, round 2): when
-    // the height changes, force a full-screen invalidate via
-    // GfxInvalidateScreen — the standard primitive used throughout
-    // the codebase (Weather.cpp, Drawing.cpp etc.) for "I changed
-    // something at draw-time and need everything repainted." The
-    // previous attempt called VirtualFloorInvalidate(true) which
-    // only marks the floor's 5x5 footprint dirty via MapInvalidate-
-    // Region — but the floor's edge sprites still didn't reliably
-    // repaint because partOfVirtualFloor is only true for tiles
-    // within the active footprint, and the per-tile dirty pump
-    // didn't always include all of them between Z-change frames.
-    // Full-screen invalidate is heavier but guaranteed to refresh
-    // every edge tile.
-    if (_virtualFloorHeight != height)
+    if (VirtualFloorIsEnabled())
     {
         _virtualFloorHeight = height;
-        GfxInvalidateScreen();
     }
 }
 
@@ -252,39 +235,39 @@ static void VirtualFloorGetTileProperties(
     //  * Ghost objects, which are displayed as lit squares
     for (auto* tileElement : TileElementsView(loc))
     {
-        const auto elementType = tileElement->GetType();
+        const auto elementType = tileElement->getType();
 
         if (elementType == TileElementType::Surface)
         {
-            if (height < tileElement->GetClearanceZ())
+            if (height < tileElement->getClearanceZ())
             {
                 *outBelowGround = true;
             }
-            else if (height < (tileElement->GetBaseZ() + kLandHeightStep) && tileElement->AsSurface()->GetSlope() != 0)
+            else if (height < (tileElement->getBaseZ() + kLandHeightStep) && tileElement->asSurface()->GetSlope() != 0)
             {
                 *outBelowGround = true;
                 *outOccupied = true;
             }
-            if (height > tileElement->GetBaseZ())
+            if (height > tileElement->getBaseZ())
             {
                 *aboveGround = true;
             }
             continue;
         }
 
-        if (height >= tileElement->GetClearanceZ() || height < tileElement->GetBaseZ())
+        if (height >= tileElement->getClearanceZ() || height < tileElement->getBaseZ())
         {
             continue;
         }
 
         if (elementType == TileElementType::Wall || elementType == TileElementType::Banner)
         {
-            int32_t direction = tileElement->GetDirection();
+            int32_t direction = tileElement->getDirection();
             *outOccupiedEdges |= 1 << direction;
             continue;
         }
 
-        if (tileElement->IsGhost())
+        if (tileElement->isGhost())
         {
             *outLit = true;
             continue;
@@ -404,7 +387,7 @@ void VirtualFloorPaint(PaintSession& session)
             { { 5, 5, _virtualFloorHeight + ((dullEdges & EDGE_NW) ? -2 : 0) }, { 0, 0, 1 } });
     }
 
-    if (Config::Get().general.virtualFloorStyle != VirtualFloorStyles::Glassy)
+    if (Config::Get().general.virtualFloorStyle != VirtualFloorStyles::glassy)
         return;
 
     if (!weAreOccupied && !weAreLit && weAreAboveGround && weAreOwned)

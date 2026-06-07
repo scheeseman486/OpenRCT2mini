@@ -33,7 +33,7 @@ namespace OpenRCT2::Ui::Windows
     static constexpr auto kMaxWidth = 250;
     static constexpr auto kPadding = 4;
 
-    static const Widget window_error_widgets[] = {
+    static constexpr Widget window_error_widgets[] = {
         makeWidget({ 0, 0 }, { 200, 42 }, WidgetType::frame, WindowColour::primary),
     };
 
@@ -108,7 +108,7 @@ namespace OpenRCT2::Ui::Windows
             buffer.append(message);
         }
 
-        LOG_VERBOSE("show error, %s", buffer.c_str() + 1);
+        LOG_VERBOSE("show error, %s", buffer.c_str());
 
         // Don't do unnecessary work in headless. Also saves checking if cursor state is null.
         if (gOpenRCT2Headless)

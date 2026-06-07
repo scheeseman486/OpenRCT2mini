@@ -69,7 +69,7 @@ namespace OpenRCT2::Ui::Windows
 #pragma region Widgets
 
     // clang-format off
-    static const auto window_research_development_widgets = makeWidgets(
+    static constexpr auto window_research_development_widgets = makeWidgets(
         makeWindowShim(STR_RESEARCH_AND_DEVELOPMENT, kWindowSizeDevelopment),
         makeWidget({  0,  43}, {     kWindowSizeDevelopment.width, 153}, WidgetType::resize,   WindowColour::secondary                                                                 ),
         makeTab   ({  3,  17},                                                                                          STR_RESEARCH_AND_DEVELOPMENT_TIP                               ),
@@ -79,7 +79,7 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({265, 161}, {                               24,  24}, WidgetType::flatBtn,  WindowColour::tertiary,  0xFFFFFFFF,                       STR_RESEARCH_SHOW_DETAILS_TIP)
     );
 
-    static const auto window_research_funding_widgets = makeWidgets(
+    static constexpr auto window_research_funding_widgets = makeWidgets(
         makeWindowShim(STR_RESEARCH_FUNDING, kWindowSizeFunding),
         makeWidget({  0,  43}, {     kWindowSizeFunding.width, 164}, WidgetType::resize,       WindowColour::secondary                                                                                   ),
         makeTab   ({  3,  17},                                                                                         STR_RESEARCH_AND_DEVELOPMENT_TIP                                                  ),
@@ -97,7 +97,7 @@ namespace OpenRCT2::Ui::Windows
         makeWidget({  8, 186}, {kWindowSizeFunding.width - 16,  12}, WidgetType::checkbox,     WindowColour::tertiary, STR_RESEARCH_NEW_SCENERY_AND_THEMING, STR_RESEARCH_NEW_SCENERY_AND_THEMING_TIP    )
     );
 
-    static const std::span<const Widget> window_research_page_widgets[] = {
+    static constexpr std::span<const Widget> window_research_page_widgets[] = {
         window_research_development_widgets,
         window_research_funding_widgets,
     };
@@ -378,14 +378,14 @@ namespace OpenRCT2::Ui::Windows
             }
             else if (gameState.researchProgressStage == RESEARCH_STAGE_DESIGNING)
             {
-                ft.Add<StringId>(gameState.researchNextItem->GetCategoryName());
+                ft.Add<StringId>(gameState.researchNextItem->getCategoryName());
             }
             else if (gameState.researchNextItem->type == Research::EntryType::ride)
             {
                 const auto& rtd = GetRideTypeDescriptor(gameState.researchNextItem->baseRideType);
                 if (rtd.flags.has(RtdFlag::listVehiclesSeparately))
                 {
-                    ft.Add<StringId>(gameState.researchNextItem->GetName());
+                    ft.Add<StringId>(gameState.researchNextItem->getName());
                 }
                 else if (gameState.researchNextItem->flags & RESEARCH_ENTRY_FLAG_FIRST_OF_TYPE)
                 {
@@ -393,14 +393,14 @@ namespace OpenRCT2::Ui::Windows
                 }
                 else
                 {
-                    ft.Add<StringId>(gameState.researchNextItem->GetName());
+                    ft.Add<StringId>(gameState.researchNextItem->getName());
                     ft.Add<StringId>(rtd.Naming.Name);
                     label = STR_RESEARCH_TYPE_LABEL_VEHICLE;
                 }
             }
             else
             {
-                ft.Add<StringId>(gameState.researchNextItem->GetName());
+                ft.Add<StringId>(gameState.researchNextItem->getName());
             }
             drawTextWrapped(rt, screenCoords, 296, label, ft);
             screenCoords.y += 25;
@@ -437,7 +437,7 @@ namespace OpenRCT2::Ui::Windows
             if (gameState.researchLastItem->type == Research::EntryType::scenery)
             {
                 lastDevelopmentFormat = STR_RESEARCH_SCENERY_LABEL;
-                ft.Add<StringId>(gameState.researchLastItem->GetName());
+                ft.Add<StringId>(gameState.researchLastItem->getName());
             }
             else
             {
@@ -445,7 +445,7 @@ namespace OpenRCT2::Ui::Windows
                 const auto& rtd = GetRideTypeDescriptor(gameState.researchLastItem->baseRideType);
                 if (rtd.flags.has(RtdFlag::listVehiclesSeparately))
                 {
-                    ft.Add<StringId>(gameState.researchLastItem->GetName());
+                    ft.Add<StringId>(gameState.researchLastItem->getName());
                 }
                 else if (gameState.researchLastItem->flags & RESEARCH_ENTRY_FLAG_FIRST_OF_TYPE)
                 {
@@ -453,7 +453,7 @@ namespace OpenRCT2::Ui::Windows
                 }
                 else
                 {
-                    ft.Add<StringId>(gameState.researchLastItem->GetName());
+                    ft.Add<StringId>(gameState.researchLastItem->getName());
                     ft.Add<StringId>(rtd.Naming.Name);
                     lastDevelopmentFormat = STR_RESEARCH_VEHICLE_LABEL;
                 }

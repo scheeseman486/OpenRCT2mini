@@ -39,12 +39,12 @@ namespace OpenRCT2::Ui::Windows
     };
 
     // clang-format off
-    static const auto window_custom_currency_widgets = makeWidgets(
+    static constexpr auto window_custom_currency_widgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
-        makeSpinnerWidgets({100, 30}, {101, 11}, WidgetType::spinner,      WindowColour::secondary, kStringIdEmpty     ), // NB: 3 widgets
-        makeWidget        ({120, 50}, { 81, 11}, WidgetType::button,       WindowColour::secondary, kStringIdEmpty     ),
-        makeWidget        ({220, 50}, {131, 11}, WidgetType::dropdownMenu, WindowColour::secondary                     ),
-        makeWidget        ({339, 51}, { 11,  9}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH )
+        makeHoldableSpinnerWidgets({100, 30}, {101, 11}, WidgetType::spinner,      WindowColour::secondary, kStringIdEmpty     ), // NB: 3 widgets
+        makeWidget                ({120, 50}, { 81, 11}, WidgetType::button,       WindowColour::secondary, kStringIdEmpty     ),
+        makeWidget                ({220, 50}, {131, 11}, WidgetType::dropdownMenu, WindowColour::secondary                     ),
+        makeWidget                ({339, 51}, { 11,  9}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH )
     );
     // clang-format on
 
@@ -56,7 +56,6 @@ namespace OpenRCT2::Ui::Windows
         void onOpen() override
         {
             setWidgets(window_custom_currency_widgets);
-            widgetsSetHoldable(*this, { WIDX_RATE_UP, WIDX_RATE_DOWN });
             WindowInitScrollWidgets(*this);
             colours[0] = Drawing::Colour::lightBrown;
             colours[1] = Drawing::Colour::lightBrown;
@@ -122,7 +121,7 @@ namespace OpenRCT2::Ui::Windows
                     WindowTextInputOpen(
                         this, WIDX_RATE, STR_RATE_INPUT_TITLE, STR_RATE_INPUT_DESC, {}, STR_FORMAT_INTEGER,
                         static_cast<uint32_t>(CurrencyDescriptors[EnumValue(CurrencyType::custom)].rate),
-                        kCurrencyRateMaxNumDigits, OskMode::numpad);
+                        kCurrencyRateMaxNumDigits);
                     break;
             }
         }

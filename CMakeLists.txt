@@ -1,20 +1,12 @@
 # CMAKE project for openrct2
-# OPENRCT2MINI: cut 33. Lowered from 3.24 to 3.13 — the OnionUI toolchain ships
-# cmake 3.13.4 (Buildroot 2019.11.3 vintage). 3.13 has every feature this
-# project's CMakeLists actually uses (no FetchContent, no project() VERSION
-# semantics that need newer behavior).
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.24)
 
 if (CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
     message(FATAL_ERROR "Building in-source is not supported! Create a build dir and remove ${CMAKE_SOURCE_DIR}/CMakeCache.txt")
 endif()
 
-# OPENRCT2MINI: cut 33. Upstream required GCC 12+ for C++20 std::span etc.
-# We backported all C++20 use sites to C++17 (see core/Span.hpp, Bit.hpp,
-# Array.hpp, SourceLocation.hpp), so GCC 8.3 (the OnionUI cross toolchain) is
-# now a valid build compiler.
-if (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "8")
-	message(FATAL_ERROR "GCC 8+ required. Older GCC has incomplete C++17 support.")
+if (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12")
+	message(FATAL_ERROR "GCC 12+ required. Older GCC are known to fail compilation")
 endif()
 
 # Note: Searching for CCache must be before project() so project() can use CCache too
@@ -70,40 +62,27 @@ endif ()
 include(CheckCXXCompilerFlag)
 include(GNUInstallDirs)
 
-# OPENRCT2MINI: cut 33. Drop from C++20 to C++17 so the project builds against
-# the OnionUI toolchain's GCC 8.3 (the only Linux cross-toolchain matching the
-# device's glibc 2.28). The C++20 features used in upstream sources have been
-# substituted with shims (Span.hpp, Bit.hpp), manual operator replacements in
-# Identifier.hpp / RideRatings.h, and explicit typename keywords in dependent
-# type contexts (P0634R3 was C++20-only).
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
-# OPENRCT2MINI: cut 36. string(JSON ...) is CMake 3.19+; the OnionUI cross
-# toolchain ships cmake 3.13.4. The parsed values are only used by the
-# install-time DOWNLOAD_* asset fetchers; for the device build we ship
-# assets manually so all DOWNLOAD_* options are OFF and the values are
-# unused. Guard the JSON parsing so older CMake skips it.
-if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
-    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/assets.json" ASSETS_JSON)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/assets.json" ASSETS_JSON)
 
-    string(JSON TITLE_SEQUENCE_URL GET "${ASSETS_JSON}" "title-sequences" url)
-    string(JSON TITLE_SEQUENCE_SHA256 GET "${ASSETS_JSON}" "title-sequences" sha256)
+string(JSON TITLE_SEQUENCE_URL GET "${ASSETS_JSON}" "title-sequences" url)
+string(JSON TITLE_SEQUENCE_SHA256 GET "${ASSETS_JSON}" "title-sequences" sha256)
 
-    string(JSON OBJECTS_URL GET "${ASSETS_JSON}" objects url)
-    string(JSON OBJECTS_SHA256 GET "${ASSETS_JSON}" objects sha256)
+string(JSON OBJECTS_URL GET "${ASSETS_JSON}" objects url)
+string(JSON OBJECTS_SHA256 GET "${ASSETS_JSON}" objects sha256)
 
-    string(JSON OPENSFX_URL GET "${ASSETS_JSON}" opensfx url)
-    string(JSON OPENSFX_SHA256 GET "${ASSETS_JSON}" opensfx sha256)
+string(JSON OPENSFX_URL GET "${ASSETS_JSON}" opensfx url)
+string(JSON OPENSFX_SHA256 GET "${ASSETS_JSON}" opensfx sha256)
 
-    string(JSON OPENMUSIC_URL GET "${ASSETS_JSON}" openmusic url)
-    string(JSON OPENMUSIC_SHA256 GET "${ASSETS_JSON}" openmusic sha256)
+string(JSON OPENMUSIC_URL GET "${ASSETS_JSON}" openmusic url)
+string(JSON OPENMUSIC_SHA256 GET "${ASSETS_JSON}" openmusic sha256)
 
-    string(JSON REPLAYS_URL GET "${ASSETS_JSON}" replays url)
-    string(JSON REPLAYS_SHA256 GET "${ASSETS_JSON}" replays sha256)
-endif()
+string(JSON REPLAYS_URL GET "${ASSETS_JSON}" replays url)
+string(JSON REPLAYS_SHA256 GET "${ASSETS_JSON}" replays sha256)
 
 option(FORCE32 "Force 32-bit build. It will add `-m32` to compiler flags.")
 option(WITH_TESTS "Build tests")
@@ -134,72 +113,11 @@ option(DISABLE_VERSION_CHECKER "Disable the check for newer versions.")
 option(DISABLE_FLAC     "Disable FLAC support.")
 option(DISABLE_VORBIS   "Disable OGG/VORBIS support.")
 option(DISABLE_OPENGL   "Disable OpenGL support.")
-# OPENRCT2MINI: cut 34. ICU is huge and the device only needs CP1252→UTF-8.
-option(DISABLE_ICU      "Disable ICU. Falls back to a CP1252 lookup table for legacy save imports." OFF)
-# OPENRCT2MINI: cut 38. Draw the cursor in the framebuffer ourselves, for
-# platforms with no compositor / hardware cursor overlay (Miyoo Mini).
-# Cut 45: default ON. The host x86 build is the iteration vehicle for
-# everything that isn't SDL2-specific — cursor handling, D-pad-as-arrow-
-# keys, title-sequence trim, etc. Keeping host and device parity matters
-# more than playing nice with the upstream OS cursor.
-option(ENABLE_SOFTWARE_CURSOR "Render the cursor as a sprite in the framebuffer (use on platforms with no OS cursor)." ON)
 option(ENABLE_SCRIPTING "Enable script / plugin support." ON)
-
-# OPENRCT2MINI: in-game performance profiler window. See profiler-plan.md.
-# Default ON for both host and device — the sampler is gated by an atomic
-# flag so the cost when the window has never been opened is essentially
-# zero. Disable for release builds that want a smaller binary.
-option(ENABLE_PERFORMANCE_PROFILER "Build the in-game performance profiler window." ON)
-
-# How many seconds of frame-rate history the profiler keeps in its ring
-# buffer. Slow-poll (memory / IO) ring is sized as 3× this value at 1 Hz.
-# Device default 10 sec keeps the buffer at ~25 KB resident. Host default
-# 30 sec for more comfortable inspection (~75 KB). Set via CACHE STRING
-# rather than option() because option() is for booleans only.
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
-    set(PROFILER_HISTORY_SECONDS_DEFAULT 10)
-else()
-    set(PROFILER_HISTORY_SECONDS_DEFAULT 30)
-endif()
-set(PROFILER_HISTORY_SECONDS ${PROFILER_HISTORY_SECONDS_DEFAULT}
-    CACHE STRING "Seconds of profiler frame-rate history to retain.")
 option(ENABLE_ASAN "Enable the AddressSanitizer.")
 option(ENABLE_UBSAN "Enable the UndefinedBehaviourSanitizer.")
 option(ENABLE_HEADERS_CHECK "Check if include directives in header files are correct. Only works with clang" OFF)
 option(DISABLE_GUI "Don't build GUI. (Headless only.)")
-
-# OPENRCT2MINI revision 64: gate the [OPENRCT2MINI] checkpoint / diagnostic
-# logging behind a compile-time flag. ON by default for Debug builds, OFF
-# for Release. The macros in src/openrct2/MiniDebug.h compile to no-ops
-# when this is OFF, so a release binary has zero overhead from the logging
-# scaffold (no compiled-in strings, no fd writes).
-if (NOT DEFINED OPENRCT2MINI_DEBUG)
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(OPENRCT2MINI_DEBUG ON)
-    else ()
-        set(OPENRCT2MINI_DEBUG OFF)
-    endif ()
-endif ()
-if (OPENRCT2MINI_DEBUG)
-    add_definitions(-DOPENRCT2MINI_DEBUG)
-    message(STATUS "OpenRCT2mini diagnostic logging: ON (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
-else ()
-    message(STATUS "OpenRCT2mini diagnostic logging: OFF (release build)")
-endif ()
-
-# OPENRCT2MINI host-restoration-plan Phase 0: the OPENRCT2MINI compile-time
-# flag. Default OFF on every fresh build; the Mini cross-compile in
-# Packaging/miyoo_mini/build.sh sets it ON. When OFF, host gets upstream
-# OpenRCT2 feature parity for the gated cuts (engine caps, UI disables,
-# sprite paging, etc.). See host-restoration-plan.md for the gate-by-gate
-# inventory.
-option(OPENRCT2MINI "Build as the OpenRCT2mini Miyoo-targeted variant" OFF)
-if (OPENRCT2MINI)
-    add_compile_definitions(OPENRCT2MINI)
-    message(STATUS "OpenRCT2mini build variant: ON (Miyoo Mini target — all OPENRCT2MINI cuts active)")
-else ()
-    message(STATUS "OpenRCT2mini build variant: OFF (host / desktop — upstream parity for gated cuts)")
-endif ()
 
 
 if (FORCE32)
@@ -385,15 +303,6 @@ if (MSVC)
     add_definitions(-DNOMINMAX)
 else ()
     ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_SUGGEST_OVERRIDE -Wsuggest-override)
-    # OPENRCT2MINI: cut 36. GCC < 9 doesn't recognise that `final` implies
-    # `override` and emits -Wsuggest-override on `void foo() final;`. With
-    # -Werror that fails the build. Demote to warning on those compilers.
-    # Also, -Wunused-but-set-parameter (enabled by -Wextra in some GCC) fires
-    # on legitimate cross-platform fallbacks where a function parameter is
-    # assigned but only used on platforms we don't build for.
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=suggest-override -Wno-error=unused-but-set-parameter")
-    endif ()
     ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_DUPLICATED_COND -Wduplicated-cond)
     ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_NON_VIRTUAL_DTOR -Wnon-virtual-dtor)
     ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_WARN_MISSING_VARIABLE_DECLARATIONS -Wmissing-variable-declarations)
@@ -440,15 +349,14 @@ else ()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDEBUG=${DEBUG_LEVEL}")
 
     # Enable char8_t<->char conversion
-    # OPENRCT2MINI: cut 36. -fno-char8_t was introduced in GCC 9 (and is only
-    # meaningful in C++20+, where char8_t is a distinct type). On the OnionUI
-    # cross-toolchain (GCC 8.3) the flag is unrecognised and would error out.
-    # Probe for support before adding it.
-    ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS CXX_NO_CHAR8_T -fno-char8_t)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-char8_t -Wno-deprecated-declarations")
 
     if(APPLE)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=objc-method-access")
+    endif()
+
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "riscv64")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=stringop-overflow")
     endif()
 
     # Clang -Wmissing-declarations differs from GCC, set -Wmissing-prototypes for parity
@@ -479,12 +387,7 @@ if (CXX_WARN_SUGGEST_FINAL_METHODS)
 endif ()
 
 if (MINGW)
-    # OPENRCT2MINI Windows cross-build: gate -fstack-protector-strong on
-    # C/CXX languages only. add_definitions() propagates to RC compiles too,
-    # and windres rejects compiler flags ("invalid option -f"). Without
-    # this gate the .rc compile in src/openrct2-ui/CMakeLists.txt
-    # (resources/OpenRCT2.rc — icon + version + manifest) fails to build.
-    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-fstack-protector-strong>)
+   add_definitions(-fstack-protector-strong)
 endif ()
 
 # Include sub-projects
@@ -533,12 +436,8 @@ if (NOT MACOS_BUNDLE OR (MACOS_BUNDLE AND WITH_TESTS))
     # Don't recurse, grab all *.txt and *.md files
     add_definitions(-DDOCDIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DOCDIR}")
     file(GLOB DOC_FILES "${ROOT_DIR}/distribution/*.txt")
-    # OPENRCT2MINI: PRIVACY.md is not relevant to this port — network and
-    # version-checker are both disabled — so the file was deleted from the
-    # fork tree (commit d4b80c9). Drop it from DOC_FILES so install(FILES)
-    # doesn't error on the missing path. Everything else here is still
-    # present.
     list(APPEND DOC_FILES "${ROOT_DIR}/contributors.md"
+                        "${ROOT_DIR}/PRIVACY.md"
                         "${ROOT_DIR}/licence.txt"
                         "${ROOT_DIR}/distribution/scripting/scripting.md"
                         "${ROOT_DIR}/distribution/scripting/openrct2.d.ts")

@@ -13,9 +13,6 @@
 #include "../audio/Audio.h"
 #include "../core/Speed.hpp"
 #include "../entity/EntityRegistry.h"
-#include "../haptic/HapticEvent.h"
-#include "../interface/Window.h"
-#include "../interface/WindowBase.h"
 #include "../scenario/Scenario.h"
 #include "../ui/WindowManager.h"
 #include "../windows/Intent.h"
@@ -191,18 +188,8 @@ void Vehicle::UpdateSound()
     sound2_id = soundIdVolume.id;
     sound2_volume = soundIdVolume.volume;
 
-    // OPENRCT2MINI v2.18: continuous-rumble hook moved out of the
-    // sim-side Vehicle::UpdateSound. Sim-side, the audio rate isn't
-    // known yet — the actual SetRate value is derived from the
-    // vehicle's velocity/dopplerShift later in the UI-side
-    // UpdateVehicleSounds() (via VehicleSoundParams::frequency +
-    // SoundFrequency<type>()). The Haptic engine now needs that rate
-    // to scale its phase advance so the rumble loop tracks the
-    // pitch-shifted audio loop, so the hook lives where the rate is
-    // actually computed (see VehicleSounds.cpp::UpdateSound<>).
-
     // Calculate Sound Vector (used for sound frequency calcs)
-    int32_t soundDirection = Geometry::getSoundDirectionFromOrientation(Orientation);
+    int32_t soundDirection = Geometry::getSoundDirectionFromOrientation(orientation);
     int32_t soundVector = ((velocity >> 14) * soundDirection) >> 14;
     soundVector = std::clamp(soundVector, -127, 127);
 
@@ -224,7 +211,7 @@ SoundId Vehicle::UpdateScreamSound()
         if (velocity > -2.75_mph)
             return SoundId::null;
 
-        for (Vehicle* vehicle2 = getGameState().entities.GetEntity<Vehicle>(Id); vehicle2 != nullptr;
+        for (Vehicle* vehicle2 = getGameState().entities.GetEntity<Vehicle>(id); vehicle2 != nullptr;
              vehicle2 = getGameState().entities.GetEntity<Vehicle>(vehicle2->next_vehicle_on_train))
         {
             if (vehicle2->pitch < VehiclePitch::up12)
@@ -246,7 +233,7 @@ SoundId Vehicle::UpdateScreamSound()
     if (velocity < 2.75_mph)
         return SoundId::null;
 
-    for (Vehicle* vehicle2 = getGameState().entities.GetEntity<Vehicle>(Id); vehicle2 != nullptr;
+    for (Vehicle* vehicle2 = getGameState().entities.GetEntity<Vehicle>(id); vehicle2 != nullptr;
          vehicle2 = getGameState().entities.GetEntity<Vehicle>(vehicle2->next_vehicle_on_train))
     {
         if (vehicle2->pitch < VehiclePitch::down12)

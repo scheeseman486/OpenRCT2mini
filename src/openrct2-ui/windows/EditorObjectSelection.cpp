@@ -7,7 +7,7 @@
  * OpenRCT2 is licensed under the GNU General Public License version 3.
  *****************************************************************************/
 
-#include <openrct2/core/Bit.hpp>
+#include <bit>
 #include <cctype>
 #include <openrct2-ui/interface/Dropdown.h>
 #include <openrct2-ui/interface/Widget.h>
@@ -47,7 +47,7 @@
 #include <openrct2/scenes/title/TitleScene.h>
 #include <openrct2/ui/WindowManager.h>
 #include <openrct2/windows/Intent.h>
-#include <openrct2/core/Span.hpp>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -116,11 +116,7 @@ namespace OpenRCT2::Ui::Windows
     static constexpr uint8_t _numSourceGameItems = 8;
 
     static constexpr StringId kWindowTitle = kStringIdNone;
-    // OPENRCT2MINI: cut 29. Was 755 — overflows 640 px screens. Shrunk to fit.
-    // Layout code at L847-857 derives all internal positions from `width` so
-    // the list and preview pane reflow automatically; only the constexpr
-    // default needed to change.
-    static constexpr ScreenSize kWindowSize = { 640, 400 };
+    static constexpr ScreenSize kWindowSize = { 755, 400 };
     static constexpr ScreenSize kMinimumWindowSize = { 600, 400 };
     static constexpr ScreenSize kMaximumWindowSize = { 1200, 1000 };
     static constexpr auto kFilterWidth = 150;
@@ -230,7 +226,7 @@ namespace OpenRCT2::Ui::Windows
     VALIDATE_GLOBAL_WIDX(WC_EDITOR_OBJECT_SELECTION, WIDX_TAB_1);
 
     // clang-format off
-    static const auto _window_editor_object_selection_widgets = makeWidgets(
+    static constexpr auto _window_editor_object_selection_widgets = makeWidgets(
         makeWindowShim     (kWindowTitle, kWindowSize),
         makeWidget         ({  0, 43}, {kWindowSize.width, 357}, WidgetType::resize,       WindowColour::secondary                                                                 ),
         makeWidget         ({  4, 60}, {              288, 277}, WidgetType::scroll,       WindowColour::secondary, SCROLL_VERTICAL                                                ),
@@ -690,26 +686,6 @@ namespace OpenRCT2::Ui::Windows
 
         /**
          *
-        // OPENRCT2MINI list-focus-plan §3.9: 1D list opt-in. Items
-        // are _listItems entries (objects in the currently-selected
-        // category tab). Default scrollFocusActivate synthesises an
-        // onScrollMouseDown at the row centre — the existing per-row
-        // selection / load logic resolves the right object.
-        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
-        {
-            return static_cast<int32_t>(_listItems.size());
-        }
-
-        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
-        {
-            if (itemIndex < 0 || static_cast<size_t>(itemIndex) >= _listItems.size())
-                return {};
-            const int32_t y = itemIndex * kScrollableRowHeight;
-            const int32_t w = widgets[WIDX_LIST].width() - 1;
-            return ScreenRect{ { 0, y }, { w - 1, y + kScrollableRowHeight - 1 } };
-        }
-
-        /**
          * rct2: 0x006AB079
          */
         void onScrollMouseOver(int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override
@@ -1634,7 +1610,7 @@ namespace OpenRCT2::Ui::Windows
             SetEveryRideTypeInvented();
             SetEveryRideEntryInvented();
 
-            getGameState().editorStep = EditorStep::DesignsManager;
+            getGameState().editorStep = EditorStep::designsManager;
 
             int32_t entry_index = 0;
             for (; ObjectEntryGetChunk(ObjectType::ride, entry_index) == nullptr; entry_index++)

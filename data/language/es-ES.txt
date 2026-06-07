@@ -271,7 +271,7 @@ STR_0892    :Captura de pantalla guardada como ‘{STRINGID}’
 STR_0893    :¡No se pudo tomar la Captura de pantalla!
 STR_0894    :¡Datos de paisaje lleno!
 STR_0895    :No se puede construir una parte arriba y otra bajo tierra
-STR_0896    :Construcción de {STRINGID} 
+STR_0896    :Construcción de {STRING} 
 STR_0897    :Dirección
 STR_0898    :Curva izquierda
 STR_0899    :Curva derecha
@@ -1784,6 +1784,10 @@ STR_2483    :{WINDOW_COLOUR_2}Beneficio semanal: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Beneficio semanal: {RED}{CURRENCY2DP}
 STR_2487    :Mostrar nombres ‘reales’ de los visitantes
 STR_2488    :Muestra los nombres ‘reales’ de los visitantes, o sólo su número de visitante
+STR_2489    :Atajos de teclado…
+STR_2490    :Atajos de teclado
+STR_2491    :Reiniciar teclas
+STR_2492    :Cambiar todos los atajos de teclado a los valores por defecto
 STR_2493    :Cerrar ventana más-arriba
 STR_2494    :Cerrar todas las ventanas
 STR_2495    :Cancelar modo de construcción
@@ -1931,6 +1935,9 @@ STR_2780    :Añadir ‘cámara de vigilancia’
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
+STR_2784    :Cambiar atajo de teclado
+STR_2785    :{WINDOW_COLOUR_2}Presiona nueva tecla para:{NEWLINE}“{STRINGID}”
+STR_2786    :Clic en la descripción del atajo para cambiar
 STR_2787    :{WINDOW_COLOUR_2}Valor del parque: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}¡Felicidades!{NEWLINE}{BLACK}¡Has conseguido el objetivo con un valor de la compañía de {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}¡No has conseguido tu objetivo!
@@ -1943,6 +1950,7 @@ STR_2795    :Ordenar
 STR_2796    :Ordenar la lista de atracciones según el criterio seleccionado
 STR_2797    :Desplazar mapa con el ratón al borde de la pantalla
 STR_2798    :Desplazar la vista cuando el puntero del ratón esté en el borde de la ventana
+STR_2799    :Mirar o cambiar los atajos de teclado asignados
 STR_2800    :{WINDOW_COLOUR_2}Entradas: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Beneficios venta entradas: {BLACK}{CURRENCY2DP}
 STR_2802    :Mapa
@@ -2417,6 +2425,8 @@ STR_5216    :Listado de Gestor de Diseño de Vía
 STR_5217    :Trucos
 STR_5218    :Temas
 STR_5219    :Opciones
+STR_5220    :Atajos de teclado
+STR_5221    :Cambiar Atajos de teclado
 STR_5222    :Cargar/Guardar
 STR_5223    :Aviso Guardar
 STR_5224    :Aviso Demoler Attrac.
@@ -3568,13 +3578,15 @@ STR_6577    :Velocidad del freno bloqueante
 STR_6578    :Establece el límite de velocidad para los frenos bloqueantes. En el modo de sección de bloque, los frenos adyacentes con una velocidad más lenta se vinculan al freno bloqueante.
 STR_6579    :Los frenos bloqueantes se establecerán a la velocidad por defecto al guardarlos como diseño de vía.
 STR_6580    :Restablecer
+STR_6581    :¿Estás seguro de que quieres restablecer todos los atajos de teclado en esta pestaña?
+STR_6582    :Abrir ventana de atajos de teclado
 STR_6583    :{WINDOW_COLOUR_2}Trenes Invertidos
 STR_6584    :Selecciona para que los trenes viajen marcha atrás
 STR_6585    :No se puede realizar cambios…
 STR_6586    :OpenRCT2
 STR_6587    :El tema principal de OpenRTC es una obra de Allister Brimble,{NEWLINE}licenciada bajo CC BY-SA 4.0.
 STR_6588    :Gracias a Herman Riddering por permitirnos grabar el 35er Voigt.
-STR_6589    :Intercambiar botones de ventana
+STR_6589    :Mostrar botones de ventana a la izquierda
 STR_6590    :Mostrar los botones de ventana (como el de cerrar la ventana) a la izquierda de la barra de título en lugar de a la derecha.
 STR_6591    :El empleado está reparando una atracción y no puede ser despedido.
 STR_6592    :El empleado está inspeccionando una atracción y no puede ser despedido.
@@ -3770,13 +3782,13 @@ STR_6781    :Capturas de pantalla
 STR_6782    :Notificaciones de parque
 STR_6783    :Notificaciones de atracciones
 STR_6784    :Notificaciones de visitantes
-STR_6785    :Ratón virtual
-STR_6786    :Aceleración:
-STR_6787    :Qué tan rápido el D-pad alcanza la velocidad máxima del ratón virtual
-STR_6788    :Velocidad:
-STR_6789    :Multiplicador de velocidad del ratón virtual
-STR_6790    :Aceleración: {COMMA32}%
-STR_6791    :Velocidad: {COMMA32}%
+STR_6785    :Mando
+STR_6786    :Zona muerta:
+STR_6787    :Zona muerta del stick analógico (movimiento mínimo requerido)
+STR_6788    :Sensibilidad:
+STR_6789    :Multiplicador de la sensibilidad del stick analógico
+STR_6790    :Zona muerta: {COMMA32}%
+STR_6791    :Sensibilidad: {COMMA32}%
 STR_6792    :Edificios de entrada
 STR_6793    :Visitantes y personal
 STR_6794    :Decoración y temas
@@ -3792,17 +3804,3 @@ STR_7003    :El archivo de audio ‘{STRING}’ está truncado. Se esperaban {IN
 STR_7004    :Forzar redibujado
 STR_7005    :Arrastrar un área de sendero
 STR_7006    :Dibujar borde alrededor de los botones con imágenes
-STR_7030    :Cursores
-STR_7031    :Estilo del cursor:
-STR_7032    :Elige cómo se dibuja el cursor en la pantalla
-STR_7033    :Predeterminado
-STR_7034    :Alto contraste
-STR_7035    :Clásico
-STR_7036    :(ninguna)
-STR_7037    :Este parque supera los límites admitidos por OpenRCT2mini (tamaño del mapa, atracciones o entidades) y no se puede cargar en este dispositivo.
-# OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
-STR_7038    :Sombra paralela
-STR_7039    :Muestra una sombra translúcida bajo el cursor para que destaque sobre fondos recargados
-# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
-STR_7040    :Windows
-STR_7041    :Plegar la ventana

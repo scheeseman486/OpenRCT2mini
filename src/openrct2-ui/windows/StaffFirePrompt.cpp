@@ -36,7 +36,7 @@ namespace OpenRCT2::Ui::Windows
 
     // clang-format off
     // 0x9AFB4C
-    static const auto _staffFireWidgets = makeWidgets(
+    static constexpr auto _staffFireWidgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
         makeWidget({                    10, kWindowSize.height - 20}, {85, 14}, WidgetType::button, WindowColour::primary, STR_YES               ),
         makeWidget({kWindowSize.width - 95, kWindowSize.height - 20}, {85, 14}, WidgetType::button, WindowColour::primary, STR_SAVE_PROMPT_CANCEL)
@@ -98,7 +98,7 @@ namespace OpenRCT2::Ui::Windows
         auto* windowMgr = GetWindowManager();
         auto* window = windowMgr->FocusOrCreate<StaffFirePromptWindow>(
             WindowClass::firePrompt, kWindowSize, { WindowFlag::centreScreen, WindowFlag::transparent });
-        window->setWindowNumber(peep->Id.ToUnderlying());
+        window->setWindowNumber(peep->id.ToUnderlying());
         return window;
     }
 } // namespace OpenRCT2::Ui::Windows

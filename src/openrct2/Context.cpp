@@ -14,17 +14,12 @@
 
 #include "AssetPackManager.h"
 #include "Context.h"
-
-// OPENRCT2MINI: cut 39h. Direct fputs/fflush for early-init crash diagnosis,
-// independent of the OpenRCT2 logger.
-#include <cstdio>
 #include "Editor.h"
 #include "FileClassifier.h"
 #include "Game.h"
 #include "GameState.h"
 #include "GameStateSnapshots.h"
 #include "Input.h"
-#include "MiniDebug.h"  // OPENRCT2MINI revision 64 — gated debug logging
 #include "OpenRCT2.h"
 #include "ParkImporter.h"
 #include "PlatformEnvironment.h"
@@ -46,7 +41,6 @@
 #include "core/Timer.hpp"
 #include "drawing/ColourMap.h"
 #include "drawing/Drawing.h"
-#include "drawing/SpriteScratch.h"
 #include "drawing/IDrawingEngine.h"
 #include "drawing/Image.h"
 #include "drawing/LightFX.h"
@@ -67,12 +61,7 @@
 #include "park/ParkFile.h"
 #include "platform/Crash.h"
 #include "platform/Platform.h"
-#include "profiling/Bench.h"
 #include "profiling/Profiling.h"
-#ifdef ENABLE_PERFORMANCE_PROFILER
-    #include "profiling/Sampler.h"
-#endif
-#include "rct1/Csg.h"  // OPENRCT2MINI revision 65 — Csg1datPresentAtLocation gate
 #include "rct2/RCT2.h"
 #include "ride/TrackDesignRepository.h"
 #include "scenario/Scenario.h"
@@ -323,16 +312,9 @@ namespace OpenRCT2
 
         int32_t RunOpenRCT2(int argc, const char** argv) override
         {
-            // OPENRCT2MINI revision 39h / 64. Stderr checkpoints gated on
-            // OPENRCT2MINI_DEBUG — release builds compile these to no-ops.
-            MINI_DBG_PUTS("checkpoint: Initialise() entering");
-            bool ok = Initialise();
-            MINI_DBG_LOG("checkpoint: Initialise() returned %s\n", ok ? "true" : "false");
-            if (ok)
+            if (Initialise())
             {
-                MINI_DBG_PUTS("checkpoint: Launch() entering");
                 Launch();
-                MINI_DBG_PUTS("checkpoint: Launch() returned");
                 return EXIT_SUCCESS;
             }
             return EXIT_FAILURE;
@@ -420,42 +402,25 @@ namespace OpenRCT2
 
         bool Initialise() final override
         {
-            // OPENRCT2MINI: cut 39i. Per-step stderr checkpoints — moved up so
-            // they cover the entire Initialise body, not just from
-            // CreateWindow onward (the previous device run died BEFORE the
-            // first checkpoint here).
-            auto kpt = []([[maybe_unused]] const char* tag) {
-                MINI_DBG_LOG("  init: %s\n", tag);
-            };
-            kpt("Initialise body entered");
             if (_initialised)
             {
                 throw std::runtime_error("Context already initialised.");
             }
             _initialised = true;
 
-            kpt("CrashInit start");
             CrashInit();
-            kpt("CrashInit done");
 
-            kpt("Config version check start");
-            // OPENRCT2MINI: never auto-open the Changelog window on launch.
-            // Upstream's behaviour was: on the first run after a version
-            // bump, pop the Changelog. That makes sense for desktop where
-            // OpenRCT2 auto-updates and the user might not know what
-            // changed; on the device the user already saw the changelog
-            // when they downloaded the new tarball, and the window itself
-            // renders empty for our build (no online fetch). Suppress the
-            // auto-show but keep the lastRunVersion bookkeeping in sync.
-            if (!String::equals(Config::Get().general.lastRunVersion, kOpenRCT2Version))
+            if (String::equals(Config::Get().general.lastRunVersion, kOpenRCT2Version))
             {
+                gOpenRCT2ShowChangelog = false;
+            }
+            else
+            {
+                gOpenRCT2ShowChangelog = true;
                 Config::Get().general.lastRunVersion = kOpenRCT2Version;
                 Config::Save();
             }
-            gOpenRCT2ShowChangelog = false;
-            kpt("Config version check done");
 
-            kpt("OpenLanguage start");
             try
             {
                 _localisationService->OpenLanguage(Config::Get().general.language);
@@ -481,7 +446,6 @@ namespace OpenRCT2
                     return false;
                 }
             }
-            kpt("OpenLanguage done");
 
             // TODO add configuration option to allow multiple instances
             // if (!gOpenRCT2Headless && !Platform::LockSingleInstance()) {
@@ -491,12 +455,9 @@ namespace OpenRCT2
 
             if (!gOpenRCT2Headless)
             {
-                kpt("GetOrPromptRCT2Path start");
                 auto rct2InstallPath = GetOrPromptRCT2Path();
-                kpt("GetOrPromptRCT2Path done");
                 if (rct2InstallPath.empty())
                 {
-                    kpt("rct2InstallPath EMPTY → returning false");
                     return false;
                 }
                 _env->SetBasePath(DirBase::rct2, rct2InstallPath);
@@ -504,18 +465,13 @@ namespace OpenRCT2
 
             // The repositories are all dependent on the RCT2 path being set,
             // so they cannot be set in the constructor.
-            kpt("CreateObjectRepository");
             _objectRepository = CreateObjectRepository(*_env);
-            kpt("CreateObjectManager");
             _objectManager = CreateObjectManager(*_objectRepository);
-            kpt("CreateTrackDesignRepository");
             _trackDesignRepository = CreateTrackDesignRepository(*_env);
-            kpt("CreateScenarioRepository");
             _scenarioRepository = CreateScenarioRepository(*_env);
 
             if (!gOpenRCT2Headless)
             {
-                kpt("AssetPackManager construct");
                 _assetPackManager = std::make_unique<AssetPackManager>();
             }
 #ifdef __ENABLE_DISCORD__
@@ -526,7 +482,6 @@ namespace OpenRCT2
 #endif
 
 #ifndef __HAIKU__ // Haiku's user is always root, skip warning them about it.
-            kpt("ProcessIsElevated check");
             if (Platform::ProcessIsElevated())
             {
                 std::string elevationWarning = _localisationService->GetString(STR_ADMIN_NOT_RECOMMENDED);
@@ -541,7 +496,6 @@ namespace OpenRCT2
             }
 #endif
 
-            kpt("IsRunningInWine check");
             if (Platform::IsRunningInWine())
             {
                 std::string wineWarning = _localisationService->GetString(STR_WINE_NOT_RECOMMENDED);
@@ -555,59 +509,43 @@ namespace OpenRCT2
                 }
             }
 
-            kpt("CreateWindow start");
             if (!gOpenRCT2Headless)
             {
                 _uiContext->CreateWindow();
             }
-            kpt("CreateWindow done");
 
             EnsureUserContentDirectoriesExist();
-            kpt("EnsureUserContentDirectoriesExist done");
 
             if (!gOpenRCT2Headless)
             {
                 Audio::Init();
-                kpt("Audio::Init done");
                 Audio::PopulateDevices();
-                kpt("Audio::PopulateDevices done");
                 Audio::InitRideSoundsAndInfo();
-                kpt("Audio::InitRideSoundsAndInfo done");
                 Audio::gGameSoundsOff = !Config::Get().sound.masterSoundEnabled;
             }
 
             ChatInit();
-            kpt("ChatInit done");
             CopyOriginalUserFilesOver();
-            kpt("CopyOriginalUserFilesOver done");
 
             if (!gOpenRCT2NoGraphics)
             {
-                kpt("LoadBaseGraphics start");
                 if (!LoadBaseGraphics())
                 {
-                    kpt("LoadBaseGraphics FAILED");
                     return false;
                 }
-                kpt("LoadBaseGraphics done");
                 Drawing::LightFx::Init();
-                kpt("LightFx::Init done");
             }
 
             ContextInit();
-            kpt("ContextInit done");
             ResetSubsystems();
-            kpt("ResetSubsystems done");
 
             if (!gOpenRCT2Headless)
             {
                 auto* preloaderScene = static_cast<PreloaderScene*>(GetPreloaderScene());
                 SetActiveScene(preloaderScene);
-                kpt("SetActiveScene(preloader) done");
 
                 // TODO: preload the title scene in another (parallel) job.
                 preloaderScene->AddJob([this]() { InitialiseRepositories(); });
-                kpt("preloader jobs queued");
             }
             else
             {
@@ -616,11 +554,8 @@ namespace OpenRCT2
 
 #ifdef ENABLE_SCRIPTING
             // quickjs script engine is single-threaded and must be set up on the main thread
-            OpenProgress(STR_LOADING_PLUGIN_ENGINE);
             _scriptEngine.Initialise();
             _uiContext->InitialiseScriptExtensions();
-
-            OpenProgress(STR_LOADING_GENERIC);
 #endif
 
             return true;
@@ -639,7 +574,7 @@ namespace OpenRCT2
             WindowInitAll();
 
             gInputFlags.clearAll();
-            InputSetState(InputState::Reset);
+            InputSetState(InputState::reset);
             gPressedWidget.windowClassification = WindowClass::null;
             gPickupPeepImage = ImageId();
             ResetTooltipNotShown();
@@ -685,11 +620,6 @@ namespace OpenRCT2
             TitleSequenceManager::Scan();
 
             OpenProgress(STR_LOADING_GENERIC);
-
-            // OPENRCT2MINI: bootstrap object loading just touched every audio object's
-            // ImageTable (and any other intransient objects). Hint the kernel that those
-            // pages are cold so RSS drops back to baseline before the title scene begins.
-            OpenRCT2::Drawing::SpriteScratchEvict();
         }
 
     public:
@@ -903,21 +833,12 @@ namespace OpenRCT2
 
                 GameUnloadScripts();
                 _objectManager->LoadObjects(result.RequiredObjects, true);
-                // OPENRCT2MINI: LoadObjects faulted in every Object's ImageTable. The
-                // renderer only needs a small subset right after; let the kernel reclaim
-                // the loader's working set immediately. Pages re-fault transparently.
-                OpenRCT2::Drawing::SpriteScratchEvict();
                 SetProgress(90, 100, STR_STRING_M_PERCENT);
 
                 MapAnimations::ClearAll();
                 // TODO: Have a separate GameState and exchange once loaded.
                 auto& gameState = ::getGameState();
                 parkImporter->Import(gameState);
-                // OPENRCT2MINI: peepSpawns is a small fixed-content vector grown only at
-                // import; safe to shrink. Skipped tileElements / banners — TileElement*
-                // and Banner* are held all over the codebase and shrink_to_fit invalidates
-                // them. Crashes manifest later in simulation when those pointers are read.
-                gameState.peepSpawns.shrink_to_fit();
                 SetProgress(100, 100, STR_STRING_M_PERCENT);
 
                 // Reset viewport rendering inhibition
@@ -989,14 +910,6 @@ namespace OpenRCT2
                     ft.Add<uint32_t>(kParkFileCurrentVersion);
                     windowManager->ShowError(STR_WARNING_PARK_VERSION_TITLE, STR_WARNING_PARK_VERSION_MESSAGE, ft);
                 }
-                // OPENRCT2MINI revision 65: warning restored. Polish #176
-                // suppressed this because cut 2 left CSG permanently
-                // unloaded, making the warning misfire on every RCT1
-                // park whether or not RCT1 was linked. Revision 65 wires
-                // CSG loading back up via mmap (see GfxLoadCsg() call
-                // site below + Drawing.Sprite.cpp), so the stamp set by
-                // ImageTable::ReadJson now genuinely means "RCT1 is
-                // missing or unloadable" — surface it.
                 else if (HasObjectsThatUseFallbackImages())
                 {
                     Console::Error::WriteLine("Park has objects which require RCT1 linked. Fallback images will be used.");
@@ -1037,32 +950,6 @@ namespace OpenRCT2
                 }
                 auto windowManager = _uiContext->GetWindowManager();
                 windowManager->ShowError(STR_FILE_CONTAINS_UNSUPPORTED_RIDE_TYPES, kStringIdNone, {});
-            }
-            catch (const ParkExceedsDeviceLimitsException& e)
-            {
-                // OPENRCT2MINI revision 70: a V2 .park file's contents
-                // exceeded one of OpenRCT2mini's reduced engine caps (map
-                // size 255×255, 255 rides, or 10000 entities). The loader
-                // threw cleanly mid-stream. Console carries full detail.
-                //
-                // Revision 70d: by the time this catch fires the partial
-                // load has already mutated game state — _objectManager
-                // UnloadAll'd our title-screen kMinimumRequiredObjects and
-                // loaded the oversized park's set; gameState.mapSize was
-                // assigned the saved (oversized) value before the throw;
-                // MapAnimations::ClearAll ran. Leaving that state in place
-                // breaks the title scene (renders nothing, pan stops).
-                // SetActiveScene(GetTitleScene()) reinitialises everything
-                // via TitleScene::Load. The error dialog survives this
-                // transition because it's drained from TitleScene::Tick
-                // (rev 70d) rather than from Load — Tick runs on a stable
-                // frame after all scene transitions have settled.
-                Console::Error::WriteLine("Unable to open park: %s", e.what());
-                gOpenRCT2PendingParkLoadError = STR_PARK_EXCEEDS_OPENRCT2MINI_LIMITS;
-                if (loadTitleScreenFirstOnFail)
-                {
-                    SetActiveScene(GetTitleScene());
-                }
             }
             catch (const UnsupportedVersionException& e)
             {
@@ -1135,99 +1022,21 @@ namespace OpenRCT2
             auto result = std::string();
             if (gCustomRCT2DataPath.empty())
             {
-                // OPENRCT2MINI revision 39j / 64. Diagnostic log of the
-                // configured rct2 path and probe result — gated behind
-                // OPENRCT2MINI_DEBUG. The fatal "RCT2 install not found"
-                // message below is unconditional because the user needs
-                // to see it in any build.
-                auto cfgPath = Config::Get().general.rct2Path;
-                MINI_DBG_LOG("  rct2Path = %s\n", cfgPath.empty() ? "(empty)" : cfgPath.c_str());
-
-                bool exists = !cfgPath.empty() && Platform::OriginalGameDataExists(cfgPath);
-
-                // OPENRCT2MINI cut 46: if the configured path is missing or
-                // empty, look for an `rct2` directory next to the binary
-                // (i.e. <exe_dir>/rct2). Lets you drop the openrct2 binary
-                // alongside an RCT2 install without editing config.ini or
-                // passing --rct2-data-path.
-                //
-                // appimage-plan: when running from an AppImage, the
-                // binary's actual path is inside the squashfs mount
-                // (/tmp/.mount_xxx/usr/bin/openrct2), which is not where
-                // the user dropped their rct2/ folder. AppImageKit
-                // exposes $APPIMAGE = the .AppImage file's absolute path;
-                // its directory is the user-facing portable root. Prefer
-                // that when set, fall back to exe-dir otherwise. Mirrors
-                // the same lookup used in Platform.Linux.cpp's
-                // GetFolderPath() for saves and PlatformEnvironment.cpp's
-                // initial path resolution.
-                if (!exists)
+                // Check install directory
+                if (Config::Get().general.rct2Path.empty() || !Platform::OriginalGameDataExists(Config::Get().general.rct2Path))
                 {
-                    std::string baseDir;
-                    if (const char* appImagePath = getenv("APPIMAGE");
-                        appImagePath != nullptr && appImagePath[0] != '\0')
+                    LOG_VERBOSE(
+                        "install directory does not exist or invalid directory selected, %s",
+                        Config::Get().general.rct2Path.c_str());
+                    if (!Config::FindOrBrowseInstallDirectory())
                     {
-                        baseDir = Path::GetDirectory(appImagePath);
-                    }
-                    else
-                    {
-                        baseDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
-                    }
-                    if (!baseDir.empty())
-                    {
-                        auto candidate = Path::Combine(baseDir, u8"rct2");
-                        if (Platform::OriginalGameDataExists(candidate))
-                        {
-                            MINI_DBG_LOG("  base-dir fallback found rct2 install at %s\n", candidate.c_str());
-                            cfgPath = candidate;
-                            exists = true;
-                        }
+                        auto path = Config::GetDefaultPath();
+                        Console::Error::WriteLine(
+                            "An RCT2 install directory must be specified! Please edit \"game_path\" in %s.\n", path.c_str());
+                        return std::string();
                     }
                 }
-
-                MINI_DBG_LOG("  OriginalGameDataExists = %s\n", exists ? "true" : "false");
-
-                if (!exists)
-                {
-                    // Unconditional FATAL message — the user needs this whether
-                    // it's a debug or release build. Don't fall into the
-                    // SDL-message-box / menu-dialog path on platforms whose
-                    // SDL backend can't bring those up (Miyoo Mini's libmi_gfx
-                    // framebuffer has no native message-box facility —
-                    // SDL_ShowSimpleMessageBox crashes there). Instead emit
-                    // a clear stderr message and exit.
-                    //
-                    // Tailor the suggested path to whichever portable layout
-                    // is in use (Miyoo SD card / AppImage drop-folder / bare
-                    // binary) by reusing the same base-dir resolution as the
-                    // auto-detect above.
-                    std::string baseDir;
-                    if (const char* appImagePath = getenv("APPIMAGE");
-                        appImagePath != nullptr && appImagePath[0] != '\0')
-                    {
-                        baseDir = Path::GetDirectory(appImagePath);
-                    }
-                    else
-                    {
-                        baseDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
-                    }
-                    auto suggested = baseDir.empty()
-                        ? std::string{ "<directory next to the OpenRCT2mini binary>" }
-                        : Path::Combine(baseDir, u8"rct2");
-                    std::fputs("\n[OPENRCT2MINI] FATAL: RCT2 install not found.\n", stderr);
-                    std::fputs("[OPENRCT2MINI]\n", stderr);
-                    std::fputs(
-                        "[OPENRCT2MINI] OpenRCT2 expects your legitimate RollerCoaster Tycoon 2\n", stderr);
-                    std::fputs("[OPENRCT2MINI] install at:\n", stderr);
-                    std::fprintf(stderr, "[OPENRCT2MINI]   %s/Data/g1.dat\n", suggested.c_str());
-                    std::fprintf(stderr, "[OPENRCT2MINI]   %s/ObjData/...\n", suggested.c_str());
-                    std::fputs("[OPENRCT2MINI]\n", stderr);
-                    std::fputs("[OPENRCT2MINI] Copy your RCT2 install to that folder and relaunch.\n", stderr);
-                    std::fputs("[OPENRCT2MINI] We can't ship g1.dat — it's not free.\n\n", stderr);
-                    std::fflush(stderr);
-                    return std::string();
-                }
-                result = cfgPath;
+                result = Config::Get().general.rct2Path;
             }
             else
             {
@@ -1244,19 +1053,7 @@ namespace OpenRCT2
                 return false;
             }
             GfxLoadG2PalettesFontsTracks();
-            // OPENRCT2MINI revision 65: restore CSG load. Cut 2 originally
-            // dropped the eager call to save 40 MB of heap-pinned pixel data;
-            // GfxLoadCsg now routes through SpritePager (mmap), so the on-disk
-            // 39.5 MB lives in file-backed RSS that the kernel pages out under
-            // pressure. Heap cost is ~2.7 MB (header table + element vector).
-            // Gate on Csg1datPresentAtLocation so we don't try to open missing
-            // files for users without an RCT1 install. Failure is non-fatal:
-            // _csgLoaded stays false and the existing fallback path runs.
-            const auto& rct1PathForCsg = Config::Get().general.rct1Path;
-            if (!rct1PathForCsg.empty() && Csg1datPresentAtLocation(rct1PathForCsg))
-            {
-                GfxLoadCsg();
-            }
+            GfxLoadCsg();
             FontSpriteInitialiseCharacters();
             return true;
         }
@@ -1266,35 +1063,35 @@ namespace OpenRCT2
             if (gOpenRCT2Headless)
             {
                 // NONE or OPEN are the only allowed actions for headless mode
-                if (gOpenRCT2StartupAction != StartupAction::Open)
+                if (gOpenRCT2StartupAction != StartupAction::open)
                 {
-                    gOpenRCT2StartupAction = StartupAction::None;
+                    gOpenRCT2StartupAction = StartupAction::none;
                 }
             }
             else
             {
-                if ((gOpenRCT2StartupAction == StartupAction::Title) && Config::Get().general.playIntro)
+                if ((gOpenRCT2StartupAction == StartupAction::title) && Config::Get().general.playIntro)
                 {
-                    gOpenRCT2StartupAction = StartupAction::Intro;
+                    gOpenRCT2StartupAction = StartupAction::intro;
                 }
             }
 
             IScene* nextScene{};
             switch (gOpenRCT2StartupAction)
             {
-                case StartupAction::Intro:
+                case StartupAction::intro:
                 {
                     nextScene = GetIntroScene();
                     break;
                 }
 
-                case StartupAction::Title:
+                case StartupAction::title:
                 {
                     nextScene = GetTitleScene();
                     break;
                 }
 
-                case StartupAction::Open:
+                case StartupAction::open:
                 {
                     // A path that includes "://" is illegal with all common filesystems, so it is almost certainly a URL
                     // This way all cURL supported protocols, like http, ftp, scp and smb are automatically handled
@@ -1342,7 +1139,7 @@ namespace OpenRCT2
                     break;
                 }
 
-                case StartupAction::Edit:
+                case StartupAction::edit:
                 {
                     if (String::sizeOf(gOpenRCT2StartupActionPath) == 0)
                     {
@@ -1422,11 +1219,6 @@ namespace OpenRCT2
          */
         void Launch()
         {
-            // OPENRCT2MINI revision 39l / 64. Launch() checkpoints, gated.
-            auto kpt = []([[maybe_unused]] const char* tag) {
-                MINI_DBG_LOG("  launch: %s\n", tag);
-            };
-            kpt("entered");
             if (!_versionCheckFuture.valid())
             {
                 _versionCheckFuture = std::async(std::launch::async, [this] {
@@ -1437,12 +1229,10 @@ namespace OpenRCT2
                     }
                 });
             }
-            kpt("versionCheckFuture queued");
 
             if (!gOpenRCT2Headless)
             {
                 GetPreloaderScene()->SetOnComplete([&]() { SwitchToStartUpScene(); });
-                kpt("SetOnComplete on PreloaderScene done");
             }
             else
             {
@@ -1460,11 +1250,8 @@ namespace OpenRCT2
                 },
                 this, 0, 1);
 #else
-            kpt("stdInOutConsole.Start");
             _stdInOutConsole.Start();
-            kpt("RunGameLoop start");
             RunGameLoop();
-            kpt("RunGameLoop returned");
 #endif
         }
 
@@ -1480,13 +1267,6 @@ namespace OpenRCT2
         bool ShouldRunVariableFrame()
         {
             if (!ShouldDraw())
-                return false;
-            // OPENRCT2MINI rev 95: bench always takes the fixed-frame
-            // path. The bench-specific branch in RunFixedFrame forces
-            // one Tick per frame for determinism. Letting RunVariableFrame
-            // run instead would re-introduce the variable ticks-per-frame
-            // coupling that bench is explicitly trying to remove.
-            if (::OpenRCT2::Profiling::Bench::isActive())
                 return false;
             if (!Config::Get().general.uncapFPS)
                 return false;
@@ -1519,45 +1299,6 @@ namespace OpenRCT2
         {
             PROFILED_FUNCTION();
 
-            // OPENRCT2MINI: cut 39l. Print which sub-step inside the very
-            // OPENRCT2MINI revision 39l / 64. Per-frame checkpoints — only
-            // the first three frames so steady-state isn't drowned in
-            // spam. Gated behind OPENRCT2MINI_DEBUG.
-            static int s_kptFrameNo = 0;
-            const bool kptThis = s_kptFrameNo < 3;
-            if (kptThis)
-            {
-                MINI_DBG_LOG("  frame %d: entered\n", s_kptFrameNo);
-            }
-            ++s_kptFrameNo;
-
-            // OPENRCT2MINI rev 95: timedemo-style benchmark. When active,
-            // capture the wall-clock at the very top of the frame and
-            // report the duration to Bench at the very bottom (after the
-            // profiler hook). Cost when inactive is one relaxed atomic
-            // load — no allocation, no syscall.
-            const bool benchActive = ::OpenRCT2::Profiling::Bench::isActive();
-            std::chrono::steady_clock::time_point benchFrameStart;
-            if (benchActive)
-            {
-                benchFrameStart = std::chrono::steady_clock::now();
-            }
-
-            // OPENRCT2MINI: poll the poweroff flag at the top of every
-            // frame. If a SIGTERM has arrived since the last frame, this
-            // saves the loaded park to <user>/save/poweroff.park and
-            // calls Finish() so the loop exits cleanly on the next
-            // iteration. No-op when the flag isn't set, so the cost in
-            // the common case is one relaxed atomic load.
-            HandlePowerOffSaveIfRequested();
-
-            // OPENRCT2MINI P1: performance profiler frame-start hook.
-            // No-op when the sampler is disabled (one relaxed atomic
-            // load + branch). See profiler-plan.md.
-#ifdef ENABLE_PERFORMANCE_PROFILER
-            ::OpenRCT2::Profiling::Sampler::onFrameStart();
-#endif
-
             const auto deltaTime = _timer.GetElapsedTimeAndRestart().count();
 
             // Make sure we catch the state change and reset it.
@@ -1572,45 +1313,21 @@ namespace OpenRCT2
                 tweener.Restore();
                 tweener.Reset();
             }
-            if (kptThis) { MINI_DBG_PUTS("  frame: variable check ok"); }
 
             UpdateTimeAccumulators(deltaTime);
-            if (kptThis) { MINI_DBG_PUTS("  frame: UpdateTimeAccumulators ok"); }
 
             Network::Update();
-            if (kptThis) { MINI_DBG_PUTS("  frame: Network::Update ok"); }
 
             if (useVariableFrame)
             {
-                if (kptThis) { MINI_DBG_PUTS("  frame: RunVariableFrame start"); }
                 RunVariableFrame(deltaTime);
             }
             else
             {
-                if (kptThis) { MINI_DBG_PUTS("  frame: RunFixedFrame start"); }
                 RunFixedFrame(deltaTime);
             }
-            if (kptThis) { MINI_DBG_PUTS("  frame: RunXFrame done"); }
 
             Network::Flush();
-            if (kptThis) { MINI_DBG_PUTS("  frame: complete"); }
-
-            // OPENRCT2MINI P1: performance profiler frame-end hook.
-#ifdef ENABLE_PERFORMANCE_PROFILER
-            ::OpenRCT2::Profiling::Sampler::onFrameEnd();
-#endif
-
-            // OPENRCT2MINI rev 95: bench frame-end hook. Records the
-            // wall-clock duration of this frame and, when the target
-            // count is reached, writes the result line and clears
-            // active. See profiling/Bench.cpp for the report logic.
-            if (benchActive)
-            {
-                const auto now = std::chrono::steady_clock::now();
-                const auto durUs = std::chrono::duration_cast<std::chrono::microseconds>(now - benchFrameStart)
-                                       .count();
-                ::OpenRCT2::Profiling::Bench::onFrameEnd(static_cast<uint32_t>(durUs));
-            }
         }
 
         void UpdateTimeAccumulators(float deltaTime)
@@ -1634,55 +1351,10 @@ namespace OpenRCT2
 
             _uiContext->ProcessMessages();
 
-            // OPENRCT2MINI rev 95: timedemo-style benchmark.
-            //
-            // When bench is active we deliberately break the upstream
-            // framerate-pacing model:
-            //   1. Skip the accumulator-too-low Sleep — render as fast
-            //      as the device will go (uncapped framerate).
-            //   2. Force exactly one Tick per frame regardless of how
-            //      long the previous frame took. The default behaviour
-            //      runs as many ticks as fit in the elapsed wall time,
-            //      which means a slow frame (paint stall, GC, etc.)
-            //      catches up with multiple ticks on the next frame —
-            //      that variable ticks-per-frame coupling makes the
-            //      title sequence's peep behaviour run-to-run non-
-            //      deterministic. One tick per frame + RNG reset (in
-            //      Bench::start) gives identical game-state evolution
-            //      across runs.
-            //   3. Reset the accumulator afterwards so we don't drift.
-            //
-            // This is exactly the Quake/Doom timedemo model.
-            if (::OpenRCT2::Profiling::Bench::isActive())
-            {
-                Tick();
-                _ticksAccumulator = 0.0f;
-
-                _backgroundWorker.dispatchCompleted();
-                ContextHandleInput();
-                WindowUpdateAll();
-
-                if (ShouldDraw())
-                {
-                    Draw();
-                }
-                return;
-            }
-
             if (_ticksAccumulator < kGameUpdateTimeMS)
             {
                 const auto sleepTimeSec = std::min(kNetworkUpdateTimeMS, kGameUpdateTimeMS - _ticksAccumulator);
                 Platform::Sleep(static_cast<uint32_t>(sleepTimeSec * 1000.f));
-                // OPENRCT2MINI: this branch is upstream's framerate-pacing
-                // sleep — no Tick, no Draw, no PROFILED_FUNCTION callsite
-                // fires. Tell the profiler to discard the in-flight frame
-                // so the ring isn't polluted with sub-millisecond phantom
-                // samples (which produce FPS readings of 600-500000 and
-                // zero CPU phase deltas). The matching onFrameEnd at the
-                // bottom of RunFrame becomes a no-op for this iteration.
-#ifdef ENABLE_PERFORMANCE_PROFILER
-                ::OpenRCT2::Profiling::Sampler::cancelFrame();
-#endif
                 return;
             }
 

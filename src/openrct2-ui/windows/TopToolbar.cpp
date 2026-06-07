@@ -110,15 +110,12 @@ namespace OpenRCT2::Ui::Windows
         DDIDX_GIANT_SCREENSHOT = 7,
         // separator
         DDIDX_ABOUT = 9,
-        // OPENRCT2MINI: removed DDIDX_FILE_BUG_ON_GITHUB. The upstream entry
-        // pointed users at OpenRCT2's own GitHub issue tracker — wrong place
-        // to file OpenRCT2mini-specific bugs. All subsequent indices shift
-        // down by one.
-        DDIDX_UPDATE_AVAILABLE = 10,
-        DDIDX_OPTIONS = 11,
+        DDIDX_FILE_BUG_ON_GITHUB = 10,
+        DDIDX_UPDATE_AVAILABLE = 11,
+        DDIDX_OPTIONS = 12,
         // separator
-        DDIDX_QUIT_TO_MENU = 13,
-        DDIDX_EXIT_OPENRCT2 = 14,
+        DDIDX_QUIT_TO_MENU = 14,
+        DDIDX_EXIT_OPENRCT2 = 15,
     };
 
     enum TopToolbarViewMenuDdidx
@@ -167,7 +164,7 @@ namespace OpenRCT2::Ui::Windows
 
     enum
     {
-        DDIDX_CHEATS = 0,
+        DDIDX_CHEATS,
         DDIDX_TILE_INSPECTOR = 1,
         DDIDX_OBJECT_SELECTION = 2,
         DDIDX_INVENTIONS_LIST = 3,
@@ -176,26 +173,6 @@ namespace OpenRCT2::Ui::Windows
         DDIDX_ENABLE_SANDBOX_MODE = 6,
         DDIDX_DISABLE_CLEARANCE_CHECKS = 7,
         DDIDX_DISABLE_SUPPORT_LIMITS = 8,
-        // OPENRCT2MINI: cut 30. Debug items folded into the cheats dropdown so
-        // the toolbar drops one button. Indices 9..12 are added at runtime
-        // when Config::general.debuggingTools is on; the standalone
-        // WIDX_DEBUG widget is hidden permanently.
-        // 9 is a separator (added when debug items are appended)
-        DDIDX_DEBUG_CONSOLE = 10,
-        DDIDX_DEBUG_PAINT_TOOL = 11,
-        // OPENRCT2MINI P1: performance profiler. Sits at the bottom of the
-        // debug-tools cluster and is only surfaced when debuggingTools is on.
-        // See profiler-plan.md.
-        DDIDX_PERFORMANCE_PROFILER = 12,
-        // OPENRCT2MINI gamepad-plan 1.11: Haptics control panel. Sits
-        // directly under the performance profiler, gated on the same
-        // debuggingTools flag so the cheats dropdown stays unchanged
-        // for non-debug users. See gamepad-plan.md.
-        DDIDX_HAPTICS = 13,
-        // OPENRCT2MINI gamepad-plan 1.11b: per-SoundId rumble editor.
-        DDIDX_RUMBLE_EDITOR = 14,
-        // OPENRCT2MINI input-plan Track 2 §4.2: LED Options panel.
-        DDIDX_LED = 15,
 
         TOP_TOOLBAR_CHEATS_COUNT,
     };
@@ -257,20 +234,19 @@ namespace OpenRCT2::Ui::Windows
     static constexpr size_t _totalToolbarElements = kWidgetOrderLeftGroup.size() + kWidgetOrderRightGroup.size();
 
     // Make a combined version of both halves of the toolbar, with a separator halfway.
-    // OPENRCT2MINI: cut 33. std::copy became constexpr in C++20; manual loops
-    // for C++17 compat.
     static constexpr std::array<int, _totalToolbarElements + 1> kWidgetOrderCombined = []() {
-        std::array<int, _totalToolbarElements + 1> combined{};
-        size_t idx = 0;
-        for (auto v : kWidgetOrderLeftGroup) combined[idx++] = v;
-        combined[idx++] = WIDX_SEPARATOR;
-        for (auto v : kWidgetOrderRightGroup) combined[idx++] = v;
+        std::array<int, _totalToolbarElements + 1> combined;
+
+        auto halfWayPoint = std::copy(kWidgetOrderLeftGroup.begin(), kWidgetOrderLeftGroup.end(), combined.begin());
+        *halfWayPoint = WIDX_SEPARATOR;
+        std::copy(kWidgetOrderRightGroup.begin(), kWidgetOrderRightGroup.end(), halfWayPoint + 1);
+
         return combined;
     }();
 
 #pragma endregion
 
-    static const auto _topToolbarWidgets = makeWidgets(
+    static constexpr auto _topToolbarWidgets = makeWidgets(
         makeRemapWidget({  0, 0}, {30, kTopToolbarHeight + 1}, WidgetType::trnBtn, WindowColour::primary   , SPR_TOOLBAR_PAUSE,          STR_PAUSE_GAME_TIP                ), // Pause
         makeRemapWidget({ 60, 0}, {30, kTopToolbarHeight + 1}, WidgetType::trnBtn, WindowColour::primary   , SPR_TOOLBAR_FILE,           STR_DISC_AND_GAME_OPTIONS_TIP     ), // File menu
         makeRemapWidget({250, 0}, {30, kTopToolbarHeight + 1}, WidgetType::trnBtn, WindowColour::primary   , SPR_G2_TOOLBAR_MUTE,        STR_TOOLBAR_MUTE_TIP              ), // Mute
@@ -450,7 +426,7 @@ namespace OpenRCT2::Ui::Windows
             auto i = 0;
             gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_SHORTCUT_SHOW_MAP);
             gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_EXTRA_VIEWPORT);
-            if (gLegacyScene == LegacyScene::scenarioEditor && getGameState().editorStep == EditorStep::LandscapeEditor)
+            if (gLegacyScene == LegacyScene::scenarioEditor && getGameState().editorStep == EditorStep::landscapeEditor)
             {
                 gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_MAPGEN_MENU_ITEM);
             }
@@ -480,7 +456,7 @@ namespace OpenRCT2::Ui::Windows
         void mapMenuDropdown(int16_t dropdownIndex)
         {
             int32_t customStartIndex = 3;
-            if (gLegacyScene == LegacyScene::scenarioEditor && getGameState().editorStep == EditorStep::LandscapeEditor)
+            if (gLegacyScene == LegacyScene::scenarioEditor && getGameState().editorStep == EditorStep::landscapeEditor)
             {
                 customStartIndex++;
             }
@@ -522,102 +498,65 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
-        // OPENRCT2MINI: cut 31. Pause is a toggle at the top of the speed
-        // dropdown now — the standalone WIDX_PAUSE button is hidden. Indices:
-        //   0  Pause (toggle)
-        //   1  separator
-        //   2..5  Normal / Quick / Fast / Turbo
-        //   6  separator        ┐ debuggingTools only
-        //   7  Hyper            ┘
-        static constexpr int32_t kFFDDIDX_PAUSE = 0;
-        static constexpr int32_t kFFDDIDX_SEP1 = 1;
-        static constexpr int32_t kFFDDIDX_NORMAL = 2;
-        static constexpr int32_t kFFDDIDX_QUICK = 3;
-        static constexpr int32_t kFFDDIDX_FAST = 4;
-        static constexpr int32_t kFFDDIDX_TURBO = 5;
-        static constexpr int32_t kFFDDIDX_SEP2 = 6;
-        static constexpr int32_t kFFDDIDX_HYPER = 7;
-
         void initFastforwardMenu(Widget& widget)
         {
-            gDropdown.items[kFFDDIDX_PAUSE] = Dropdown::ToggleOption(STR_SHORTCUT_PAUSE);
-            gDropdown.items[kFFDDIDX_SEP1] = Dropdown::Separator();
-            gDropdown.items[kFFDDIDX_NORMAL] = Dropdown::MenuLabel(STR_SPEED_NORMAL);
-            gDropdown.items[kFFDDIDX_QUICK] = Dropdown::MenuLabel(STR_SPEED_QUICK);
-            gDropdown.items[kFFDDIDX_FAST] = Dropdown::MenuLabel(STR_SPEED_FAST);
-            gDropdown.items[kFFDDIDX_TURBO] = Dropdown::MenuLabel(STR_SPEED_TURBO);
+            int32_t num_items = 4;
+            gDropdown.items[0] = Dropdown::MenuLabel(STR_SPEED_NORMAL);
+            gDropdown.items[1] = Dropdown::MenuLabel(STR_SPEED_QUICK);
+            gDropdown.items[2] = Dropdown::MenuLabel(STR_SPEED_FAST);
+            gDropdown.items[3] = Dropdown::MenuLabel(STR_SPEED_TURBO);
 
-            int32_t num_items = kFFDDIDX_TURBO + 1; // 6
             if (Config::Get().general.debuggingTools)
             {
-                gDropdown.items[kFFDDIDX_SEP2] = Dropdown::Separator();
-                gDropdown.items[kFFDDIDX_HYPER] = Dropdown::MenuLabel(STR_SPEED_HYPER);
-                num_items = kFFDDIDX_HYPER + 1; // 8
+                num_items = 6;
+
+                gDropdown.items[4] = Dropdown::Separator();
+                gDropdown.items[5] = Dropdown::MenuLabel(STR_SPEED_HYPER);
             }
 
             WindowDropdownShowText(
                 { windowPos.x + widget.left, windowPos.y + widget.top }, widget.height(),
                 colours[0].withFlag(ColourFlag::translucent, true), 0, num_items);
 
-            // Pause check state
-            const bool paused = (gGamePaused & GAME_PAUSED_NORMAL) != 0;
-            if (paused)
-                gDropdown.items[kFFDDIDX_PAUSE].setChecked(true);
-            // Multiplayer clients can't toggle pause (mirrors the legacy
-            // WIDX_PAUSE click guard).
-            if (Network::GetMode() == Network::Mode::client)
-                gDropdown.items[kFFDDIDX_PAUSE].setDisabled(true);
-
-            // Speed checkmarks — gGameSpeed is 1-based; map to the new indices.
-            if (gGameSpeed >= 1 && gGameSpeed <= 4)
-                gDropdown.items[kFFDDIDX_NORMAL + (gGameSpeed - 1)].setChecked(true);
-            if (gGameSpeed == 8)
-                gDropdown.items[kFFDDIDX_HYPER].setChecked(true);
-
-            // Default index = the next reasonable speed step (or pause if paused).
-            if (paused)
+            // Set checkmarks
+            if (gGameSpeed <= 4)
             {
-                gDropdown.defaultIndex = kFFDDIDX_PAUSE;
+                gDropdown.items[gGameSpeed - 1].setChecked(true);
             }
-            else if (Config::Get().general.debuggingTools)
+            if (gGameSpeed == 8)
             {
-                gDropdown.defaultIndex = (gGameSpeed == 8) ? kFFDDIDX_NORMAL : kFFDDIDX_NORMAL + gGameSpeed;
+                gDropdown.items[5].setChecked(true);
+            }
+
+            if (Config::Get().general.debuggingTools)
+            {
+                gDropdown.defaultIndex = (gGameSpeed == 8 ? 0 : gGameSpeed);
             }
             else
             {
-                gDropdown.defaultIndex = (gGameSpeed >= 4) ? kFFDDIDX_NORMAL : kFFDDIDX_NORMAL + gGameSpeed;
+                gDropdown.defaultIndex = (gGameSpeed >= 4 ? 0 : gGameSpeed);
+            }
+            if (gDropdown.defaultIndex == 4)
+            {
+                gDropdown.defaultIndex = 5;
             }
         }
 
         void fastforwardMenuDropdown(int16_t dropdownIndex)
         {
-            if (dropdownIndex == kFFDDIDX_PAUSE)
-            {
-                if (Network::GetMode() != Network::Mode::client)
-                {
-                    auto pauseToggleAction = GameActions::PauseToggleAction();
-                    GameActions::Execute(&pauseToggleAction, getGameState());
-                    _waitingForPause = true;
-                }
-                return;
-            }
-
             auto* w = WindowGetMain();
-            if (w == nullptr)
-                return;
-
-            int32_t newSpeed = 0;
-            switch (dropdownIndex)
+            if (w != nullptr)
             {
-                case kFFDDIDX_NORMAL: newSpeed = 1; break;
-                case kFFDDIDX_QUICK:  newSpeed = 2; break;
-                case kFFDDIDX_FAST:   newSpeed = 3; break;
-                case kFFDDIDX_TURBO:  newSpeed = 4; break;
-                case kFFDDIDX_HYPER:  newSpeed = 8; break;
-                default: return;
+                if (dropdownIndex >= 0 && dropdownIndex <= 5)
+                {
+                    auto newSpeed = dropdownIndex + 1;
+                    if (newSpeed >= 5)
+                        newSpeed = 8;
+
+                    auto setSpeedAction = GameActions::GameSetSpeedAction(newSpeed);
+                    GameActions::Execute(&setSpeedAction, getGameState());
+                }
             }
-            auto setSpeedAction = GameActions::GameSetSpeedAction(newSpeed);
-            GameActions::Execute(&setSpeedAction, getGameState());
         }
 
         void initFileMenu(Widget& widget)
@@ -629,7 +568,7 @@ namespace OpenRCT2::Ui::Windows
                 gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_GIANT_SCREENSHOT);
                 gDropdown.items[numItems++] = Dropdown::Separator();
                 gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_ABOUT);
-                // OPENRCT2MINI: removed STR_FILE_BUG_ON_GITHUB entry.
+                gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_FILE_BUG_ON_GITHUB);
 
                 if (GetContext()->HasNewVersionInfo())
                     gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_UPDATE_AVAILABLE);
@@ -654,7 +593,7 @@ namespace OpenRCT2::Ui::Windows
                 gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_GIANT_SCREENSHOT);
                 gDropdown.items[numItems++] = Dropdown::Separator();
                 gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_ABOUT);
-                // OPENRCT2MINI: removed STR_FILE_BUG_ON_GITHUB entry.
+                gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_FILE_BUG_ON_GITHUB);
 
                 if (GetContext()->HasNewVersionInfo())
                     gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_UPDATE_AVAILABLE);
@@ -676,7 +615,7 @@ namespace OpenRCT2::Ui::Windows
                 gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_GIANT_SCREENSHOT);
                 gDropdown.items[numItems++] = Dropdown::Separator();
                 gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_ABOUT);
-                // OPENRCT2MINI: removed STR_FILE_BUG_ON_GITHUB entry.
+                gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_FILE_BUG_ON_GITHUB);
 
                 if (GetContext()->HasNewVersionInfo())
                     gDropdown.items[numItems++] = Dropdown::PlainMenuLabel(STR_UPDATE_AVAILABLE);
@@ -696,10 +635,7 @@ namespace OpenRCT2::Ui::Windows
         {
             using namespace Dropdown;
 
-            // OPENRCT2MINI: cut 30. The cheats dropdown is the combined dev-tools
-            // menu now — cheats + (when debuggingTools is on) console + debug paint.
-            // Lets us drop the WIDX_DEBUG button entirely so the toolbar fits 640.
-            constexpr ItemExt baseItems[] = {
+            constexpr ItemExt items[] = {
                 ToggleOption(DDIDX_CHEATS, STR_CHEAT_TITLE),
                 ToggleOption(DDIDX_TILE_INSPECTOR, STR_DEBUG_DROPDOWN_TILE_INSPECTOR),
                 ToggleOption(DDIDX_OBJECT_SELECTION, STR_DEBUG_DROPDOWN_OBJECT_SELECTION),
@@ -710,49 +646,13 @@ namespace OpenRCT2::Ui::Windows
                 ToggleOption(DDIDX_DISABLE_CLEARANCE_CHECKS, STR_DISABLE_CLEARANCE_CHECKS),
                 ToggleOption(DDIDX_DISABLE_SUPPORT_LIMITS, STR_DISABLE_SUPPORT_LIMITS),
             };
-            static_assert(ItemIDsMatchIndices(baseItems));
+            static_assert(ItemIDsMatchIndices(items));
 
-            SetItems(baseItems);
-
-            const bool showDebugItems = Config::Get().general.debuggingTools;
-            size_t numItems = std::size(baseItems);
-            if (showDebugItems)
-            {
-                // Slot 9 is a separator, 10 = console, 11 = debug paint, 12 =
-                // performance profiler. Use the Item-typed overloads (no
-                // ItemID), matching the legacy debug dropdown's pattern at the
-                // bottom of this file. The profiler is gated here too — it
-                // only surfaces when Options > Advanced > Enable debugging
-                // tools is checked.
-                gDropdown.items[9] = Dropdown::Separator();
-                gDropdown.items[DDIDX_DEBUG_CONSOLE] = Dropdown::ToggleOption(STR_DEBUG_DROPDOWN_CONSOLE);
-                gDropdown.items[DDIDX_DEBUG_PAINT_TOOL] = Dropdown::ToggleOption(STR_DEBUG_DROPDOWN_DEBUG_PAINT);
-#ifdef ENABLE_PERFORMANCE_PROFILER
-                gDropdown.items[DDIDX_PERFORMANCE_PROFILER] = Dropdown::ToggleOption(STR_PERFORMANCE_PROFILER);
-#else
-                // Profiler-disabled build: separator placeholder in
-                // slot 12 keeps the indices contiguous so the Haptics
-                // entry below stays at DDIDX_HAPTICS without needing
-                // a parallel set of #ifdef'd indices.
-                gDropdown.items[DDIDX_PERFORMANCE_PROFILER] = Dropdown::Separator();
-#endif
-                // OPENRCT2MINI gamepad-plan 1.11: Haptics control panel.
-                // Sits directly under Performance Profiler and is gated
-                // by the same debuggingTools flag.
-                gDropdown.items[DDIDX_HAPTICS] = Dropdown::ToggleOption(STR_HAPTICS);
-                // OPENRCT2MINI gamepad-plan 1.11b: Rumble Editor — per-
-                // SoundId envelope authoring. Sits below the basic
-                // Haptics window in the same dropdown.
-                gDropdown.items[DDIDX_RUMBLE_EDITOR] = Dropdown::ToggleOption(STR_RUMBLE_EDITOR_TITLE);
-                // OPENRCT2MINI input-plan Track 2 §4.2: LED Options panel.
-                // Sits below the Rumble Editor in the same dropdown.
-                gDropdown.items[DDIDX_LED] = Dropdown::ToggleOption(STR_LED);
-                numItems = DDIDX_LED + 1;
-            }
+            SetItems(items);
 
             WindowDropdownShowText(
                 { windowPos.x + widget.left, windowPos.y + widget.top }, widget.height(),
-                colours[0].withFlag(ColourFlag::translucent, true), Dropdown::Flag::StayOpen, numItems);
+                colours[0].withFlag(ColourFlag::translucent, true), Dropdown::Flag::StayOpen, TOP_TOOLBAR_CHEATS_COUNT);
 
             // Disable items that are not yet available in multiplayer
             if (Network::GetMode() != Network::Mode::none)
@@ -783,13 +683,6 @@ namespace OpenRCT2::Ui::Windows
                 gDropdown.items[DDIDX_DISABLE_SUPPORT_LIMITS].setChecked(true);
             }
 
-            if (showDebugItems)
-            {
-                auto* windowMgr = GetWindowManager();
-                gDropdown.items[DDIDX_DEBUG_CONSOLE].setChecked(false); // Console doesn't expose an open-state we can poll cheaply
-                gDropdown.items[DDIDX_DEBUG_PAINT_TOOL].setChecked(windowMgr->FindByClass(WindowClass::debugPaint) != nullptr);
-            }
-
             gDropdown.defaultIndex = DDIDX_CHEATS;
         }
 
@@ -799,26 +692,6 @@ namespace OpenRCT2::Ui::Windows
             {
                 case DDIDX_CHEATS:
                     ContextOpenWindow(WindowClass::cheats);
-                    break;
-                case DDIDX_PERFORMANCE_PROFILER:
-#ifdef ENABLE_PERFORMANCE_PROFILER
-                    ContextOpenWindow(WindowClass::performanceProfiler);
-#endif
-                    break;
-                // OPENRCT2MINI gamepad-plan 1.11: open the Haptics
-                // control window. Always available when debuggingTools
-                // is on, regardless of whether the profiler build flag
-                // is set — both surface from the same dropdown.
-                case DDIDX_HAPTICS:
-                    ContextOpenWindow(WindowClass::haptics);
-                    break;
-                // OPENRCT2MINI gamepad-plan 1.11b: open Rumble Editor.
-                case DDIDX_RUMBLE_EDITOR:
-                    ContextOpenWindow(WindowClass::rumbleEditor);
-                    break;
-                // OPENRCT2MINI input-plan Track 2 §4.2: open LED panel.
-                case DDIDX_LED:
-                    ContextOpenWindow(WindowClass::led);
                     break;
                 case DDIDX_TILE_INSPECTOR:
                     ContextOpenWindow(WindowClass::tileInspector);
@@ -845,23 +718,6 @@ namespace OpenRCT2::Ui::Windows
                 case DDIDX_DISABLE_SUPPORT_LIMITS:
                     CheatsSet(CheatType::disableSupportLimits, !getGameState().cheats.disableSupportLimits);
                     break;
-                // OPENRCT2MINI: cut 30. Debug menu items folded into this handler
-                // so the standalone WIDX_DEBUG button can disappear.
-                case DDIDX_DEBUG_CONSOLE:
-                {
-                    auto& console = GetInGameConsole();
-                    console.Open();
-                    break;
-                }
-                case DDIDX_DEBUG_PAINT_TOOL:
-                {
-                    auto* windowMgr = GetWindowManager();
-                    if (windowMgr->FindByClass(WindowClass::debugPaint) == nullptr)
-                        ContextOpenWindow(WindowClass::debugPaint);
-                    else
-                        windowMgr->CloseByClass(WindowClass::debugPaint);
-                    break;
-                }
             }
         }
 
@@ -1089,13 +945,13 @@ namespace OpenRCT2::Ui::Windows
                         case DDIDX_NEW_GAME:
                         {
                             auto loadOrQuitAction = GameActions::LoadOrQuitAction(
-                                GameActions::LoadOrQuitModes::OpenSavePrompt, PromptMode::saveBeforeNewGame);
+                                GameActions::LoadOrQuitModes::openSavePrompt, PromptMode::saveBeforeNewGame);
                             GameActions::Execute(&loadOrQuitAction, gameState);
                             break;
                         }
                         case DDIDX_LOAD_GAME:
                         {
-                            auto loadOrQuitAction = GameActions::LoadOrQuitAction(GameActions::LoadOrQuitModes::OpenSavePrompt);
+                            auto loadOrQuitAction = GameActions::LoadOrQuitAction(GameActions::LoadOrQuitModes::openSavePrompt);
                             GameActions::Execute(&loadOrQuitAction, gameState);
                             break;
                         }
@@ -1130,7 +986,16 @@ namespace OpenRCT2::Ui::Windows
                         case DDIDX_GIANT_SCREENSHOT:
                             ScreenshotGiant();
                             break;
-                        // OPENRCT2MINI: case DDIDX_FILE_BUG_ON_GITHUB removed.
+                        case DDIDX_FILE_BUG_ON_GITHUB:
+                        {
+                            std::string url = "https://github.com/OpenRCT2/OpenRCT2/issues/new?"
+                                              "assignees=&labels=bug&template=bug_report.yaml";
+                            // Automatically fill the "OpenRCT2 build" input
+                            auto versionStr = String::urlEncode(gVersionInfoFull);
+                            url.append("&f299dd2a20432827d99b648f73eb4649b23f8ec98d158d6f82b81e43196ee36b=" + versionStr);
+                            GetContext()->GetUiContext().OpenURL(url);
+                        }
+                        break;
                         case DDIDX_UPDATE_AVAILABLE:
                             ContextOpenWindowView(WindowView::newVersionInfo);
                             break;
@@ -1140,7 +1005,7 @@ namespace OpenRCT2::Ui::Windows
                             windowMgr->CloseByClass(WindowClass::manageTrackDesign);
                             windowMgr->CloseByClass(WindowClass::trackDeletePrompt);
                             auto loadOrQuitAction = GameActions::LoadOrQuitAction(
-                                GameActions::LoadOrQuitModes::OpenSavePrompt, PromptMode::saveBeforeQuit);
+                                GameActions::LoadOrQuitModes::openSavePrompt, PromptMode::saveBeforeQuit);
                             GameActions::Execute(&loadOrQuitAction, gameState);
                             break;
                         }
@@ -1223,10 +1088,7 @@ namespace OpenRCT2::Ui::Windows
         void ResetWidgetToDefaultState()
         {
             // Enable / disable buttons
-            // OPENRCT2MINI: cut 31. Pause is now an entry in the FASTFORWARD
-            // speed dropdown — the standalone button is hidden permanently.
-            // Pause state shows up as an overlay on the FASTFORWARD icon.
-            widgets[WIDX_PAUSE].type = WidgetType::empty;
+            widgets[WIDX_PAUSE].type = WidgetType::trnBtn;
             widgets[WIDX_FILE_MENU].type = WidgetType::trnBtn;
             widgets[WIDX_ZOOM_OUT].type = WidgetType::trnBtn;
             widgets[WIDX_ZOOM_IN].type = WidgetType::trnBtn;
@@ -1250,9 +1112,7 @@ namespace OpenRCT2::Ui::Windows
             widgets[WIDX_RESEARCH].type = WidgetType::trnBtn;
             widgets[WIDX_FASTFORWARD].type = WidgetType::trnBtn;
             widgets[WIDX_CHEATS].type = WidgetType::trnBtn;
-            // OPENRCT2MINI: cut 30. WIDX_DEBUG is permanently empty — its menu
-            // items live in the cheats dropdown now (see initCheatsMenu).
-            widgets[WIDX_DEBUG].type = WidgetType::empty;
+            widgets[WIDX_DEBUG].type = Config::Get().general.debuggingTools ? WidgetType::trnBtn : WidgetType::empty;
             widgets[WIDX_NEWS].type = WidgetType::trnBtn;
             widgets[WIDX_NETWORK].type = WidgetType::trnBtn;
         }
@@ -1308,21 +1168,21 @@ namespace OpenRCT2::Ui::Windows
             widgets[WIDX_NETWORK].type = WidgetType::empty;
 
             auto& gameState = getGameState();
-            if (gameState.editorStep != EditorStep::LandscapeEditor)
+            if (gameState.editorStep != EditorStep::landscapeEditor)
             {
                 widgets[WIDX_LAND].type = WidgetType::empty;
                 widgets[WIDX_WATER].type = WidgetType::empty;
             }
 
-            if (gameState.editorStep != EditorStep::RollercoasterDesigner)
+            if (gameState.editorStep != EditorStep::rollerCoasterDesigner)
             {
                 widgets[WIDX_RIDES].type = WidgetType::empty;
                 widgets[WIDX_CONSTRUCT_RIDE].type = WidgetType::empty;
                 widgets[WIDX_FASTFORWARD].type = WidgetType::empty;
             }
 
-            if (gameState.editorStep != EditorStep::LandscapeEditor
-                && gameState.editorStep != EditorStep::RollercoasterDesigner)
+            if (gameState.editorStep != EditorStep::landscapeEditor
+                && gameState.editorStep != EditorStep::rollerCoasterDesigner)
             {
                 widgets[WIDX_MAP].type = WidgetType::empty;
                 widgets[WIDX_SCENERY].type = WidgetType::empty;
@@ -1409,37 +1269,38 @@ namespace OpenRCT2::Ui::Windows
         }
 
         // TODO: look into using std::span
-        // OPENRCT2MINI: cut 32 — must mirror AlignButtons' new SEPARATOR-skipping
-        // behaviour, otherwise the right group's flush-right alignment lands a
-        // separator-sized gap to the right of the actual content.
         template<typename T>
         uint16_t GetToolbarWidth(T toolbarItems)
         {
+            bool firstItem = true;
             auto totalWidth = 0;
             for (auto widgetIndex : toolbarItems)
             {
                 auto* widget = &widgets[widgetIndex];
-                if (widgetIndex == WIDX_SEPARATOR || widget->type == WidgetType::empty)
+                if (widget->type == WidgetType::empty && widgetIndex != WIDX_SEPARATOR)
+                    continue;
+
+                if (firstItem && widgetIndex == WIDX_SEPARATOR)
                     continue;
 
                 totalWidth += widget->width();
+                firstItem = false;
             }
             return totalWidth;
         }
 
-        // OPENRCT2MINI: cut 32 — drop SEPARATOR widgets entirely from layout.
-        // Upstream's separators added 10 px of dead space between e.g. cheats
-        // and zoom, construct-ride and finances, etc. On a 640 px screen those
-        // gaps look like padding that doesn't belong; the icons already have
-        // visual breathing room from their own transparent margins. Skipping
-        // SEPARATOR keeps the click areas flush.
+        // TODO: look into using std::span
         template<typename T>
-        void AlignButtons(T toolbarItems, uint16_t xPos, uint16_t yOffset = 0)
+        void AlignButtons(T toolbarItems, uint16_t xPos)
         {
+            bool firstItem = true;
             for (auto widgetIndex : toolbarItems)
             {
                 auto* widget = &widgets[widgetIndex];
-                if (widgetIndex == WIDX_SEPARATOR || widget->type == WidgetType::empty)
+                if (widget->type == WidgetType::empty && widgetIndex != WIDX_SEPARATOR)
+                    continue;
+
+                if (firstItem && widgetIndex == WIDX_SEPARATOR)
                     continue;
 
                 auto widgetWidth = widget->width() - 1;
@@ -1448,117 +1309,31 @@ namespace OpenRCT2::Ui::Windows
                 widget->right = xPos;
                 xPos += 1;
 
-                if (yOffset != 0)
-                {
-                    auto widgetHeight = widget->height();
-                    widget->top = yOffset;
-                    widget->bottom = yOffset + widgetHeight;
-                }
-            }
-        }
-
-        // OPENRCT2MINI: cut 29. Reset every widget back to row 0 before the
-        // per-frame layout pass; otherwise switching from two-row to one-row
-        // (e.g. the user resizes the dev-host window wider) would leave widgets
-        // stuck on row 1.
-        void ResetWidgetRowsToDefault()
-        {
-            const uint16_t row0Height = kTopToolbarHeight + 1;
-            for (auto& widget : widgets)
-            {
-                if (widget.bottom > row0Height)
-                {
-                    widget.top = 0;
-                    widget.bottom = row0Height;
-                }
-            }
-        }
-
-        // OPENRCT2MINI: cut 30/32. Flow-pack: [left + right] in order, wrap when
-        // next button would overflow. SEPARATORs are skipped entirely (cut 32)
-        // so adjacent buttons are flush. Returns true if any widget landed
-        // below row 0.
-        template<typename T>
-        bool AlignButtonsFlow(T toolbarItems, uint16_t startX, uint16_t screenWidth, uint16_t rowHeight)
-        {
-            uint16_t xPos = startX;
-            uint16_t yOffset = 0;
-            bool wrapped = false;
-
-            for (auto widgetIndex : toolbarItems)
-            {
-                auto* widget = &widgets[widgetIndex];
-                if (widgetIndex == WIDX_SEPARATOR || widget->type == WidgetType::empty)
-                    continue;
-
-                const auto widgetWidth = widget->width() - 1;
-
-                if (xPos + widgetWidth > screenWidth)
-                {
-                    xPos = 0;
-                    yOffset = rowHeight;
-                    wrapped = true;
-                }
-
-                widget->left = xPos;
-                xPos += widgetWidth;
-                widget->right = xPos;
-                xPos += 1;
-
-                const auto widgetHeight = widget->height();
-                widget->top = yOffset;
-                widget->bottom = yOffset + widgetHeight;
-            }
-            return wrapped;
-        }
-
-        void ApplyToolbarHeight(bool wrapped)
-        {
-            const uint16_t rowHeight = kTopToolbarHeight + 1;
-            const uint16_t targetHeight = wrapped ? rowHeight * 2 : rowHeight;
-            if (height != targetHeight)
-            {
-                height = targetHeight;
-                invalidate();
+                firstItem = false;
             }
         }
 
         void AlignButtonsLeftRight()
         {
-            // OPENRCT2MINI: cut 32. Always flow-pack — no separator gaps, no
-            // inter-group gap. The toolbar packs flush from x=0 left-to-right
-            // and wraps to a second row only if the screen is too narrow.
-            // This replaces the cut-29/30 split that kept the upstream
-            // "right group flush-right with middle gap" layout for wide
-            // screens; the user wants flush-packing on every screen size.
-            ResetWidgetRowsToDefault();
+            // Align left hand side toolbar buttons
+            AlignButtons(kWidgetOrderLeftGroup, 0);
 
-            const auto screenWidth = ContextGetWidth();
-            const uint16_t rowHeight = kTopToolbarHeight + 1;
-
-            const bool wrapped = AlignButtonsFlow(kWidgetOrderCombined, 0, screenWidth, rowHeight);
-            ApplyToolbarHeight(wrapped);
+            // Align right hand side toolbar buttons
+            auto totalWidth = GetToolbarWidth(kWidgetOrderRightGroup);
+            auto xPos = ContextGetWidth() - totalWidth;
+            AlignButtons(kWidgetOrderRightGroup, xPos);
         }
 
         void AlignButtonsCentre()
         {
-            ResetWidgetRowsToDefault();
+            // First, we figure out how much space we'll be needing
+            auto totalWidth = GetToolbarWidth(kWidgetOrderCombined);
 
-            const auto totalWidth = GetToolbarWidth(kWidgetOrderCombined);
-            const auto screenWidth = ContextGetWidth();
-            const uint16_t rowHeight = kTopToolbarHeight + 1;
+            // We'll start from the centre of the UI...
+            auto xPos = (ContextGetWidth() - totalWidth) / 2;
 
-            if (static_cast<int32_t>(totalWidth) > screenWidth)
-            {
-                // Won't fit centred — wrap via flow-pack from x=0.
-                const bool wrapped = AlignButtonsFlow(kWidgetOrderCombined, 0, screenWidth, rowHeight);
-                ApplyToolbarHeight(wrapped);
-                return;
-            }
-
-            const auto xPos = (screenWidth - totalWidth) / 2;
+            // And finally, align the buttons in the centre
             AlignButtons(kWidgetOrderCombined, xPos);
-            ApplyToolbarHeight(false);
         }
 
         void onPrepareDraw() override
@@ -1607,32 +1382,15 @@ namespace OpenRCT2::Ui::Windows
                               windowPos.y + widgets[WIDX_FASTFORWARD].top + 0 };
                 if (widgetIsPressed(*this, WIDX_FASTFORWARD))
                     screenPos.y++;
+                GfxDrawSprite(rt, ImageId(SPR_G2_FASTFORWARD), screenPos + ScreenCoordsXY{ 6, 3 });
 
-                // OPENRCT2MINI: cut 31 / polish. The standalone WIDX_PAUSE
-                // button is gone (pause is folded into the game-speed
-                // dropdown on this button). When paused, draw the
-                // upstream pause sprite SPR_TOOLBAR_PAUSE with the
-                // toolbar's primary colour remap — exact replica of
-                // how upstream's trnBtn renderer drew the original
-                // pause widget (see WidgetDrawImage in Widget.cpp:899
-                // applying image.WithPrimary(colour)). When NOT paused,
-                // show the FASTFORWARD icon plus the speed arrows.
-                const bool paused = (gGamePaused & GAME_PAUSED_NORMAL) != 0;
-                if (paused)
+                for (int32_t i = 0; i < gGameSpeed && gGameSpeed <= 4; i++)
                 {
-                    GfxDrawSprite(rt, ImageId(SPR_TOOLBAR_PAUSE).WithPrimary(colours[0].colour), screenPos);
+                    GfxDrawSprite(rt, ImageId(SPR_G2_SPEED_ARROW), screenPos + ScreenCoordsXY{ 5 + i * 5, 15 });
                 }
-                else
+                for (int32_t i = 0; i < 3 && gGameSpeed >= 5; i++)
                 {
-                    GfxDrawSprite(rt, ImageId(SPR_G2_FASTFORWARD), screenPos + ScreenCoordsXY{ 6, 3 });
-                    for (int32_t i = 0; i < gGameSpeed && gGameSpeed <= 4; i++)
-                    {
-                        GfxDrawSprite(rt, ImageId(SPR_G2_SPEED_ARROW), screenPos + ScreenCoordsXY{ 5 + i * 5, 15 });
-                    }
-                    for (int32_t i = 0; i < 3 && gGameSpeed >= 5; i++)
-                    {
-                        GfxDrawSprite(rt, ImageId(SPR_G2_HYPER_ARROW), screenPos + ScreenCoordsXY{ 5 + i * 6, 15 });
-                    }
+                    GfxDrawSprite(rt, ImageId(SPR_G2_HYPER_ARROW), screenPos + ScreenCoordsXY{ 5 + i * 6, 15 });
                 }
             }
 

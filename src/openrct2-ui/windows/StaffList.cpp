@@ -84,7 +84,7 @@ namespace OpenRCT2::Ui::Windows
     constexpr int32_t kMaximumWindowHeight = 450;
 
     // clang-format off
-    static const auto _staffListWidgets = makeWidgets(
+    static constexpr auto _staffListWidgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
         makeWidget({  0, 43}, { kWindowSize.width, kWindowSize.height - 43}, WidgetType::resize,    WindowColour::secondary                                                    ), // tab content panel
         makeTab   ({  3, 17},                                                                                                STR_STAFF_HANDYMEN_TAB_TIP                        ), // handymen tab
@@ -192,7 +192,7 @@ namespace OpenRCT2::Ui::Windows
                 for (auto peep : EntityList<Staff>())
                 {
                     getGameState().entities.EntitySetFlashing(peep, false);
-                    if (peep->AssignedStaffType == GetSelectedStaffType())
+                    if (peep->assignedStaffType == GetSelectedStaffType())
                     {
                         getGameState().entities.EntitySetFlashing(peep, true);
                     }
@@ -338,25 +338,6 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
-        // OPENRCT2MINI list-focus-plan §3.4: 1D list opt-in. Items
-        // are staff entries; rows are kScrollableRowHeight tall. The
-        // default scrollFocusActivate synthesises onScrollMouseDown
-        // at the row centre, which fires the existing fire / open-
-        // peep dispatch.
-        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
-        {
-            return static_cast<int32_t>(_staffList.size());
-        }
-
-        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
-        {
-            if (itemIndex < 0 || static_cast<size_t>(itemIndex) >= _staffList.size())
-                return {};
-            const int32_t y = itemIndex * kScrollableRowHeight;
-            const int32_t w = widgets[WIDX_STAFF_LIST_LIST].width() - 16;
-            return ScreenRect{ { 0, y }, { w - 1, y + kScrollableRowHeight - 1 } };
-        }
-
         void onScrollMouseDown(int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override
         {
             int32_t i = screenCoords.y / kScrollableRowHeight;
@@ -440,7 +421,7 @@ namespace OpenRCT2::Ui::Windows
                     drawTextEllipsised(rt, { actionOffset, y }, actionColumnSize, format, ft);
 
                     // True if a patrol path is set for the worker
-                    if (peep->HasPatrolArea())
+                    if (peep->hasPatrolArea())
                     {
                         GfxDrawSprite(rt, ImageId(SPR_STAFF_PATROL_PATH), { nameColumnSize + 5, y });
                     }
@@ -448,7 +429,7 @@ namespace OpenRCT2::Ui::Windows
                     auto staffOrderIcon_x = nameColumnSize + 20;
                     if (!peep->isEntertainer())
                     {
-                        auto staffOrders = peep->StaffOrders;
+                        auto staffOrders = peep->staffOrders;
                         auto staffOrderSprite = GetStaffOrderBaseSprite(GetSelectedStaffType());
 
                         while (staffOrders != 0)
@@ -512,12 +493,12 @@ namespace OpenRCT2::Ui::Windows
             for (auto* peep : EntityList<Staff>())
             {
                 getGameState().entities.EntitySetFlashing(peep, false);
-                if (peep->AssignedStaffType == GetSelectedStaffType())
+                if (peep->assignedStaffType == GetSelectedStaffType())
                 {
                     getGameState().entities.EntitySetFlashing(peep, true);
 
                     StaffEntry entry;
-                    entry.Id = peep->Id;
+                    entry.Id = peep->id;
                     entry.Name = peep->GetName();
 
                     _staffList.push_back(std::move(entry));
@@ -581,10 +562,10 @@ namespace OpenRCT2::Ui::Windows
                     CoordsXYZ nullLoc{};
                     nullLoc.SetNull();
 
-                    GameActions::PeepPickupAction pickupAction{ GameActions::PeepPickupType::Pickup, staff->Id, nullLoc,
+                    GameActions::PeepPickupAction pickupAction{ GameActions::PeepPickupType::pickup, staff->id, nullLoc,
                                                                 Network::GetCurrentPlayerId() };
                     pickupAction.SetCallback(
-                        [staffId = staff->Id](const GameActions::GameAction* ga, const GameActions::Result* result) {
+                        [staffId = staff->id](const GameActions::GameAction* ga, const GameActions::Result* result) {
                             if (result->error != GameActions::Status::ok)
                                 return;
 
@@ -685,16 +666,16 @@ namespace OpenRCT2::Ui::Windows
             auto closestPeepDistance = std::numeric_limits<int32_t>::max();
             for (auto peep : EntityList<Staff>())
             {
-                if (peep->AssignedStaffType != GetSelectedStaffType())
+                if (peep->assignedStaffType != GetSelectedStaffType())
                     continue;
 
                 if (isPatrolAreaSet)
                 {
-                    if (!peep->HasPatrolArea())
+                    if (!peep->hasPatrolArea())
                     {
                         continue;
                     }
-                    if (!peep->IsLocationInPatrol(footpathCoords))
+                    if (!peep->isLocationInPatrol(footpathCoords))
                     {
                         continue;
                     }

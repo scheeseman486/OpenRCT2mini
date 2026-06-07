@@ -31,7 +31,7 @@ namespace OpenRCT2::Ui::Windows
         WIDX_BACKGROUND
     };
 
-    static const auto _tooltipWidgets = makeWidgets(
+    static constexpr auto _tooltipWidgets = makeWidgets(
         makeWidget({ 0, 0 }, { 200, 32 }, WidgetType::imgBtn, WindowColour::primary));
 
     class TooltipWindow final : public Window
@@ -161,7 +161,7 @@ namespace OpenRCT2::Ui::Windows
         gTooltipCursor = screenCoords;
         gTooltipCloseTimeout = 0;
         gTooltipWidget.windowClassification = WindowClass::null;
-        InputSetState(InputState::Normal);
+        InputSetState(InputState::normal);
         gInputFlags.unset(InputFlag::leftMousePressed);
     }
 

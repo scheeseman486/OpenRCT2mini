@@ -15,13 +15,13 @@
 
 enum class ConsoleInput : uint8_t
 {
-    None,
-    LineClear,
-    LineExecute,
-    HistoryPrevious,
-    HistoryNext,
-    ScrollPrevious,
-    ScrollNext,
+    none,
+    lineClear,
+    lineExecute,
+    historyPrevious,
+    historyNext,
+    scrollPrevious,
+    scrollNext,
 };
 
 namespace OpenRCT2
@@ -38,9 +38,7 @@ namespace OpenRCT2::Drawing
 class InteractiveConsole
 {
 private:
-    // OPENRCT2MINI: cut 33. atomic_flag::test() is C++20-only; use
-    // atomic<bool> which has supported non-mutating .load() since C++11.
-    std::atomic<bool> _commandExecuting{ false };
+    std::atomic_flag _commandExecuting;
 
 public:
     virtual ~InteractiveConsole()

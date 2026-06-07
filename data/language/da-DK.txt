@@ -270,7 +270,7 @@ STR_0892    :Skærmbillede gemt på disken som ‘{STRINGID}’
 STR_0893    :Skærmbillede fejlet !
 STR_0894    :Landskab data område fuld !
 STR_0895    :Kan ikke bygge delvist over og under overfladen
-STR_0896    :{STRINGID} Konstruktion
+STR_0896    :{STRING} Konstruktion
 STR_0897    :Retning
 STR_0898    :Venstresving
 STR_0899    :Højresving
@@ -1783,6 +1783,10 @@ STR_2483    :{WINDOW_COLOUR_2}Ugentlig profit: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Ugentlig profit: {RED}{CURRENCY2DP}
 STR_2487    :Vis ‘rigtige’ navne på gæsterne
 STR_2488    :Skift imellem at vise ‘rigtige’ navne på gæster og gæst nummre
+STR_2489    :Genvejs taster…
+STR_2490    :Tastatur genveje
+STR_2491    :Nulstil genveje
+STR_2492    :Sæt alle tastatur genveje tilbage til standard indstillinger
 STR_2493    :Luk det forreste vindue
 STR_2494    :Luk alle flydende vinduer
 STR_2495    :Afslut konstruktions tilstand
@@ -1930,6 +1934,9 @@ STR_2780    :Ekstra visning
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
+STR_2784    :Skift tastatur genvej
+STR_2785    :{WINDOW_COLOUR_2}tryk på den nye genvej for:{NEWLINE}“{STRINGID}”
+STR_2786    :Klik på genvejsbeskrivelsen og vælg en ny tast
 STR_2787    :{WINDOW_COLOUR_2}Park værdi: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Tillykke !{NEWLINE}{BLACK}Du har nået dit mål med en virksomheds værdi på {CURRENCY} !
 STR_2789    :{WINDOW_COLOUR_2}Du har ikke opnået dit mål!
@@ -1942,6 +1949,7 @@ STR_2795    :Sorter
 STR_2796    :Sorter ordnen af forlystelseslisten ved hjælp af den viste informationstype
 STR_2797    :Flyt visning når markøren rør ved kanten af skærmen
 STR_2798    :Scroll oversigten når musen rører kanten
+STR_2799    :Få vist eller rediger genvejstaster
 STR_2800    :{WINDOW_COLOUR_2}Total entré: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}indkomst fra entré: {BLACK}{CURRENCY2DP}
 STR_2802    :Kort
@@ -2414,6 +2422,8 @@ STR_5216    :Banedesign Manager Liste
 STR_5217    :Snyd
 STR_5218    :Temaer
 STR_5219    :Indstillinger
+STR_5220    :Tastatur genveje
+STR_5221    :Ændre tastatur genveje
 STR_5222    :Hent/gem
 STR_5223    :Gem prompt
 STR_5224    :Nedriv forlystelse prompt
@@ -3565,13 +3575,15 @@ STR_6577    :Blokbremse hastighed
 STR_6578    :Indstil hastighedsgrænse for blokbremser. I bloksektionstilstand er tilstødende bremser med en langsommere hastighed forbundet med blokbremsen.
 STR_6579    :Blokbremser indstilles til standardhastighed, når de gemmes som spordesign
 STR_6580    :Nulstil
+STR_6581    :Er du sikker på, at du vil nulstille alle genvejstaster på denne fane?
+STR_6582    :Åbn vinduet med tastaturgenveje
 STR_6583    :{WINDOW_COLOUR_2}Baglænskørende tog
 STR_6584    :Vælg for at køre tog baglæns
 STR_6585    :Kan ikke foretage ændringer…
 STR_6586    :OpenRCT2
 STR_6587    :OpenRCT2 Titelmelodi er et værk af Allister Brimble,{NEWLINE}licenseret CC BY-SA 4.0.
 STR_6588    :Tak til Herman Riddering for at give os mulighed for at optage 35er Voigt.
-STR_6589    :Byt om på vinduesknapper
+STR_6589    :Vis vinduesknapperne til venstre
 STR_6590    :Vis vinduesknapperne (f.eks. for at lukke vinduet) til venstre for titellinjen i stedet for til højre.
 STR_6591    :Medarbejder er i øjeblikket ved at ordne en tur og kan ikke fyres.
 STR_6592    :Medarbejder inspicerer i øjeblikket en forlystelse og kan ikke fyres.
@@ -3768,13 +3780,13 @@ STR_6781    :Skærmbilleder
 STR_6782    :Park-meddelelser
 STR_6783    :Forlystelses-meddelelser
 STR_6784    :Gæste-meddelelser
-STR_6785    :Virtuel mus
-STR_6786    :Acceleration:
-STR_6787    :Hvor hurtigt D-pad'en når den virtuelle mus' maksimumhastighed
-STR_6788    :Hastighed:
-STR_6789    :Multiplikator for virtuel mus-hastighed
-STR_6790    :Acceleration: {COMMA32}%
-STR_6791    :Hastighed: {COMMA32}%
+STR_6785    :Gamepad
+STR_6786    :Dødzone:
+STR_6787    :Dødzone for analog‑stick (mindste nødvendige bevægelse)
+STR_6788    :Følsomhed:
+STR_6789    :Følsomhedsmultiplikator for analog‑stick
+STR_6790    :Dødzone: {COMMA32}%
+STR_6791    :Følsomhed: {COMMA32}%
 STR_6792    :Indgangsbygninger
 STR_6793    :Gæster og personale
 STR_6794    :Scenarie og Temaer
@@ -3807,17 +3819,3 @@ STR_7025    :Gør Synlig
 STR_7026    :Gør hele forlystelsen synlig
 STR_7028    :Kvart spiral op
 STR_7029    :Kvart spiral ned
-STR_7030    :Markører
-STR_7031    :Markørstil:
-STR_7032    :Vælg hvordan skærmens markør tegnes
-STR_7033    :Standard
-STR_7034    :Høj kontrast
-STR_7035    :Klassisk
-STR_7036    :(ingen)
-STR_7037    :Denne park overskrider OpenRCT2minis understøttede grænser (kortstørrelse, forlystelser eller enheder) og kan ikke indlæses på denne enhed.
-# OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
-STR_7038    :Slagskygge
-STR_7039    :Tegner en gennemsigtig skygge under markøren, så den skiller sig ud på travle baggrunde
-# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
-STR_7040    :Windows
-STR_7041    :Rul vindue op

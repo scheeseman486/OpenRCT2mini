@@ -2214,9 +2214,9 @@ std::optional<std::string_view> GetDATPathName(std::string_view newPathName)
     return std::nullopt;
 }
 
-static constexpr auto kExtendedFootpathMappings = std::array<RCT2::FootpathMapping, 1>{{
+static constexpr auto kExtendedFootpathMappings = std::to_array<RCT2::FootpathMapping>({
     { "rct1.path.tarmac", "rct1.footpath_surface.tarmac", "rct1.footpath_surface.queue_blue", "rct2.footpath_railings.wood" },
-}};
+});
 
 const RCT2::FootpathMapping* GetFootpathMapping(const ObjectEntryDescriptor& desc)
 {
@@ -2274,7 +2274,7 @@ void UpdateFootpathsFromMapping(
     pathToRailingsMap[entryIndex] = railingIndex;
 }
 
-static constexpr auto kPeepAnimObjects = std::array<std::string_view, 15>{{
+static constexpr auto kPeepAnimObjects = std::to_array<std::string_view>({
     "rct2.peep_animations.guest",
     "rct2.peep_animations.handyman",
     "rct2.peep_animations.mechanic",
@@ -2290,7 +2290,7 @@ static constexpr auto kPeepAnimObjects = std::array<std::string_view, 15>{{
     "rct2.peep_animations.entertainer_roman",
     "rct2.peep_animations.entertainer_sheriff",
     "rct2.peep_animations.entertainer_snowman",
-}};
+});
 
 std::span<const std::string_view> GetLegacyPeepAnimationObjects()
 {
@@ -2336,7 +2336,7 @@ static bool ConvertPeepAnimationType(TPeepType* peep, AnimObjectConversionTable&
     peep->AnimationObjectIndex = conversion.first;
     peep->AnimationGroup = static_cast<PeepAnimationGroup>(conversion.second);
 
-    if (!peep->template Is<Staff>())
+    if (!peep->template is<Staff>())
         return true;
 
     // NB: 'EatFood' used to be supported, but turned out to be unused in C++ code.
@@ -2377,12 +2377,12 @@ void ConvertPeepAnimationTypeToObjects(GameState_t& gameState)
     LOG_VERBOSE("Converted %d peep entities", numConverted);
 }
 
-static constexpr auto kClimateObjectIdsByLegacyClimateType = std::array<std::string_view, 4>{{
+static constexpr auto kClimateObjectIdsByLegacyClimateType = std::to_array<std::string_view>({
     "rct2.climate.cool_and_wet",
     "rct2.climate.warm",
     "rct2.climate.hot_and_dry",
     "rct2.climate.cold",
-}};
+});
 
 std::string_view GetClimateObjectIdFromLegacyClimateType(RCT12::ClimateType climate)
 {

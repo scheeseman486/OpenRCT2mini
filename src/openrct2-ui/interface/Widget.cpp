@@ -25,7 +25,6 @@
 #include <openrct2/drawing/Rectangle.h>
 #include <openrct2/drawing/Text.h>
 #include <openrct2/interface/ColourWithFlags.h>
-#include <openrct2/interface/Window.h>
 #include <openrct2/localisation/Formatter.h>
 #include <openrct2/localisation/Formatting.h>
 #include <openrct2/localisation/Language.h>
@@ -114,7 +113,6 @@ namespace OpenRCT2::Ui
                 WidgetCaptionDraw(rt, w, widgetIndex);
                 break;
             case WidgetType::closeBox:
-            case WidgetType::shadeBox: // OPENRCT2MINI W7: same draw as closeBox; only the glyph differs
                 WidgetCloseboxDraw(rt, w, widgetIndex);
                 break;
             case WidgetType::scroll:
@@ -574,26 +572,17 @@ namespace OpenRCT2::Ui
         topLeft = w.windowPos + ScreenCoordsXY{ widget->left + 2, widget->top + 1 };
         int32_t width = widget->width() - 5;
 
-        // OPENRCT2MINI W7: scan the full widget array for title-bar
-        // buttons (closeBox + shadeBox). The pre-W5 code checked only
-        // widgetIndex+1/+2 because OpenRCT2 originally placed close box(es)
-        // immediately after the caption; shadeBox is appended at the tail
-        // by resizeFrame() so a full scan is now required. For each button
-        // found, subtract kCloseButtonSize from the title's available
-        // width, and if it sits on the left half, shift the centered text
-        // right by kCloseButtonSize so it doesn't overlap the button.
-        int32_t leftButtonShift = 0;
-        const int32_t windowMidX = w.width / 2;
-        for (const auto& other : w.widgets)
+        if (static_cast<size_t>(widgetIndex + 1) < w.widgets.size()
+            && (w.widgets[widgetIndex + 1]).type == WidgetType::closeBox)
         {
-            if (other.type == WidgetType::closeBox || other.type == WidgetType::shadeBox)
-            {
+            width -= kCloseButtonSize;
+            if (static_cast<size_t>(widgetIndex + 2) < w.widgets.size()
+                && (w.widgets[widgetIndex + 2]).type == WidgetType::closeBox)
                 width -= kCloseButtonSize;
-                if (other.left < windowMidX)
-                    leftButtonShift += kCloseButtonSize;
-            }
         }
-        topLeft.x += width / 2 + leftButtonShift;
+        topLeft.x += width / 2;
+        if (Config::Get().interface.windowButtonsOnTheLeft)
+            topLeft.x += kCloseButtonSize;
         if (Config::Get().interface.enlargedUi)
             topLeft.y += kTitleHeightLarge / 4;
 
@@ -606,28 +595,9 @@ namespace OpenRCT2::Ui
             ft.Add<const utf8*>(widget->string);
         }
 
-        // OPENRCT2MINI active-window-emphasis plan §3.3 (revised
-        // round 3): combine BOTH treatments — the text base colour
-        // changes (white→grey for inactive) AND paletteDarken1 is
-        // applied over the entire caption rect. Stacking both gives
-        // the user-requested "one shade darker" text result: the
-        // grey base is already darker than white, then the filter
-        // dims it further. paletteDarken1 alone (with white base)
-        // dimmed the background nicely but left the text too bright;
-        // grey alone (without the filter) was too subtle.
-        const auto captionColour
-            = OpenRCT2::isActiveWindowForEmphasis(w) ? Drawing::Colour::white : Drawing::Colour::grey;
         drawTextEllipsised(
             rt, topLeft, width, formatString, ft,
-            { ColourWithFlags{ captionColour }.withFlag(ColourFlag::withOutline, true),
-              TextAlignment::centre });
-        if (!OpenRCT2::isActiveWindowForEmphasis(w))
-        {
-            const auto captionTopLeft = w.windowPos + ScreenCoordsXY{ widget->left, widget->top };
-            const auto captionBottomRight = w.windowPos + ScreenCoordsXY{ widget->right, widget->bottom };
-            Rectangle::filter(
-                rt, { captionTopLeft, captionBottomRight }, FilterPaletteID::paletteDarken1);
-        }
+            { ColourWithFlags{ Drawing::Colour::white }.withFlag(ColourFlag::withOutline, true), TextAlignment::centre });
     }
 
     /**
@@ -648,33 +618,7 @@ namespace OpenRCT2::Ui
         auto borderStyle = Rectangle::BorderStyle::outset;
         if (w.flags.has(WindowFlag::higherContrastOnPress))
             brightness = Rectangle::FillBrightness::dark;
-        // OPENRCT2MINI W7: shadeBox is a momentary toggle — never persistently
-        // pressed. We can't trust WidgetFlag::isPressed for it because some
-        // windows (e.g. Scenery's updatePressedTab) drive press state by
-        // INDEX, and the shadeBox is appended at the end of the widgets
-        // array by resizeFrame, where its index can transiently collide
-        // with one of those windows' enum slots (e.g. WIDX_SCENERY_TAB_1).
-        // For shadeBox, look only at the active mouse-press state.
-        bool buttonIsPressed;
-        if (widget.type == WidgetType::shadeBox)
-        {
-            buttonIsPressed = false;
-            if (InputGetState() == InputState::WidgetPressed || InputGetState() == InputState::DropdownActive)
-            {
-                if (gInputFlags.has(InputFlag::widgetPressed)
-                    && gPressedWidget.windowClassification == w.classification
-                    && gPressedWidget.windowNumber == w.number
-                    && gPressedWidget.widgetIndex == widgetIndex)
-                {
-                    buttonIsPressed = true;
-                }
-            }
-        }
-        else
-        {
-            buttonIsPressed = widgetIsPressed(w, widgetIndex);
-        }
-        if (buttonIsPressed || isToolActive(w, widgetIndex))
+        if (widgetIsPressed(w, widgetIndex) || isToolActive(w, widgetIndex))
             borderStyle = Rectangle::BorderStyle::inset;
 
         auto colour = w.colours[widget.colour];
@@ -685,16 +629,7 @@ namespace OpenRCT2::Ui
         if (widget.string == nullptr)
             return;
 
-        // OPENRCT2MINI W7: closebox's text-y offset is calibrated for the ❌
-        // glyph's font metrics. The shade glyphs (▾/▴/▼/▲) sit lower in
-        // their cell and rendering at the same offset puts them near the
-        // top of the button. In enlarged UI the larger triangles
-        // (▼/▲) happen to align well at the same offset.
-        int closeButtonTextOffset;
-        if (widget.type == WidgetType::shadeBox && !Config::Get().interface.enlargedUi)
-            closeButtonTextOffset = 3;
-        else
-            closeButtonTextOffset = Config::Get().interface.enlargedUi ? 5 : 6;
+        const auto closeButtonTextOffset = Config::Get().interface.enlargedUi ? 5 : 6;
         auto crossMidPoint = w.windowPos + ScreenCoordsXY{ widget.midX() - 1, widget.midY() - closeButtonTextOffset };
 
         if (widgetIsDisabled(w, widgetIndex))
@@ -987,7 +922,7 @@ namespace OpenRCT2::Ui
         if (w.widgets[widgetIndex].flags.has(WidgetFlag::isPressed))
             return true;
 
-        if (InputGetState() == InputState::WidgetPressed || InputGetState() == InputState::DropdownActive)
+        if (InputGetState() == InputState::widgetPressed || InputGetState() == InputState::dropdownActive)
         {
             if (!gInputFlags.has(InputFlag::widgetPressed))
                 return false;
@@ -1225,13 +1160,7 @@ namespace OpenRCT2::Ui
         topLeft.y = w.windowPos.y + widget.textTop();
 
         auto* textInput = Windows::GetTextboxSession();
-        // OPENRCT2MINI: when the OSK is active, render its buffer +
-        // caret here so the parent textbox visibly mirrors what the
-        // user is typing. The engine's textInput session is stopped
-        // on OSK open (so SDL text events don't pollute the bound
-        // buffer), but `active` is still true via _usingWidgetTextBox.
-        const bool oskActive = Windows::OskIsActive();
-        if (!active || (textInput == nullptr && !oskActive))
+        if (!active || textInput == nullptr)
         {
             if (widget.text != 0)
             {
@@ -1242,48 +1171,30 @@ namespace OpenRCT2::Ui
             return;
         }
 
-        std::string oskBuffer;
-        size_t oskCaret = 0;
-        const std::string* effectiveBuffer = nullptr;
-        size_t effectiveCaret = 0;
-        if (oskActive)
-        {
-            oskBuffer = Windows::OskGetCurrentText();
-            oskCaret = Windows::OskGetCaretByteOffset();
-            effectiveBuffer = &oskBuffer;
-            effectiveCaret = oskCaret;
-        }
-        else
-        {
-            effectiveBuffer = textInput->Buffer;
-            effectiveCaret = textInput->SelectionStart;
-        }
-
         // String length needs to add 12 either side of box
         // +13 for cursor when max length.
         u8string wrappedString;
-        wrapString(*effectiveBuffer, bottomRight.x - topLeft.x - 5 - 6, FontStyle::medium, &wrappedString, nullptr);
+        wrapString(*textInput->Buffer, bottomRight.x - topLeft.x - 5 - 6, FontStyle::medium, &wrappedString, nullptr);
 
         drawText(rt, { topLeft.x + 2, topLeft.y }, wrappedString, { w.colours[1], { TextPaintFlag::noFormatting } });
 
         // Make a trimmed view of the string for measuring the width.
         int32_t curX = topLeft.x
             + getStringWidth(
-                           u8string_view{ wrappedString.c_str(), std::min(wrappedString.length(), effectiveCaret) },
+                           u8string_view{ wrappedString.c_str(), std::min(wrappedString.length(), textInput->SelectionStart) },
                            FontStyle::medium, true)
             + 3;
 
         int32_t width = 6;
-        if (effectiveCaret < effectiveBuffer->size())
+        if (static_cast<uint32_t>(textInput->SelectionStart) < textInput->Buffer->size())
         {
             // Make a new 1 character wide string for measuring the width
             // of the character that the cursor is under. (NOTE: this is broken for multi byte utf8 codepoints)
             width = std::max(
-                getStringWidth(u8string{ (*effectiveBuffer)[effectiveCaret] }, FontStyle::medium, true) - 2, 4);
+                getStringWidth(u8string{ (*textInput->Buffer)[textInput->SelectionStart] }, FontStyle::medium, true) - 2, 4);
         }
 
-        const bool caretFlashed = oskActive ? Windows::OskCaretIsFlashed() : Windows::TextBoxCaretIsFlashed();
-        if (caretFlashed)
+        if (Windows::TextBoxCaretIsFlashed())
         {
             auto colour = getColourMap(w.colours[1].colour).midLight;
             auto y = topLeft.y + 1 + widget.height() - 5;

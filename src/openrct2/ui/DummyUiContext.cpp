@@ -57,7 +57,7 @@ namespace OpenRCT2::Ui
         }
         ScaleQuality GetScaleQuality() override
         {
-            return ScaleQuality::NearestNeighbour;
+            return ScaleQuality::nearestNeighbour;
         }
         void SetFullscreenMode(FullscreenMode /*mode*/) override
         {
@@ -156,24 +156,6 @@ namespace OpenRCT2::Ui
         }
         void SetKeysPressed(uint32_t /*keysym*/, uint8_t /*scancode*/) override
         {
-        }
-        // OPENRCT2MINI gamepad-plan 1.11: dummy haptic — silent no-op.
-        // Headless / test / pre-2.6-Mini runs have no controllers to
-        // talk to, so this is the right behaviour. The real
-        // implementation lives in openrct2-ui/UiContext.cpp.
-        void RumbleControllers(float /*low*/, float /*high*/, uint32_t /*durationMs*/) override
-        {
-        }
-        // OPENRCT2MINI gamepad-plan 1.13: dummy LED — silent no-op.
-        // Headless / test / pre-2.6-Mini runs have no controllers, so
-        // the LED-flash engine treats ControllerHasLED()==false as
-        // "skip everything", which is the right behaviour here.
-        void SetControllerLED(uint8_t /*r*/, uint8_t /*g*/, uint8_t /*b*/) override
-        {
-        }
-        bool ControllerHasLED() override
-        {
-            return false;
         }
 
         class X8DrawingEngineFactory final : public IDrawingEngineFactory

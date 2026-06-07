@@ -258,7 +258,7 @@ STR_0892    :Screenshot Hard Drive’a bu isim ile kayıt edildi: ‘{STRINGID}�
 STR_0893    :Screenshot çekilemedi!
 STR_0894    :Arazi veri alanı dolu!
 STR_0895    :Yarı yerüstü, yarı yeraltı inşa edilemez!
-STR_0896    :{STRINGID} İnşası
+STR_0896    :{STRING} İnşası
 STR_0897    :Yön
 STR_0898    :Sola viraj
 STR_0899    :Sağa viraj
@@ -1771,6 +1771,10 @@ STR_2483    :{WINDOW_COLOUR_2}Haftalık kâr: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Haftalık kâr: {RED}{CURRENCY2DP}
 STR_2487    :Müşteriler gerçek isim taşısın
 STR_2488    :Müşterilerin gerçek isim taşımasını açınız/kapatınız
+STR_2489    :Tuş ayarları…
+STR_2490    :Tuş ayarları
+STR_2491    :Varsayılan ayarlar
+STR_2492    :
 STR_2493    :Son açılan pencereyi kapat
 STR_2494    :Tüm pencereleri kapat
 STR_2495    :İnşayı kapat
@@ -1918,6 +1922,9 @@ STR_2780    :Ekstra görüntü alanı
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT +
 STR_2783    :CTRL +
+STR_2784    :Tuş ayarını değiştiriniz
+STR_2785    :{WINDOW_COLOUR_2}Bu kısaltma için yeni tuş giriniz:{NEWLINE}“{STRINGID}”
+STR_2786    :Tuşu değiştirmek için buraya basınız
 STR_2787    :{WINDOW_COLOUR_2}Park değeri: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Tebrikler !{NEWLINE}{BLACK}Park değeri hedefinizi {CURRENCY} ile tamamladınız!
 STR_2789    :{WINDOW_COLOUR_2}Hedeflerinize ulaşamadınız !
@@ -1930,6 +1937,7 @@ STR_2795    :Sıralama
 STR_2796    :Aletleri kullandığınız bilgiye göre sıralayınız
 STR_2797    :Mouse ekran kenarına getirildiğinde görüntü kaydırılsın
 STR_2798    :Mouse ekran kenarına geldiğinde ekran kaydırılıyor
+STR_2799    :Tuş ayarlarını değiştiriniz
 STR_2800    :{WINDOW_COLOUR_2}Toplam müşteri sayısı: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Bilet satışlarından toplam gelir: {BLACK}{CURRENCY2DP}
 STR_2802    :Harita
@@ -2402,6 +2410,8 @@ STR_5216    :Alet Tasarım Yöneticisi Listesi
 STR_5217    :Hile
 STR_5218    :Tema
 STR_5219    :Seçenekler
+STR_5220    :Tuş Ayarları
+STR_5221    :Tuş Değiştirme
 STR_5222    :Yükleme/Kayıtlama
 STR_5223    :Kaydetme
 STR_5224    :Alet/Dükkan silme

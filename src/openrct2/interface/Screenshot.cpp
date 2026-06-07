@@ -199,13 +199,13 @@ static int32_t GetHighestBaseClearanceZ(const CoordsXY& location, const bool use
     {
         do
         {
-            if (useViewClipping && (element->GetBaseZ() > gClipHeight * kCoordsZStep))
+            if (useViewClipping && (element->getBaseZ() > gClipHeight * kCoordsZStep))
             {
                 continue;
             }
-            z = std::max<int32_t>(z, element->GetBaseZ());
-            z = std::max<int32_t>(z, element->GetClearanceZ());
-        } while (!(element++)->IsLastForTile());
+            z = std::max<int32_t>(z, element->getBaseZ());
+            z = std::max<int32_t>(z, element->getClearanceZ());
+        } while (!(element++)->isLastForTile());
     }
     return z;
 }
@@ -233,11 +233,6 @@ static RenderTarget CreateRT(const Viewport& viewport)
     RenderTarget rt;
     rt.width = viewport.width;
     rt.height = viewport.height;
-    // OPENRCT2MINI 2026-05-21 (upstream-merge v0.5.1): upstream replaced the
-    // std::nothrow form with a throwing new + try/catch. That sidesteps the
-    // GCC 16 -Wduplicated-branches false-positive we previously worked
-    // around with pragma push/pop here — the workaround was specific to
-    // the nothrow expression. Adopt upstream's form and drop our pragmas.
     try
     {
         rt.bits = new PaletteIndex[rt.width * rt.height];

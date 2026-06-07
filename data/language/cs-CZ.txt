@@ -271,7 +271,7 @@ STR_0892    :Snímek obrazovky byl uložen jako „{STRINGID}“
 STR_0893    :Snímaní obrazovky selhalo!
 STR_0894    :Datová oblast krajiny zaplněna!
 STR_0895    :Nelze stavět částečně pod a nad zemí
-STR_0896    :{STRINGID} - stavba
+STR_0896    :{STRING} - stavba
 STR_0897    :Směr
 STR_0898    :Zatáčka vlevo
 STR_0899    :Zatáčka vpravo
@@ -1788,6 +1788,10 @@ STR_2483    :{WINDOW_COLOUR_2}Týdenní zisk: {BLACK}+{CURRENCY2DP}
 STR_2484    :{WINDOW_COLOUR_2}Týdenní zisk: {RED}{CURRENCY2DP}
 STR_2487    :Zobrazit „skutečná“ jména návštěvníků
 STR_2488    :Přepíná mezi zobrazením „skutečného“ jména a čísla návštěvníka
+STR_2489    :Klávesové zkratky…
+STR_2490    :Klávesové zkratky
+STR_2491    :Obnovit původní nastavení
+STR_2492    :Nastaví všechny klávesové zkratky na jejich výchozí hodnoty
 STR_2493    :Zavřít okno na vrchu
 STR_2494    :Zavřít všechny plovoucí okna
 STR_2495    :Zrušit mód stavění
@@ -1935,6 +1939,9 @@ STR_2780    :Extra pohled
 STR_2781    :{STRINGID}:
 STR_2782    :SHIFT + 
 STR_2783    :CTRL + 
+STR_2784    :Změnit klávesovou zkratku
+STR_2785    :{WINDOW_COLOUR_2}Stiskněte novou klávesovou zkratku pro:{NEWLINE}„{STRINGID}“
+STR_2786    :Klikněte na popis klávesové zkratky pro výběr nastavení zkratky
 STR_2787    :{WINDOW_COLOUR_2}Hodnota parku: {BLACK}{CURRENCY}
 STR_2788    :{WINDOW_COLOUR_2}Gratulujeme!{NEWLINE}{BLACK}Bylo dosaženo cíle scénáře s hodnotou společnosti {CURRENCY}!
 STR_2789    :{WINDOW_COLOUR_2}Nepodařilo se dosáhnout cíle scénáře!
@@ -1947,6 +1954,7 @@ STR_2795    :Seřadit
 STR_2796    :Seřadit seznam podle zobrazené informace
 STR_2797    :Posouvat pohled při najetí myší k okraji
 STR_2798    :Posouvat pohled, když ukazatel myši narazí na hranu displeje
+STR_2799    :Zobrazit a upravit přiřazení klávesy Ctrl
 STR_2800    :{WINDOW_COLOUR_2}Celkem vstupů: {BLACK}{COMMA32}
 STR_2801    :{WINDOW_COLOUR_2}Příjem ze vstupů: {BLACK}{CURRENCY2DP}
 STR_2802    :Mapa
@@ -2419,6 +2427,8 @@ STR_5216    :Správce seznamu návrhů tratí
 STR_5217    :Cheaty
 STR_5218    :Motivy
 STR_5219    :Nastavení
+STR_5220    :Klávesové zkratky
+STR_5221    :Změnit klávesové zkratky
 STR_5222    :Načíst/uložit
 STR_5223    :Výzva k uložení
 STR_5224    :Výzva k odstranění atrakce
@@ -3567,13 +3577,15 @@ STR_6577    :Rychlost blokových brzd
 STR_6578    :Nastaví rychlostní omezení blokových brzd. V módu okruhu rozděleného na bloky jsou přiléhající brzdy s nižší rychlostí spojeny s blokovou brzdou.
 STR_6579    :Při uložení jako návrh tratě se blokové brzdy nastaví na výchozí rychlost
 STR_6580    :Obnovit
+STR_6581    :Opravdu chcete obnovit všechny klávesové zkratky na této záložce?
+STR_6582    :Otevřít okno Klávesové zkratky
 STR_6583    :{WINDOW_COLOUR_2}Obrácené vlaky
 STR_6584    :Zvolte pro vlaky jezdící pozpátku
 STR_6585    :Nelze změnit…
 STR_6586    :OpenRCT2
 STR_6587    :Úvodní znělka OpenRCT2 je dílem Allistera Brimblea,{NEWLINE}licencováno CC BY-SA 4.0.
 STR_6588    :Poděkování Hermanu Ridderingovi za svolení k nahrání 35er Voigt.
-STR_6589    :Prohodit tlačítka oken
+STR_6589    :Zobrazit tlačítka oken vlevo
 STR_6590    :Zobrazit tlačítka oken (např. Zavřít) na levé straně titulku okna namísto pravé.
 STR_6591    :Zaměstnanec právě opravuje atrakci a nelze jej propustit.
 STR_6592    :Zaměstnanec právě provádí inspekci atrakce a nelze jej propustit.
@@ -3769,14 +3781,14 @@ STR_6781    :Snímky obrazovky
 STR_6782    :Upozornění o parku
 STR_6783    :Upozornění o atrakcích
 STR_6784    :Upozornění o návštěvnících
-STR_6785    :Virtuální myš
-STR_6786    :Akcelerace:
+STR_6785    :Gamepad
+STR_6786    :Mrtvá zóna:
 
-STR_6787    :Jak rychle D-pad dosáhne maximální rychlosti virtuální myši
-STR_6788    :Rychlost:
-STR_6789    :Násobitel rychlosti virtuální myši
-STR_6790    :Akcelerace: {COMMA32}%
-STR_6791    :Rychlost: {COMMA32}%
+STR_6787    :Mrtvá zóna analogové páčky (minimální vyžadovaný pohyb)
+STR_6788    :Citlivost:
+STR_6789    :Násobitel citlivosti analogové páčky
+STR_6790    :Mrtvá zóna: {COMMA32}%
+STR_6791    :Citlivost: {COMMA32}%
 STR_6792    :Budovy vstupů
 STR_6793    :Návštěvníci a personál
 STR_6794    :Kulisy a motivy
@@ -3794,17 +3806,3 @@ STR_7005    :Stavět cesty v oblasti označené tažením
 STR_7006    :Vykreslit okraje tlačítek s obrázky
 STR_7007    :Typ atrakce
 STR_7008    :Neznámá atrakce ({INT32})
-STR_7030    :Kurzory
-STR_7031    :Styl kurzoru:
-STR_7032    :Vyberte, jak se vykresluje kurzor na obrazovce
-STR_7033    :Výchozí
-STR_7034    :Vysoký kontrast
-STR_7035    :Klasický
-STR_7036    :(žádná)
-STR_7037    :Tento park překračuje limity OpenRCT2mini (velikost mapy, atrakce nebo entity) a nelze jej načíst na tomto zařízení.
-# OPENRCT2MINI: optional 50%-translucent drop shadow under the software cursor.
-STR_7038    :Vržený stín
-STR_7039    :Vykreslí průhledný stín pod kurzorem, aby vynikl na rušném pozadí
-# OPENRCT2MINI revision 77: Windows cursor theme — Default palette/bitmaps with a Win9x-style main pointer.
-STR_7040    :Windows
-STR_7041    :Sbalit okno
