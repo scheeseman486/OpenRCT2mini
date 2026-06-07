@@ -10,6 +10,9 @@
 #include "InGameConsole.h"
 
 #include "../UiStringIds.h"
+#include "../UiContext.h"
+#include "../input/InputManager.h"
+#include "../windows/Windows.h"
 #include "Theme.h"
 
 #include <algorithm>
@@ -29,6 +32,7 @@
 #include <openrct2/interface/Window.h>
 #include <openrct2/localisation/Language.h>
 #include <openrct2/localisation/LocalisationService.h>
+#include <openrct2/profiling/Bench.h>
 
 using namespace OpenRCT2;
 using namespace OpenRCT2::Drawing;
@@ -146,6 +150,42 @@ void InGameConsole::ClearInput()
     }
 }
 
+// OPENRCT2MINI: live mirror from OSK. Called every frame while the OSK
+// is up over a console session. Updates _consoleCurrentLine and the
+// caret position so the prompt line in the console region renders
+// what the user is typing on the OSK.
+void InGameConsole::OskMirrorBuffer(std::string_view text, size_t caret)
+{
+    _consoleCurrentLine.assign(text);
+    if (caret > _consoleCurrentLine.size())
+        caret = _consoleCurrentLine.size();
+    RefreshCaret(caret);
+    if (_consoleTextInputSession != nullptr)
+    {
+        _consoleTextInputSession->SelectionStart = caret;
+        _consoleTextInputSession->Length = UTF8Length(_consoleCurrentLine.c_str());
+    }
+}
+
+// OPENRCT2MINI: OSK Start submitted a line. Behave as if the user hit
+// Enter on a real keyboard: install the typed text and run
+// LineExecute, which appends to history, runs the command, scrolls
+// the output, and clears the input via ClearInput().
+void InGameConsole::OskSubmitLine(std::string_view text)
+{
+    _consoleCurrentLine.assign(text);
+    RefreshCaret(_consoleCurrentLine.size());
+    Input(ConsoleInput::lineExecute);
+    // ClearInput inside LineExecute re-calls ContextStartTextInput so
+    // the keyboard-driven path can keep typing. The OSK is driving
+    // input here, not the keyboard, and the OSK already disables SDL
+    // text-input on open — so re-arm the disable, otherwise SDL
+    // resumes feeding TEXTINPUT events into _consoleCurrentLine and
+    // every subsequent device-button press briefly flashes raw chars
+    // in the prompt before the OSK frame mirror overwrites them.
+    ContextStopTextInput();
+}
+
 void InGameConsole::HistoryAdd(const u8string& src)
 {
     if (_consoleHistory.size() >= kConsoleHistorySize)
@@ -197,42 +237,6 @@ void InGameConsole::ClearLine()
     RefreshCaret();
 }
 
-// OPENRCT2MINI: live mirror from OSK. Called every frame while the OSK
-// is up over a console session. Updates _consoleCurrentLine and the
-// caret position so the prompt line in the console region renders
-// what the user is typing on the OSK.
-void InGameConsole::OskMirrorBuffer(std::string_view text, size_t caret)
-{
-    _consoleCurrentLine.assign(text);
-    if (caret > _consoleCurrentLine.size())
-        caret = _consoleCurrentLine.size();
-    RefreshCaret(caret);
-    if (_consoleTextInputSession != nullptr)
-    {
-        _consoleTextInputSession->SelectionStart = caret;
-        _consoleTextInputSession->Length = UTF8Length(_consoleCurrentLine.c_str());
-    }
-}
-
-// OPENRCT2MINI: OSK Start submitted a line. Behave as if the user hit
-// Enter on a real keyboard: install the typed text and run
-// LineExecute, which appends to history, runs the command, scrolls
-// the output, and clears the input via ClearInput().
-void InGameConsole::OskSubmitLine(std::string_view text)
-{
-    _consoleCurrentLine.assign(text);
-    RefreshCaret(_consoleCurrentLine.size());
-    Input(ConsoleInput::lineExecute);
-    // ClearInput inside LineExecute re-calls ContextStartTextInput so
-    // the keyboard-driven path can keep typing. The OSK is driving
-    // input here, not the keyboard, and the OSK already disables SDL
-    // text-input on open — so re-arm the disable, otherwise SDL
-    // resumes feeding TEXTINPUT events into _consoleCurrentLine and
-    // every subsequent device-button press briefly flashes raw chars
-    // in the prompt before the OSK frame mirror overwrites them.
-    ContextStopTextInput();
-}
-
 void InGameConsole::Open()
 {
     if (!_isInitialised)
@@ -245,6 +249,32 @@ void InGameConsole::Open()
     ScrollToEnd();
     RefreshCaret();
     _consoleTextInputSession = ContextStartTextInput(_consoleCurrentLine, kConsoleInputSize);
+
+    // OPENRCT2MINI gamepad-plan 1.6c.5: route kInterfaceDismiss /
+    // kInterfaceConfirm to LineClear / LineExecute. Stack is layered
+    // — the OSK that OskOpenForConsole spawns below pushes ITS hooks
+    // on top of ours; OSK's confirm / dismiss handles its own state
+    // first, and when OSK closes (line submit, OSK cancel) ours
+    // become active again. ESC / RETURN keyboard via the same
+    // dispatch as PAD BACK / PAD START.
+    _modalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
+        /*dismiss=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+            Input(ConsoleInput::lineClear);
+            return true;
+        },
+        /*confirm=*/ [this](const OpenRCT2::Ui::InputEvent&) {
+            Input(ConsoleInput::lineExecute);
+            return true;
+        },
+    });
+
+    // OPENRCT2MINI: spawn the on-screen keyboard so the user can type
+    // commands without a physical keyboard. The OSK calls back into
+    // OskMirrorBuffer / OskSubmitLine for the live mirror and commit.
+    // osk-overhaul §7+§8: gate on the Options checkbox so desktop users
+    // can drive the console with a hardware keyboard via SDL_TEXTINPUT.
+    if (Config::Get().interface.onScreenKeyboard)
+        OpenRCT2::Ui::Windows::OskOpenForConsole();
 }
 
 void InGameConsole::Close()
@@ -253,6 +283,11 @@ void InGameConsole::Close()
     _isOpen = false;
     Invalidate();
     ContextStopTextInput();
+    // OPENRCT2MINI gamepad-plan 1.6c.5: pop our modal-hooks slot.
+    OpenRCT2::Ui::GetInputManager().popModalHooks(_modalHooksToken);
+    // OPENRCT2MINI: tear down the OSK along with the console.
+    // CloseByClass is idempotent if the OSK is already closing.
+    OpenRCT2::Ui::Windows::OskClose();
 }
 
 void InGameConsole::Hide()
@@ -300,7 +335,17 @@ void InGameConsole::Invalidate() const
 void InGameConsole::Update()
 {
     _consoleTopLeft = { 0, 0 };
-    _consoleBottomRight = { ContextGetWidth(), 322 };
+    // OPENRCT2MINI: clamp console region to fit above the OSK when
+    // it's up. The OSK uses a compact 214 px layout in console mode
+    // (no edit strip — the console renders its own prompt) so we
+    // get the saved 26 px back as console real estate.
+    int32_t bottomY = 322;
+    if (OpenRCT2::Ui::Windows::OskIsActive())
+    {
+        const int32_t oskH = OpenRCT2::Ui::Windows::OskGetActiveHeight();
+        bottomY = ContextGetHeight() - oskH;
+    }
+    _consoleBottomRight = { ContextGetWidth(), bottomY };
 
     if (_isOpen)
     {
@@ -327,12 +372,45 @@ void InGameConsole::Update()
         _isCommandAwaitingCompletion = false;
     }
 
+    // OPENRCT2MINI rev 95b: bench finish handshake. The `bench` command
+    // hides the console at start; when the run completes, Bench latches
+    // _reportPending and we pop the console back open with the summary
+    // line + log path so the user sees the result immediately.
+    if (Profiling::Bench::hasPendingReport())
+    {
+        Open();
+        InteractiveConsole::WriteLine(Profiling::Bench::getLastReport());
+        const auto& logPath = Profiling::Bench::getLastLogPath();
+        if (!logPath.empty())
+        {
+            InteractiveConsole::WriteLine("Detailed log: " + logPath);
+        }
+        WritePrompt();
+        Profiling::Bench::markReportConsumed();
+    }
+
     // Flash the caret
     _consoleCaretTicks = (_consoleCaretTicks + 1) % 30;
 }
 
 void InGameConsole::Draw(RenderTarget& rt) const
 {
+    // OPENRCT2MINI rev 95d: render the "Benchmark running..." overlay
+    // even when the console is hidden. This is the only on-screen
+    // signal that the game is in bench mode (inputs are dropped and
+    // the user can't see the console). Drawn first so it falls under
+    // the console panel if the user re-opens it manually somehow.
+    if (Profiling::Bench::isActive())
+    {
+        ColourWithFlags benchColour = { OpenRCT2::Drawing::Colour::white, {} };
+        if (!LocalisationService_UseTrueTypeFont())
+        {
+            benchColour.flags.set(ColourFlag::withOutline, true);
+        }
+        const FontStyle benchStyle = FontStyle::medium;
+        drawText(rt, ScreenCoordsXY{ 4, 4 }, "Benchmark running...", { benchColour, benchStyle });
+    }
+
     if (!_isOpen)
         return;
 

@@ -25,9 +25,16 @@
     #else
         #include <stdlib.h>
     #endif
-    #include <unicode/ucnv.h>
-    #include <unicode/unistr.h>
-    #include <unicode/utypes.h>
+    // OPENRCT2MINI: cut 34. ICU includes only when ICU is enabled. Under
+    // DISABLE_ICU we use Cp1252.hpp's lookup table for CP1252 → UTF-8
+    // and hand-rolled UTF-8 ↔ UTF-32 for the wide-char paths.
+    #ifndef DISABLE_ICU
+        #include <unicode/ucnv.h>
+        #include <unicode/unistr.h>
+        #include <unicode/utypes.h>
+    #else
+        #include "Cp1252.hpp"
+    #endif
 #else
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -63,22 +70,55 @@ namespace OpenRCT2::String
         WideCharToMultiByte(CodePage::UTF8, 0, src.data(), srcLen, result.data(), sizeReq, nullptr, nullptr);
         return result;
 #else
-    // Which constructor to use depends on the size of wchar_t...
-    // UTF-32 is the default on most POSIX systems; Windows uses UTF-16.
-    // Unfortunately, we'll have to help the compiler here.
-    #if U_SIZEOF_WCHAR_T == 4
-        icu::UnicodeString str = icu::UnicodeString::fromUTF32(reinterpret_cast<const UChar32*>(src.data()), src.length());
-    #elif U_SIZEOF_WCHAR_T == 2
-        std::wstring wstr = std::wstring(src);
-        icu::UnicodeString str = icu::UnicodeString(static_cast<const wchar_t*>(wstr.c_str()));
-    #else
-        #error Unsupported U_SIZEOF_WCHAR_T size
-    #endif
+    #ifndef DISABLE_ICU
+        // Which constructor to use depends on the size of wchar_t...
+        // UTF-32 is the default on most POSIX systems; Windows uses UTF-16.
+        #if U_SIZEOF_WCHAR_T == 4
+            icu::UnicodeString str = icu::UnicodeString::fromUTF32(reinterpret_cast<const UChar32*>(src.data()), src.length());
+        #elif U_SIZEOF_WCHAR_T == 2
+            std::wstring wstr = std::wstring(src);
+            icu::UnicodeString str = icu::UnicodeString(static_cast<const wchar_t*>(wstr.c_str()));
+        #else
+            #error Unsupported U_SIZEOF_WCHAR_T size
+        #endif
 
         std::string result;
         str.toUTF8String(result);
-
         return result;
+    #else
+        // OPENRCT2MINI: cut 34. Hand-rolled UTF-32 → UTF-8 for the no-ICU build.
+        // Linux wchar_t is 4 bytes (UTF-32). The result string is at most 4×N
+        // bytes for an N-codepoint input; reserve and emit in one pass.
+        std::string result;
+        result.reserve(src.size());
+        for (wchar_t wc : src)
+        {
+            uint32_t cp = static_cast<uint32_t>(wc);
+            if (cp < 0x80)
+            {
+                result.push_back(static_cast<char>(cp));
+            }
+            else if (cp < 0x800)
+            {
+                result.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+                result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+            }
+            else if (cp < 0x10000)
+            {
+                result.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+                result.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+            }
+            else
+            {
+                result.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+                result.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+                result.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+            }
+        }
+        return result;
+    #endif
 #endif
     }
 
@@ -91,27 +131,67 @@ namespace OpenRCT2::String
         MultiByteToWideChar(CodePage::UTF8, 0, src.data(), srcLen, result.data(), sizeReq);
         return result;
 #else
+    #ifndef DISABLE_ICU
         icu::UnicodeString str = icu::UnicodeString::fromUTF8(std::string(src));
 
-    // Which constructor to use depends on the size of wchar_t...
-    // UTF-32 is the default on most POSIX systems; Windows uses UTF-16.
-    // Unfortunately, we'll have to help the compiler here.
-    #if U_SIZEOF_WCHAR_T == 4
-        size_t length = static_cast<size_t>(str.length());
-        std::wstring result(length, '\0');
-
-        UErrorCode status = U_ZERO_ERROR;
-        str.toUTF32(reinterpret_cast<UChar32*>(&result[0]), str.length(), status);
-
-    #elif U_SIZEOF_WCHAR_T == 2
-        const char16_t* buffer = str.getBuffer();
-        std::wstring result = static_cast<wchar_t*>(buffer);
-
-    #else
-        #error Unsupported U_SIZEOF_WCHAR_T size
-    #endif
+        // Which constructor to use depends on the size of wchar_t.
+        #if U_SIZEOF_WCHAR_T == 4
+            size_t length = static_cast<size_t>(str.length());
+            std::wstring result(length, '\0');
+            UErrorCode status = U_ZERO_ERROR;
+            str.toUTF32(reinterpret_cast<UChar32*>(&result[0]), str.length(), status);
+        #elif U_SIZEOF_WCHAR_T == 2
+            const char16_t* buffer = str.getBuffer();
+            std::wstring result = static_cast<wchar_t*>(buffer);
+        #else
+            #error Unsupported U_SIZEOF_WCHAR_T size
+        #endif
 
         return result;
+    #else
+        // OPENRCT2MINI: cut 34. Hand-rolled UTF-8 → UTF-32 for the no-ICU build.
+        // Linux wchar_t is 4 bytes (UTF-32). Doesn't validate exhaustively —
+        // assumes well-formed UTF-8 in. Mirrors what utf8 → ICU does internally.
+        std::wstring result;
+        result.reserve(src.size());
+        size_t i = 0;
+        while (i < src.size())
+        {
+            uint8_t b0 = static_cast<uint8_t>(src[i]);
+            uint32_t cp;
+            size_t len;
+            if (b0 < 0x80)
+            {
+                cp = b0;
+                len = 1;
+            }
+            else if ((b0 & 0xE0) == 0xC0 && i + 1 < src.size())
+            {
+                cp = ((b0 & 0x1F) << 6) | (static_cast<uint8_t>(src[i + 1]) & 0x3F);
+                len = 2;
+            }
+            else if ((b0 & 0xF0) == 0xE0 && i + 2 < src.size())
+            {
+                cp = ((b0 & 0x0F) << 12) | ((static_cast<uint8_t>(src[i + 1]) & 0x3F) << 6)
+                    | (static_cast<uint8_t>(src[i + 2]) & 0x3F);
+                len = 3;
+            }
+            else if ((b0 & 0xF8) == 0xF0 && i + 3 < src.size())
+            {
+                cp = ((b0 & 0x07) << 18) | ((static_cast<uint8_t>(src[i + 1]) & 0x3F) << 12)
+                    | ((static_cast<uint8_t>(src[i + 2]) & 0x3F) << 6) | (static_cast<uint8_t>(src[i + 3]) & 0x3F);
+                len = 4;
+            }
+            else
+            {
+                cp = 0xFFFD;
+                len = 1;
+            }
+            result.push_back(static_cast<wchar_t>(cp));
+            i += len;
+        }
+        return result;
+    #endif
 #endif
     }
 
@@ -565,7 +645,7 @@ namespace OpenRCT2::String
         return std::string(startSubstr, stringLength);
     }
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(DISABLE_ICU)
     static const char* getIcuCodePage(int32_t codePage)
     {
         switch (codePage)
@@ -617,6 +697,7 @@ namespace OpenRCT2::String
 
         return dst;
 #else
+    #ifndef DISABLE_ICU
         const char* codepage = getIcuCodePage(srcCodePage);
         icu::UnicodeString convertString(src.data(), codepage);
 
@@ -624,6 +705,29 @@ namespace OpenRCT2::String
         convertString.toUTF8String(result);
 
         return result;
+    #else
+        // OPENRCT2MINI: cut 34. Without ICU, only CP1252 is fully decoded.
+        // Asian codepages (CP932/936/949/950) get a graceful degradation —
+        // strip non-ASCII bytes to ?'s — rather than throwing, so the
+        // language-pack loader doesn't crash trying to index Japanese / etc.
+        // language packs. The English/Western-European scenarios our target
+        // build ships with don't go through the Asian codepages anyway.
+        switch (srcCodePage)
+        {
+            case OpenRCT2::CodePage::UTF8:
+                return std::string(src);
+            case OpenRCT2::CodePage::CP_1252:
+                return ::OpenRCT2::Compat::cp1252ToUtf8(src);
+            default:
+            {
+                std::string result;
+                result.reserve(src.size());
+                for (unsigned char b : src)
+                    result.push_back(b < 0x80 ? static_cast<char>(b) : '?');
+                return result;
+            }
+        }
+    #endif
 #endif
     }
 
@@ -654,6 +758,7 @@ namespace OpenRCT2::String
 
         return toUtf8(dstW);
 #else
+    #ifndef DISABLE_ICU
         icu::UnicodeString str = icu::UnicodeString::fromUTF8(std::string(src));
         str.toUpper();
 
@@ -661,6 +766,18 @@ namespace OpenRCT2::String
         str.toUTF8String(res);
 
         return res;
+    #else
+        // OPENRCT2MINI: cut 34. ASCII-only uppercase fallback for the no-ICU
+        // build. Non-ASCII bytes are passed through unchanged — this is the
+        // English/Western-European-scenario scope OpenRCT2mini targets.
+        std::string result(src);
+        for (auto& c : result)
+        {
+            if (c >= 'a' && c <= 'z')
+                c = static_cast<char>(c - 'a' + 'A');
+        }
+        return result;
+    #endif
 #endif
     }
 

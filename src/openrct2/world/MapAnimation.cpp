@@ -599,7 +599,8 @@ static std::optional<UpdateType> IsElementAnimated(const TileElementBase& elemen
 
 void MapAnimations::MarkTileForInvalidation(const TileCoordsXY coords)
 {
-    if (!MapIsEdge(coords.ToCoordsXY()) && !_mapAnimationsUpdate.contains(coords))
+    // OPENRCT2MINI: cut 33. std::set::contains is C++20; use find() != end() for C++17.
+    if (!MapIsEdge(coords.ToCoordsXY()) && _mapAnimationsUpdate.find(coords) == _mapAnimationsUpdate.end())
     {
         _mapAnimationsInvalidate[coords.x + (coords.y * kMaximumMapSizeTechnical)] = true;
     }

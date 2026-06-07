@@ -29,11 +29,6 @@ if (APPLE)
     set(LIBOPENRCT2_LINKAGE STATIC)
 endif()
 add_library(libopenrct2 ${LIBOPENRCT2_LINKAGE} ${OPENRCT2_QUICKJS_NG_SOURCES} ${OPENRCT2_CORE_SOURCES} ${OPENRCT2_CORE_MM_SOURCES})
-
-# OPENRCT2MINI: embedded_defaults headers live under the build dir and
-# need to be on libopenrct2 PUBLIC includes so both libopenrct2 and
-# openrct2-ui can #include them.
-target_include_directories(libopenrct2 PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/embedded_defaults")
 add_library(OpenRCT2::libopenrct2 ALIAS libopenrct2)
 
 if (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13")
@@ -178,10 +173,42 @@ else ()
 endif ()
 
 if (MINGW)
-    # Hardcode libraries used on mingw
-    target_link_libraries(libopenrct2 crypto ws2_32 tasn1 unistring iconv p11-kit hogweed gmp nettle)
-    # Link in libssp
-    target_link_libraries(libopenrct2 -fstack-protector-strong)
+    # OPENRCT2MINI host-restoration / Windows-cross: the gnutls+iconv stack
+    # (crypto, tasn1, unistring, iconv, p11-kit, hogweed, gmp, nettle) is only
+    # needed when network/HTTP is enabled. Under our Windows cross-build
+    # profile (DISABLE_NETWORK=ON, DISABLE_HTTP=ON) none of these are present
+    # in the mingw-w64 cross-sysroot and linking against them would fail.
+    # ws2_32 is the platform crypto+winsock; only pulled when network is on.
+    if (NOT DISABLE_NETWORK OR NOT DISABLE_HTTP)
+        target_link_libraries(libopenrct2 crypto ws2_32 tasn1 unistring iconv p11-kit hogweed gmp nettle)
+    endif ()
+    # Link in libssp (stack protector runtime) — needed unconditionally
+    # since other CMake branches set -fstack-protector-strong globally.
+    #
+    # OPENRCT2MINI 2026-05-21: split out from upstream's -fstack-protector-
+    # strong (which the gcc driver expands at link time to -lssp + -lssp_
+    # nonshared in -Bdynamic mode, pulling libssp-0.dll into the import
+    # table). We need libssp linked STATICALLY so the binary doesn't depend
+    # on libssp-0.dll at runtime — there's a Wine + MinGW SEH bug where any
+    # dynamic libstdc++ / libgcc-adjacent DLL breaks C++ exception unwinding
+    # (typeinfo duplicated across EXE + DLL → catch handlers silently fail
+    # to match). See toolchain-mingw-w64-x86_64.cmake for the full diagnostic.
+    #
+    # Why both -lssp and -lssp_nonshared:
+    #   - libssp.a       provides __stack_chk_guard (the canary value)
+    #   - libssp_nonshared.a provides __stack_chk_fail (the trap fn)
+    # The toolchain file already pulls libssp.a via CMAKE_EXE_LINKER_FLAGS,
+    # but that happens BEFORE the .obj files on the link line so it'd be
+    # skipped if no symbols were undefined yet. Pulling here lands inside
+    # the --start-group block (after .objs) where it'll resolve refs from
+    # all openrct2 .o files. -Wl,-Bstatic on each makes ld prefer .a over
+    # .dll.a; -Bdynamic resets for anything after.
+    target_link_libraries(libopenrct2 -Wl,-Bstatic -lssp -lssp_nonshared -Wl,-Bdynamic)
+    # bcrypt: libzip's zip_crypto_win.c uses Windows BCrypt API for AES.
+    # Listed as a transitive dep so it lands adjacent to libzip in the
+    # link line; without this, ld processes -lbcrypt before libzip.a and
+    # fails to resolve __imp_BCryptHashData etc.
+    target_link_libraries(libopenrct2 bcrypt)
 endif()
 
 if (UNIX AND NOT HAIKU AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "BSD")
@@ -198,7 +225,12 @@ if (EMSCRIPTEN)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_FUNCTIONS=${EMSCRIPTEN_EXPORTED_FUNCTIONS} --js-library ${ROOT_DIR}/emscripten/deps.js")
 endif()
 
-if (NOT MINGW AND NOT MSVC AND NOT EMSCRIPTEN)
+# OPENRCT2MINI: cut 34. ICU made conditional. The only ICU functionality the
+# device actually needs is CP1252 → UTF-8 conversion for legacy RCT1/RCT2
+# scenario name imports — that's a 256-entry lookup table, not 30 MB of
+# locale support. With DISABLE_ICU, String.cpp and RTL.ICU.cpp fall back to
+# hand-rolled implementations covering only the codepages we ship for.
+if (NOT MINGW AND NOT MSVC AND NOT EMSCRIPTEN AND NOT DISABLE_ICU)
     if (APPLE AND NOT MACOS_USE_DEPENDENCIES)
         execute_process(COMMAND brew --prefix icu4c OUTPUT_VARIABLE HOMEBREW_PREFIX_ICU OUTPUT_STRIP_TRAILING_WHITESPACE)
         # Needed for linking with non-broken icu on Apple platforms
@@ -214,6 +246,16 @@ if (NOT MINGW AND NOT MSVC AND NOT EMSCRIPTEN)
     else ()
         target_link_libraries(libopenrct2 ${ICU_LIBRARIES})
     endif ()
+endif ()
+if (DISABLE_ICU)
+    target_compile_definitions(libopenrct2 PUBLIC DISABLE_ICU)
+endif ()
+
+# OPENRCT2MINI: performance profiler — see profiler-plan.md.
+if (ENABLE_PERFORMANCE_PROFILER)
+    target_compile_definitions(libopenrct2 PUBLIC
+        ENABLE_PERFORMANCE_PROFILER
+        PROFILER_HISTORY_SECONDS=${PROFILER_HISTORY_SECONDS})
 endif ()
 
 if (NOT DISABLE_TTF)
@@ -256,80 +298,6 @@ target_include_directories(libopenrct2 SYSTEM PRIVATE ${PNG_INCLUDE_DIRS}
 target_include_directories(libopenrct2 SYSTEM PRIVATE ${ZSTD_INCLUDE_DIRS})
 include_directories(libopenrct2 SYSTEM ${CMAKE_CURRENT_LIST_DIR}/../thirdparty)
 
-# To avoid unnecessary rebuilds set the current branch and
-# short sha1 only for the two files that use these
-# definitions: Version.cpp and Crash/Platform.cpp
-if (NOT OPENRCT2_VERSION_TAG STREQUAL "")
-    set_property(SOURCE ${CMAKE_CURRENT_LIST_DIR}/Version.cpp ${CMAKE_CURRENT_LIST_DIR}/Crash/Platform.cpp
-            PROPERTY COMPILE_DEFINITIONS
-            OPENRCT2_VERSION_TAG="${OPENRCT2_VERSION_TAG}")
-endif()
-
-if (NOT OPENRCT2_BRANCH STREQUAL "master" AND NOT OPENRCT2_BRANCH STREQUAL "")
-    set_property(SOURCE ${CMAKE_CURRENT_LIST_DIR}/Version.cpp ${CMAKE_CURRENT_LIST_DIR}/Crash/Platform.cpp
-            APPEND PROPERTY COMPILE_DEFINITIONS
-            OPENRCT2_BRANCH="${OPENRCT2_BRANCH}")
-endif()
-
-if (NOT OPENRCT2_COMMIT_SHA1_SHORT STREQUAL "HEAD" AND NOT OPENRCT2_COMMIT_SHA1_SHORT STREQUAL "")
-    set_property(SOURCE ${CMAKE_CURRENT_LIST_DIR}/Version.cpp ${CMAKE_CURRENT_LIST_DIR}/Crash/Platform.cpp
-            APPEND PROPERTY COMPILE_DEFINITIONS
-            OPENRCT2_COMMIT_SHA1_SHORT="${OPENRCT2_COMMIT_SHA1_SHORT}")
-endif()
-
-if((X86 OR X86_64) AND NOT MSVC AND NOT EMSCRIPTEN)
-    set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/drawing/SSE41Drawing.cpp PROPERTIES COMPILE_FLAGS -msse4.1)
-    set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/drawing/AVX2Drawing.cpp PROPERTIES COMPILE_FLAGS -mavx2)
-endif()
-
-# Add headers check to verify all headers carry their dependencies.
-# Only valid for Clang for now:
-# - GCC 8 does not support -Wno-pragma-once-outside-header
-# - Other compilers status unknown
-if (ENABLE_HEADERS_CHECK AND "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    add_library(libopenrct2-headers-check OBJECT ${OPENRCT2_CORE_HEADERS})
-    set_target_properties(libopenrct2-headers-check PROPERTIES LINKER_LANGUAGE CXX)
-    set_source_files_properties(${OPENRCT2_CORE_HEADERS} PROPERTIES LANGUAGE CXX)
-    target_compile_options(libopenrct2-headers-check PRIVATE -Wno-pragma-once-outside-header -Wno-unused-const-variable)
-    get_target_property(LIBOPENRCT2_INCLUDE_DIRS libopenrct2 INCLUDE_DIRECTORIES)
-    set_target_properties(libopenrct2-headers-check PROPERTIES INCLUDE_DIRECTORIES "${LIBOPENRCT2_INCLUDE_DIRS}")
-else ()
-    # Dummy target to ease invocation
-    add_custom_target(libopenrct2-headers-check)
-endif ()
-
-if (UNIX)
-    add_definitions(-D_FILE_OFFSET_BITS=64)
-endif ()
-
-# Defines
-target_compile_definitions(libopenrct2 PUBLIC
-        $<$<BOOL:${USE_MMAP}>:USE_MMAP>
-        $<$<BOOL:${DISABLE_NETWORK}>:DISABLE_NETWORK>
-        $<$<BOOL:${DISABLE_HTTP}>:DISABLE_HTTP>
-        $<$<BOOL:${DISABLE_TTF}>:DISABLE_TTF>
-        $<$<BOOL:${DISABLE_VERSION_CHECKER}>:DISABLE_VERSION_CHECKER>
-        $<$<BOOL:${ENABLE_SCRIPTING}>:ENABLE_SCRIPTING>
-        # OPENRCT2MINI: src/openrct2-ui/CMakeLists.txt sets this on the UI
-        # target so PerformanceProfilerWindow can use the Sampler /
-        # SnapshotWriter symbols. The producer files (Sampler.cpp /
-        # SnapshotWriter.cpp) live in libopenrct2 and ALSO need the flag
-        # — without it they compile to empty .o and the UI build link
-        # fails on undefined references. Upstream's libopenrct2 CMake
-        # was missing this; rediscovered during the v0.5.2 merge.
-        $<$<BOOL:${ENABLE_PERFORMANCE_PROFILER}>:ENABLE_PERFORMANCE_PROFILER>
-)
-
-target_compile_options(libopenrct2 PUBLIC $<$<BOOL:${ENABLE_ASAN}>:-fsanitize=address>)
-target_link_options(libopenrct2 PUBLIC $<$<BOOL:${ENABLE_ASAN}>:-fsanitize=address>)
-
-target_compile_options(libopenrct2 PUBLIC $<$<BOOL:${ENABLE_UBSAN}>:-fsanitize=undefined>)
-target_link_options(libopenrct2 PUBLIC  $<$<BOOL:${ENABLE_UBSAN}>:-fsanitize=undefined>)
-
-if (CMAKE_LIBRARY_ARCHITECTURE MATCHES "arm-linux-gnueabihf")
-    message(STATUS "Linking to armhf libs; adding libatomic")
-    target_link_libraries(libopenrct2 atomic)
-endif()
 # OPENRCT2MINI defaults-export P3: embed per-build defaults into the
 # binary. The seed files under config/{appimage,miyoo_mini}/save/
 # (committed as the canonical source of truth — see P2) are
@@ -408,3 +376,71 @@ add_custom_target(openrct2mini_embedded_defaults ALL
         "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/DisabledSettingsDefault.h")
 add_dependencies(libopenrct2 openrct2mini_embedded_defaults)
 
+target_include_directories(libopenrct2 PUBLIC "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}")
+
+# To avoid unnecessary rebuilds set the current branch and
+# short sha1 only for the two files that use these
+# definitions: Version.cpp and Crash/Platform.cpp
+if (NOT OPENRCT2_VERSION_TAG STREQUAL "")
+    set_property(SOURCE ${CMAKE_CURRENT_LIST_DIR}/Version.cpp ${CMAKE_CURRENT_LIST_DIR}/Crash/Platform.cpp
+            PROPERTY COMPILE_DEFINITIONS
+            OPENRCT2_VERSION_TAG="${OPENRCT2_VERSION_TAG}")
+endif()
+
+if (NOT OPENRCT2_BRANCH STREQUAL "master" AND NOT OPENRCT2_BRANCH STREQUAL "")
+    set_property(SOURCE ${CMAKE_CURRENT_LIST_DIR}/Version.cpp ${CMAKE_CURRENT_LIST_DIR}/Crash/Platform.cpp
+            APPEND PROPERTY COMPILE_DEFINITIONS
+            OPENRCT2_BRANCH="${OPENRCT2_BRANCH}")
+endif()
+
+if (NOT OPENRCT2_COMMIT_SHA1_SHORT STREQUAL "HEAD" AND NOT OPENRCT2_COMMIT_SHA1_SHORT STREQUAL "")
+    set_property(SOURCE ${CMAKE_CURRENT_LIST_DIR}/Version.cpp ${CMAKE_CURRENT_LIST_DIR}/Crash/Platform.cpp
+            APPEND PROPERTY COMPILE_DEFINITIONS
+            OPENRCT2_COMMIT_SHA1_SHORT="${OPENRCT2_COMMIT_SHA1_SHORT}")
+endif()
+
+if((X86 OR X86_64) AND NOT MSVC AND NOT EMSCRIPTEN)
+    set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/drawing/SSE41Drawing.cpp PROPERTIES COMPILE_FLAGS -msse4.1)
+    set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/drawing/AVX2Drawing.cpp PROPERTIES COMPILE_FLAGS -mavx2)
+endif()
+
+# Add headers check to verify all headers carry their dependencies.
+# Only valid for Clang for now:
+# - GCC 8 does not support -Wno-pragma-once-outside-header
+# - Other compilers status unknown
+if (ENABLE_HEADERS_CHECK AND "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    add_library(libopenrct2-headers-check OBJECT ${OPENRCT2_CORE_HEADERS})
+    set_target_properties(libopenrct2-headers-check PROPERTIES LINKER_LANGUAGE CXX)
+    set_source_files_properties(${OPENRCT2_CORE_HEADERS} PROPERTIES LANGUAGE CXX)
+    target_compile_options(libopenrct2-headers-check PRIVATE -Wno-pragma-once-outside-header -Wno-unused-const-variable)
+    get_target_property(LIBOPENRCT2_INCLUDE_DIRS libopenrct2 INCLUDE_DIRECTORIES)
+    set_target_properties(libopenrct2-headers-check PROPERTIES INCLUDE_DIRECTORIES "${LIBOPENRCT2_INCLUDE_DIRS}")
+else ()
+    # Dummy target to ease invocation
+    add_custom_target(libopenrct2-headers-check)
+endif ()
+
+if (UNIX)
+    add_definitions(-D_FILE_OFFSET_BITS=64)
+endif ()
+
+# Defines
+target_compile_definitions(libopenrct2 PUBLIC
+        $<$<BOOL:${USE_MMAP}>:USE_MMAP>
+        $<$<BOOL:${DISABLE_NETWORK}>:DISABLE_NETWORK>
+        $<$<BOOL:${DISABLE_HTTP}>:DISABLE_HTTP>
+        $<$<BOOL:${DISABLE_TTF}>:DISABLE_TTF>
+        $<$<BOOL:${DISABLE_VERSION_CHECKER}>:DISABLE_VERSION_CHECKER>
+        $<$<BOOL:${ENABLE_SCRIPTING}>:ENABLE_SCRIPTING>
+)
+
+target_compile_options(libopenrct2 PUBLIC $<$<BOOL:${ENABLE_ASAN}>:-fsanitize=address>)
+target_link_options(libopenrct2 PUBLIC $<$<BOOL:${ENABLE_ASAN}>:-fsanitize=address>)
+
+target_compile_options(libopenrct2 PUBLIC $<$<BOOL:${ENABLE_UBSAN}>:-fsanitize=undefined>)
+target_link_options(libopenrct2 PUBLIC  $<$<BOOL:${ENABLE_UBSAN}>:-fsanitize=undefined>)
+
+if (CMAKE_LIBRARY_ARCHITECTURE MATCHES "arm-linux-gnueabihf")
+    message(STATUS "Linking to armhf libs; adding libatomic")
+    target_link_libraries(libopenrct2 atomic)
+endif()

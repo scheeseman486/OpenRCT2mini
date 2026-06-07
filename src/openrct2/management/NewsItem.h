@@ -17,7 +17,7 @@
 #include <array>
 #include <iterator>
 #include <optional>
-#include <span>
+#include "../core/Span.hpp"
 #include <string>
 
 struct CoordsXYZ;
@@ -46,8 +46,6 @@ namespace OpenRCT2::News
         count
     };
 
-    constexpr size_t ItemTypeCount = static_cast<size_t>(ItemType::count);
-
     // OPENRCT2MINI gamepad-plan 1.12: severity classification for
     // news items. ItemType groups by CATEGORY (peep / money /
     // research / …); a single category can span multiple severities
@@ -62,12 +60,6 @@ namespace OpenRCT2::News
     //   critical — emergency requiring immediate attention (ride
     //              crash, guest drowned, vandalism, park closure /
     //              1-week-remaining countdown)
-    // OPENRCT2MINI v0.5.2 merge: full GetSeverity classifier impl
-    // and the per-Item severity cache field are NOT yet re-merged
-    // (the safe-apply of NewsItem.cpp overwrote them, and the
-    // upstream cpp uses the new camelCase queue names — re-merge
-    // is non-trivial). The enum lives here so LED.cpp + the LED
-    // stubs in haptic/LedEvent.h reference a single canonical type.
     enum class Severity : uint8_t
     {
         info,
@@ -75,6 +67,22 @@ namespace OpenRCT2::News
         warning,
         critical,
     };
+
+    // Classify a news item by (ItemType, StringId, assoc).
+    //   - Most ItemTypes bucket cleanly (money → money, research →
+    //     info, etc.); the StringId lookup is only consulted for the
+    //     ride / peep / peeps types where the same category spans
+    //     multiple severities.
+    //   - `assoc` carries award type / ride id; used to disambiguate
+    //     positive vs negative awards via AwardIsPositive. Defaults
+    //     to 0 so callers that only have type + stringId don't have
+    //     to pass it.
+    // Unknown StringIds fall through to the category's default. New
+    // strings added later don't break the function — they just get
+    // the default until someone explicitly classifies them.
+    Severity GetSeverity(ItemType type, StringId stringId, uint32_t assoc = 0);
+
+    constexpr size_t ItemTypeCount = static_cast<size_t>(ItemType::count);
 
     enum ItemTypeProperty : uint8_t
     {
@@ -98,6 +106,15 @@ namespace OpenRCT2::News
         uint16_t ticks{};
         uint16_t monthYear{};
         uint8_t day{};
+        // OPENRCT2MINI gamepad-plan 1.13: classification cached at
+        // ingestion time so UpdateCurrentItem can drive the DualShock
+        // lightbar across the news item's full on-screen lifetime
+        // without re-running GetSeverity each frame and without
+        // storing the original StringId (which is lost after
+        // FormatStringLegacy bakes the text). Defaults to `info` so
+        // legacy items deserialised from older saves / network sync
+        // simply produce no LED flash rather than a wrong colour.
+        Severity severity = Severity::info;
         std::string text{};
 
         constexpr bool isEmpty() const noexcept
@@ -160,13 +177,14 @@ namespace OpenRCT2::News
     public:
         static_assert(N > 0, "Cannot instantiate News::ItemQueue with size=0");
 
-        using value_type = std::array<Item, N>::value_type;
+        // OPENRCT2MINI: cut 33. typename added for C++17 dependent-name resolution.
+        using value_type = typename std::array<Item, N>::value_type;
         using pointer = value_type*;
         using const_pointer = const value_type*;
         using reference = value_type&;
         using const_reference = const value_type&;
-        using iterator = std::array<Item, N>::iterator;
-        using const_iterator = std::array<Item, N>::const_iterator;
+        using iterator = typename std::array<Item, N>::iterator;
+        using const_iterator = typename std::array<Item, N>::const_iterator;
         using size_type = std::size_t;
         using difference_type = std::ptrdiff_t;
         using reverse_iterator = std::reverse_iterator<iterator>;

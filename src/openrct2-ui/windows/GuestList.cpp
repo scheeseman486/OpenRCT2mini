@@ -60,7 +60,7 @@ namespace OpenRCT2::Ui::Windows
     };
 
     // clang-format off
-    static constexpr auto window_guest_list_widgets = makeWidgets(
+    static const auto window_guest_list_widgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
         makeWidget({  0, 43}, {350, 287}, WidgetType::resize,       WindowColour::secondary                                                        ), // tab content panel
         makeWidget({  5, 59}, { 80,  12}, WidgetType::dropdownMenu, WindowColour::secondary, kStringIdEmpty                                      ), // page dropdown
@@ -532,6 +532,46 @@ namespace OpenRCT2::Ui::Windows
                 _highlightedIndex = i;
                 invalidate();
             }
+        }
+
+        // OPENRCT2MINI list-focus-plan §3.7: 1D list opt-in for both
+        // tabs. Individual mode paginates via _selectedPage — focus
+        // items are guests visible on the current page only, indexed
+        // 0..kGuestsPerPage (or less on the last page). Summarised
+        // mode uses _groups directly. Activation falls back to the
+        // default scrollFocusActivate, which synthesises an
+        // onScrollMouseDown at the row centre — the existing per-
+        // tab dispatch resolves the correct guest / group.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            switch (_selectedTab)
+            {
+                case TabId::Individual:
+                {
+                    const auto total = _guestList.size();
+                    const auto pageStart = _selectedPage * kGuestsPerPage;
+                    if (pageStart >= total)
+                        return 0;
+                    return static_cast<int32_t>(std::min<size_t>(kGuestsPerPage, total - pageStart));
+                }
+                case TabId::Summarised:
+                default:
+                    return static_cast<int32_t>(_groups.size());
+            }
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            if (itemIndex < 0)
+                return {};
+            const int32_t rowHeight = _selectedTab == TabId::Individual
+                ? kScrollableRowHeight
+                : kSummarisedGuestsRowHeight;
+            const int32_t count = scrollFocusGetItemCount(scrollIndex);
+            if (itemIndex >= count)
+                return {};
+            const int32_t y = itemIndex * rowHeight;
+            return ScreenRect{ { 0, y }, { 446, y + rowHeight - 1 } };
         }
 
         void onScrollMouseDown(int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override

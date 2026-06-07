@@ -13,6 +13,9 @@
 #include "../audio/Audio.h"
 #include "../core/Speed.hpp"
 #include "../entity/EntityRegistry.h"
+#include "../haptic/HapticEvent.h"
+#include "../interface/Window.h"
+#include "../interface/WindowBase.h"
 #include "../scenario/Scenario.h"
 #include "../ui/WindowManager.h"
 #include "../windows/Intent.h"
@@ -187,6 +190,16 @@ void Vehicle::UpdateSound()
     soundIdVolume = VehicleSoundFadeInOut(sound2_id, sound2_volume, screamSound.id, screamSound.volume);
     sound2_id = soundIdVolume.id;
     sound2_volume = soundIdVolume.volume;
+
+    // OPENRCT2MINI v2.18: continuous-rumble hook moved out of the
+    // sim-side Vehicle::UpdateSound. Sim-side, the audio rate isn't
+    // known yet — the actual SetRate value is derived from the
+    // vehicle's velocity/dopplerShift later in the UI-side
+    // UpdateVehicleSounds() (via VehicleSoundParams::frequency +
+    // SoundFrequency<type>()). The Haptic engine now needs that rate
+    // to scale its phase advance so the rumble loop tracks the
+    // pitch-shifted audio loop, so the hook lives where the rate is
+    // actually computed (see VehicleSounds.cpp::UpdateSound<>).
 
     // Calculate Sound Vector (used for sound frequency calcs)
     int32_t soundDirection = Geometry::getSoundDirectionFromOrientation(orientation);

@@ -512,6 +512,43 @@ void SaveGameWithName(u8string_view name)
     }
 }
 
+// OPENRCT2MINI: poweroff save flag. Async-signal-safe to set from a
+// signal handler. Actual save runs from the main loop via
+// HandlePowerOffSaveIfRequested(), see Game.h for the rationale.
+std::atomic<bool> gPowerOffSaveRequested{ false };
+
+void HandlePowerOffSaveIfRequested()
+{
+    // Atomic exchange so the rest of this function only runs once even if
+    // the signal fires repeatedly while we're saving.
+    if (!gPowerOffSaveRequested.exchange(false))
+        return;
+
+    LOG_INFO("OPENRCT2MINI: poweroff signal received; saving current park");
+
+    // No park to save while the title sequence is running — title parks
+    // are cycled showcases, not the user's work. Just exit cleanly.
+    if (gLegacyScene != LegacyScene::titleSequence)
+    {
+        try
+        {
+            auto& env = GetContext()->GetPlatformEnvironment();
+            const auto savesDir = env.GetDirectoryPath(DirBase::user, DirId::saves);
+            const auto savePath = Path::Combine(savesDir, u8"poweroff.park");
+            SaveGameWithName(savePath);
+        }
+        catch (const std::exception& e)
+        {
+            LOG_ERROR("OPENRCT2MINI: poweroff save failed: %s", e.what());
+        }
+    }
+
+    // Trigger graceful main-loop exit. Destructors will run normally; if
+    // the OS escalates to SIGKILL before they finish that's fine — the
+    // park file is already on disk by this point.
+    GetContext()->Finish();
+}
+
 std::unique_ptr<Intent> CreateSaveGameAsIntent()
 {
     auto name = Path::GetFileNameWithoutExtension(gScenarioSavePath);

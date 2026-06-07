@@ -12,6 +12,7 @@
 #include "../Cheats.h"
 #include "../Diagnostic.h"
 #include "../GameState.h"
+#include "../drawing/Drawing.h"
 #include "../Input.h"
 #include "../SpriteIds.h"
 #include "../config/Config.h"
@@ -46,9 +47,25 @@ bool VirtualFloorIsEnabled()
 
 void VirtualFloorSetHeight(const int16_t height)
 {
-    if (VirtualFloorIsEnabled())
+    if (!VirtualFloorIsEnabled())
+        return;
+    // OPENRCT2MINI Z-plane flicker fix (2026-05-19, round 2): when
+    // the height changes, force a full-screen invalidate via
+    // GfxInvalidateScreen — the standard primitive used throughout
+    // the codebase (Weather.cpp, Drawing.cpp etc.) for "I changed
+    // something at draw-time and need everything repainted." The
+    // previous attempt called VirtualFloorInvalidate(true) which
+    // only marks the floor's 5x5 footprint dirty via MapInvalidate-
+    // Region — but the floor's edge sprites still didn't reliably
+    // repaint because partOfVirtualFloor is only true for tiles
+    // within the active footprint, and the per-tile dirty pump
+    // didn't always include all of them between Z-change frames.
+    // Full-screen invalidate is heavier but guaranteed to refresh
+    // every edge tile.
+    if (_virtualFloorHeight != height)
     {
         _virtualFloorHeight = height;
+        GfxInvalidateScreen();
     }
 }
 

@@ -853,7 +853,10 @@ void OpenGLDrawingContext::DrawLine(RenderTarget& rt, PaletteIndex colour, const
     command.depth = _drawCount++;
 }
 
-static auto EuclideanRemainder(const auto a, const auto b)
+// OPENRCT2MINI: cut 33. `auto` parameters (abbreviated function templates) are
+// C++20; spell out as a function template for C++17 compat.
+template<typename A, typename B>
+static auto EuclideanRemainder(const A a, const B b)
 {
     const auto r = a % b;
     return r >= 0 ? r : r + b;

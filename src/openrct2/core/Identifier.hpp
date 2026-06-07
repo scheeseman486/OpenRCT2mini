@@ -9,7 +9,8 @@
 
 #pragma once
 
-#include <compare>
+// OPENRCT2MINI: cut 33. <compare> only needed for the defaulted spaceship
+// operator below — replaced with explicit relational ops for C++17 compat.
 #include <cstdint>
 #include <cstdio>
 
@@ -63,5 +64,13 @@ public:
         return _handle == ValueType::null;
     }
 
-    auto operator<=>(const TIdentifier&) const = default;
+    // OPENRCT2MINI: cut 33. Manual relational operators replacing C++20's
+    // defaulted operator<=>. Compares the underlying enum values directly,
+    // which is what the spaceship-on-_handle would do.
+    constexpr bool operator==(const TIdentifier& other) const noexcept { return _handle == other._handle; }
+    constexpr bool operator!=(const TIdentifier& other) const noexcept { return _handle != other._handle; }
+    constexpr bool operator<(const TIdentifier& other) const noexcept { return _handle < other._handle; }
+    constexpr bool operator<=(const TIdentifier& other) const noexcept { return _handle <= other._handle; }
+    constexpr bool operator>(const TIdentifier& other) const noexcept { return _handle > other._handle; }
+    constexpr bool operator>=(const TIdentifier& other) const noexcept { return _handle >= other._handle; }
 };

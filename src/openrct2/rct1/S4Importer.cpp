@@ -1439,7 +1439,8 @@ namespace OpenRCT2::RCT1
 
         void ImportMapAnimations()
         {
-            for (const auto& mapAnimation : std::span(_s4.MapAnimations, _s4.NumMapAnimations))
+            // OPENRCT2MINI: cut 33. C++17 doesn't allow CTAD through alias templates.
+            for (const auto& mapAnimation : std::span<const RCT12MapAnimation>(_s4.MapAnimations, _s4.NumMapAnimations))
             {
                 switch (mapAnimation.Type)
                 {

@@ -74,6 +74,9 @@ namespace OpenRCT2::Ui::Windows
         {
             return a == rhs.a && b == rhs.b;
         }
+        // OPENRCT2MINI: cut 33. C++20 auto-derives operator!= from operator==
+        // (P1185R2). C++17 needs explicit operator!=.
+        constexpr bool operator!=(const ColourPair& rhs) const { return !(*this == rhs); }
     };
 
     static constexpr ColourPair MapColourUnowned(ColourPair colour)
@@ -156,7 +159,7 @@ namespace OpenRCT2::Ui::Windows
     };
 
     // clang-format off
-    static constexpr auto window_map_widgets = makeWidgets(
+    static const auto window_map_widgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
         makeWidget        ({  0,  43}, {245, 215}, WidgetType::resize,    WindowColour::secondary                                                                ),
         makeRemapWidget   ({  3,  17}, { 31,  27}, WidgetType::colourBtn, WindowColour::secondary, SPR_TAB,                      STR_SHOW_PEOPLE_ON_MAP_TIP      ),

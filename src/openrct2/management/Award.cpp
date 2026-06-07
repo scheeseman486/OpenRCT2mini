@@ -677,8 +677,13 @@ void AwardGrant(AwardType type)
 {
     auto& currentAwards = getGameState().park.currentAwards;
 
-    // Remove award type if already granted
-    std::erase_if(currentAwards, [type](const Award& award) { return award.type == type; });
+    // Remove award type if already granted.
+    // OPENRCT2MINI: cut 33. std::erase_if is C++20; the erase-remove idiom is
+    // the C++17 equivalent.
+    currentAwards.erase(
+        std::remove_if(currentAwards.begin(), currentAwards.end(),
+            [type](const Award& award) { return award.type == type; }),
+        currentAwards.end());
 
     // Ensure there is space for the award
     if (currentAwards.size() >= Limits::kMaxAwards)

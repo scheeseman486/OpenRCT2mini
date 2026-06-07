@@ -89,13 +89,38 @@ namespace OpenRCT2::Platform
             case SpecialFolder::userConfig:
             case SpecialFolder::userData:
             {
-                auto path = GetEnvironmentPath("XDG_CONFIG_HOME");
-                if (path.empty())
+                // OPENRCT2MINI: self-contained user data. Config / saves /
+                // cache live next to the binary in <exeDir>/save and
+                // nowhere else — XDG_CONFIG_HOME is intentionally NOT
+                // honored on host so the project tree is fully portable.
+                // The Mini sets gCustomUserDataPath via launch.sh's
+                // --user-data-path arg which bypasses GetFolderPath
+                // entirely, so this path is host-only.
+                //
+                // (Earlier revisions respected XDG_CONFIG_HOME as an
+                // opt-in for the FHS layout. That backfired — devs with
+                // XDG_CONFIG_HOME=~/.config in their shell rc had bench
+                // output, config, saves all leaking into ~/.config
+                // instead of staying with the binary. Hard requirement
+                // wins.)
+                //
+                // appimage-plan §2: when running from an AppImage, the
+                // AppImageKit runtime sets $APPIMAGE to the absolute
+                // path of the .AppImage file the user ran. The
+                // executable's directory at that point is
+                // /tmp/.mount_xxx/usr/bin/ — the squashfs mount, read-
+                // only, vanishes at process exit. Use $APPIMAGE's
+                // directory instead so saves land next to the AppImage
+                // file on the user's actual filesystem. Bare-binary
+                // host builds (where APPIMAGE is unset) keep the
+                // existing <exeDir>/save behaviour.
+                if (const char* appImagePath = getenv("APPIMAGE");
+                    appImagePath != nullptr && appImagePath[0] != '\0')
                 {
-                    auto home = GetFolderPath(SpecialFolder::userHome);
-                    path = Path::Combine(home, u8".config");
+                    return Path::Combine(Path::GetDirectory(appImagePath), u8"save");
                 }
-                return path;
+                auto exeDir = Path::GetDirectory(Platform::GetCurrentExecutablePath());
+                return Path::Combine(exeDir, u8"save");
             }
             case SpecialFolder::userHome:
                 return GetHomePath();

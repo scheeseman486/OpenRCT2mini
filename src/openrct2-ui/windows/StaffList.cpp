@@ -84,7 +84,7 @@ namespace OpenRCT2::Ui::Windows
     constexpr int32_t kMaximumWindowHeight = 450;
 
     // clang-format off
-    static constexpr auto _staffListWidgets = makeWidgets(
+    static const auto _staffListWidgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
         makeWidget({  0, 43}, { kWindowSize.width, kWindowSize.height - 43}, WidgetType::resize,    WindowColour::secondary                                                    ), // tab content panel
         makeTab   ({  3, 17},                                                                                                STR_STAFF_HANDYMEN_TAB_TIP                        ), // handymen tab
@@ -336,6 +336,25 @@ namespace OpenRCT2::Ui::Windows
                 _highlightedIndex = i;
                 invalidate();
             }
+        }
+
+        // OPENRCT2MINI list-focus-plan §3.4: 1D list opt-in. Items
+        // are staff entries; rows are kScrollableRowHeight tall. The
+        // default scrollFocusActivate synthesises onScrollMouseDown
+        // at the row centre, which fires the existing fire / open-
+        // peep dispatch.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            return static_cast<int32_t>(_staffList.size());
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            if (itemIndex < 0 || static_cast<size_t>(itemIndex) >= _staffList.size())
+                return {};
+            const int32_t y = itemIndex * kScrollableRowHeight;
+            const int32_t w = widgets[WIDX_STAFF_LIST_LIST].width() - 16;
+            return ScreenRect{ { 0, y }, { w - 1, y + kScrollableRowHeight - 1 } };
         }
 
         void onScrollMouseDown(int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override

@@ -31,7 +31,33 @@ using namespace OpenRCT2::Audio;
 
 namespace OpenRCT2::RideAudio
 {
-    constexpr size_t kMaxRideMusicChannels = 32;
+    // OPENRCT2MINI: cut from 32 → 3. With software mixing + on-demand
+    // disk streaming on Miyoo Mini hardware, ~4 concurrent music tracks
+    // produced choppy audio in user testing on dense parks. The upstream
+    // FCFS rule (first 32 rides to enumerate win) is also replaced with
+    // priority eviction in RideUpdateMusicPosition — at cap, the quietest
+    // current instance is replaced if the new ride would be louder. The
+    // existing per-ride volume formula (CalculateVolume / newVolume in
+    // UpdateMusicInstance) already encodes "distance from screen-center",
+    // so it's a free priority key.
+    constexpr size_t kMaxRideMusicChannels = 3;
+
+    // OPENRCT2MINI: eviction hysteresis. Volume is a int16 in the rough
+    // range [-4000 (very quiet), -700 (loudest)] — about 3300 units of
+    // dynamic range. To prevent two rides with near-equal volumes from
+    // ping-ponging in and out of the cap-3 set every frame (which causes
+    // audible mid-track cuts as channels are torn down and recreated),
+    // a challenger must beat an incumbent's volume by at least this many
+    // units to displace it. ~6 % of the dynamic range — small enough to
+    // let a genuinely louder ride through, large enough to absorb the
+    // per-frame volume jitter from camera moves and ride travel.
+    //
+    // We only apply hysteresis to incumbents (rides that already have a
+    // playing channel from the previous frame); fresh challengers can
+    // still freely contest cap slots against each other within a single
+    // frame's enumeration, so the loudest 3 still end up in the set
+    // regardless of enumeration order.
+    constexpr int16_t kMusicEvictionHysteresis = 200;
 
     /**
      * Represents an audio channel to play a particular ride's music track.
@@ -315,6 +341,19 @@ namespace OpenRCT2::RideAudio
     {
         if (offset < length)
         {
+            // OPENRCT2MINI: replaced upstream's FCFS rule with
+            // priority-based eviction. Volume here is the per-frame
+            // loudness number from UpdateMusicInstance — a negative
+            // int16 where higher (closer to zero) means closer to the
+            // viewport centre. When the instance list is at cap, drop
+            // the quietest current instance if this one would be
+            // louder. Each frame _musicInstances is cleared by
+            // ClearAllViewportInstances() before rides re-register, so
+            // by the time UpdateMusicChannels runs, _musicInstances
+            // holds exactly the loudest N rides — and the existing
+            // StopInactiveRideMusicChannels / channel-allocation flow
+            // does the rest (tears down channels for evicted rides,
+            // creates channels for newly-promoted ones).
             if (_musicInstances.size() < kMaxRideMusicChannels)
             {
                 auto& instance = _musicInstances.emplace_back();
@@ -324,6 +363,39 @@ namespace OpenRCT2::RideAudio
                 instance.Volume = volume;
                 instance.Pan = pan;
                 instance.Frequency = sampleRate;
+            }
+            else
+            {
+                auto quietest = std::min_element(
+                    _musicInstances.begin(), _musicInstances.end(),
+                    [](const ViewportRideMusicInstance& a, const ViewportRideMusicInstance& b) {
+                        return a.Volume < b.Volume;
+                    });
+                if (quietest != _musicInstances.end())
+                {
+                    // OPENRCT2MINI: incumbents (rides whose channel is
+                    // still alive from the previous frame) get a
+                    // hysteresis bonus to prevent thrash. _musicChannels
+                    // is only torn down later, in
+                    // StopInactiveRideMusicChannels, so it still
+                    // reflects last frame's state during this pass.
+                    const bool quietestIsIncumbent = std::any_of(
+                        _musicChannels.begin(), _musicChannels.end(),
+                        [&](const RideMusicChannel& ch) {
+                            return ch.RideId == quietest->RideId && ch.TrackIndex == quietest->TrackIndex;
+                        });
+                    const int16_t threshold = quietest->Volume
+                        + (quietestIsIncumbent ? kMusicEvictionHysteresis : int16_t{ 0 });
+                    if (volume > threshold)
+                    {
+                        quietest->RideId = ride.id;
+                        quietest->TrackIndex = ride.musicTuneId;
+                        quietest->Offset = offset;
+                        quietest->Volume = volume;
+                        quietest->Pan = pan;
+                        quietest->Frequency = sampleRate;
+                    }
+                }
             }
             ride.musicPosition = static_cast<uint32_t>(offset);
         }

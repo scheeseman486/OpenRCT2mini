@@ -21,7 +21,7 @@
 #include <cstdint>
 #include <optional>
 #include <sfl/small_vector.hpp>
-#include <span>
+#include "Span.hpp"
 #include <stack>
 #include <type_traits>
 #include <vector>
@@ -346,7 +346,8 @@ namespace OpenRCT2
             template<typename T, std::enable_if_t<std::is_enum<T>::value, bool> = true>
             void readWrite(T& v)
             {
-                using underlying = std::underlying_type<T>::type;
+                // OPENRCT2MINI: cut 33. typename added for C++17 dependent-name resolution.
+                using underlying = typename std::underlying_type<T>::type;
                 if (_mode == Mode::reading)
                 {
                     v = static_cast<T>(readInteger<underlying>());

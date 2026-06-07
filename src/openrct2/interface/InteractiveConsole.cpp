@@ -55,6 +55,7 @@
 #include "../object/ObjectRepository.h"
 #include "../object/PeepAnimationsObject.h"
 #include "../platform/Platform.h"
+#include "../profiling/Bench.h"
 #include "../profiling/Profiling.h"
 #include "../ride/Ride.h"
 #include "../ride/RideData.h"
@@ -1136,7 +1137,7 @@ static void ConsoleCommandLoadObject(InteractiveConsole& console, const argument
     console.WriteLine("Object file loaded.");
 }
 
-constexpr auto _objectTypeNames = std::to_array<StringId>({
+constexpr auto _objectTypeNames = std::array<StringId, 21>{{
     STR_OBJECT_SELECTION_RIDE_VEHICLES_ATTRACTIONS,
     STR_OBJECT_SELECTION_SMALL_SCENERY,
     STR_OBJECT_SELECTION_LARGE_SCENERY,
@@ -1158,7 +1159,7 @@ constexpr auto _objectTypeNames = std::to_array<StringId>({
     STR_OBJECT_SELECTION_PEEP_NAMES,
     STR_OBJECT_SELECTION_PEEP_ANIMATIONS,
     STR_OBJECT_SELECTION_CLIMATE,
-});
+}};
 static_assert(_objectTypeNames.size() == EnumValue(ObjectType::count));
 
 static void ConsoleCommandCountObjects(InteractiveConsole& console, [[maybe_unused]] const arguments_t& argv)
@@ -1755,6 +1756,66 @@ static void ConsoleCommandProfilerStop([[maybe_unused]] InteractiveConsole& cons
     }
 }
 
+// OPENRCT2MINI rev 95: timedemo-style benchmark. Uses the title sequence
+// as the deterministic scene driver; forces 1 tick / frame and uncaps the
+// framerate so frame count is the only variable that gets fixed across
+// runs (Quake/Doom timedemo model — frame-count target, not wall-time).
+static void ConsoleCommandBench(InteractiveConsole& console, const arguments_t& argv)
+{
+    if (Profiling::Bench::isActive())
+    {
+        console.WriteLineError("bench: already running");
+        return;
+    }
+
+    uint32_t targetFrames = 3000;
+    if (!argv.empty())
+    {
+        const long parsed = std::strtol(argv[0].c_str(), nullptr, 10);
+        if (parsed <= 0 || parsed > 1'000'000)
+        {
+            console.WriteLineError("bench: frame count must be between 1 and 1,000,000");
+            return;
+        }
+        targetFrames = static_cast<uint32_t>(parsed);
+    }
+
+    if (!Profiling::Bench::start(targetFrames))
+    {
+        console.WriteLineError("bench: failed to start (already running, or no context)");
+        return;
+    }
+
+    console.WriteFormatLine(
+        "bench: %u frames after 60-frame warm-up; reloading title-sequence demo. Discards any unsaved park.",
+        targetFrames);
+    // Hide the console so the title-sequence demo renders unobstructed
+    // and the bench captures pure scene-render cost (no console pixels
+    // composited). InGameConsole::Update polls Bench::hasPendingReport()
+    // each frame and pops itself back open with the result line when
+    // the run finishes.
+    console.Hide();
+}
+
+static void ConsoleCommandBenchStatus(InteractiveConsole& console, [[maybe_unused]] const arguments_t& argv)
+{
+    if (Profiling::Bench::isActive())
+    {
+        console.WriteLine("bench: running");
+        return;
+    }
+
+    const auto& report = Profiling::Bench::getLastReport();
+    if (report.empty())
+    {
+        console.WriteLine("bench: idle (no run yet)");
+    }
+    else
+    {
+        console.WriteLine(report.c_str());
+    }
+}
+
 static void ConsoleSpawnBalloon(InteractiveConsole& console, const arguments_t& argv)
 {
     if (argv.size() < 3)
@@ -1883,6 +1944,18 @@ static constexpr ConsoleCommand console_command_table[] = {
       "profiler_stop [<file.csv|file.json>]" },
     { "profiler_export", ConsoleCommandProfilerExport, "Exports profiler data (format from extension, default CSV).",
       "profiler_export <file.csv|file.json>" },
+    // OPENRCT2MINI rev 95c: timedemo-style benchmark. Frame-count
+    // target, not time, so device slowdowns don't truncate the run.
+    // Reloads the title-sequence demo from position 0 — works from any
+    // scene. Discards unsaved work because the scene switch goes
+    // through TitleScene::Load → gameStateInitAll.
+    { "bench", ConsoleCommandBench,
+      "Runs a timedemo-style benchmark for the given frame count (default 3000). Reloads the title-sequence "
+      "demo from frame zero, forces 1 tick per frame, uncaps framerate, and resets RNG so runs are deterministic. "
+      "Discards any unsaved park.",
+      "bench [frames=3000]" },
+    { "bench_status", ConsoleCommandBenchStatus, "Shows whether a benchmark is running, or the last result line.",
+      "bench_status" },
 };
 
 static void ConsoleCommandWindows(InteractiveConsole& console, [[maybe_unused]] const arguments_t& argv)
@@ -2025,17 +2098,20 @@ void InteractiveConsole::WriteFormatLine(const char* format, ...)
     WriteLine(buffer);
 }
 
+// OPENRCT2MINI: cut 36. std::atomic<bool>::test()/test_and_set()/clear() are
+// C++20 (P1135). On C++17 / GCC 8.3 they don't exist on std::atomic. Use the
+// atomic<bool> primitives in C++17: exchange / store / load.
 void InteractiveConsole::BeginAsyncExecution()
 {
-    Guard::Assert(!_commandExecuting.test_and_set(), "Command already executing asynchronously");
+    Guard::Assert(!_commandExecuting.exchange(true), "Command already executing asynchronously");
 }
 
 void InteractiveConsole::EndAsyncExecution()
 {
-    _commandExecuting.clear();
+    _commandExecuting.store(false);
 }
 
 bool InteractiveConsole::IsExecuting()
 {
-    return _commandExecuting.test();
+    return _commandExecuting.load();
 }

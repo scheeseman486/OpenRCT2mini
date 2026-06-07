@@ -9,6 +9,8 @@
 
 #include "Paint.Surface.h"
 
+#include <chrono>
+
 #include "../../Cheats.h"
 #include "../../GameState.h"
 #include "../../OpenRCT2.h"
@@ -33,6 +35,7 @@
 #include "../Boundbox.h"
 #include "../Paint.SessionFlags.h"
 #include "Paint.TileElement.h"
+
 #include "Segment.h"
 
 #include <cassert>
@@ -1090,7 +1093,23 @@ void PaintSurface(PaintSession& session, uint8_t direction, uint16_t height, con
     // ebp[4] = ebp;
     // ebp[8] = ebx
 
-    if (gMapSelectFlags.has(MapSelectFlag::enable))
+    // OPENRCT2MINI grid-cursor-plan §7.2 (amendment 2026-05-17 #7):
+    // blink restored for PARKED state only. When the user is
+    // navigating the tool window's widgets in focus mode (grid
+    // cursor is set but not actively being controlled), the
+    // marker blinks on a 500 ms cycle so the user can SEE where
+    // the cursor will be when they engage grid mode. When they
+    // engage (gridCursorParked unset, marker becomes solid), the
+    // blink is dropped so the cursor is easier to track as it
+    // moves under D-pad control.
+    bool gridCursorPaintGate = true;
+    if (gMapSelectFlags.has(MapSelectFlag::enable) && gMapSelectFlags.has(MapSelectFlag::gridCursorParked))
+    {
+        using namespace std::chrono;
+        const auto ms = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        gridCursorPaintGate = ((ms / 500) & 1) == 1;
+    }
+    if (gMapSelectFlags.has(MapSelectFlag::enable) && gridCursorPaintGate)
     {
         // Loc660FB8:
         const CoordsXY& pos = session.MapPosition;

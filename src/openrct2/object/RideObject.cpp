@@ -272,6 +272,15 @@ namespace OpenRCT2
             }
         }
 
+        // OPENRCT2MINI: trim peep-loading vector capacity overshoot. push_back doubles
+        // capacity; an array of 5 waypoints ends up with capacity 8. Repeated across
+        // up to 4 car types per ride and ~20 rides per scenario this adds up to a few
+        // hundred KB. The vectors are not grown after Read.
+        for (auto& v : _peepLoadingPositions)
+            v.shrink_to_fit();
+        for (auto& v : _peepLoadingWaypoints)
+            v.shrink_to_fit();
+
         GetImageTable().Read(context, stream);
 
         // Validate properties

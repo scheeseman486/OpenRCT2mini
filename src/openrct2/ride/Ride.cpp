@@ -84,8 +84,8 @@ using namespace OpenRCT2;
 using namespace OpenRCT2::TrackMetadata;
 using namespace OpenRCT2::Scripting;
 
-static constexpr auto kRideModeBlockSectionedCounterpart = std::to_array(
-    {
+// OPENRCT2MINI: cut 36. Explicit <RideMode> so the C++17 polyfill matches.
+static constexpr auto kRideModeBlockSectionedCounterpart = std::array<RideMode, 37>{{
         RideMode::normal,                          // RideMode::normal,
         RideMode::continuousCircuitBlockSectioned, // RideMode::continuousCircuit,
         RideMode::reverseInclineLaunchedShuttle,   // RideMode::reverseInclineLaunchedShuttle,
@@ -123,7 +123,7 @@ static constexpr auto kRideModeBlockSectionedCounterpart = std::to_array(
         RideMode::continuousCircuitBlockSectioned, // RideMode::continuousCircuitBlockSectioned,
         RideMode::poweredLaunchBlockSectioned,     // RideMode::poweredLaunch,
         RideMode::poweredLaunchBlockSectioned,     // RideMode::poweredLaunchBlockSectioned,
-    });
+    }};
 static_assert(kRideModeBlockSectionedCounterpart.size() == EnumValue(RideMode::count));
 
 RideMode& operator++(RideMode& d, int)

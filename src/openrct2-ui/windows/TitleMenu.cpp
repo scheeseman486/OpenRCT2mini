@@ -44,15 +44,22 @@ namespace OpenRCT2::Ui::Windows
         DDIDX_CONVERT_SAVED_GAME,
         DDIDX_TRACK_DESIGNER,
         DDIDX_TRACK_MANAGER,
-        DDIDX_OPEN_CONTENT_FOLDER,
+        // host-restoration-plan §2e: on Mini the "Open User Content
+        // Folder" entry is dropped (handheld has a fixed SD layout);
+        // on host it's restored, shifting DDIDX_CUSTOM_BEGIN to 6.
+#ifdef OPENRCT2MINI
+        DDIDX_CUSTOM_BEGIN = 5,
+#else
+        DDIDX_OPEN_CONTENT_FOLDER = 4,
         DDIDX_CUSTOM_BEGIN = 6,
+#endif
     };
 
     static constexpr ScreenSize MenuButtonDims = { 82, 82 };
     static constexpr ScreenSize UpdateButtonDims = { MenuButtonDims.width * 4, 28 };
 
     // clang-format off
-    static constexpr auto _titleMenuWidgets = makeWidgets(
+    static const auto _titleMenuWidgets = makeWidgets(
         makeWidget({0, UpdateButtonDims.height}, MenuButtonDims,   WidgetType::imgBtn, WindowColour::tertiary,  ImageId(SPR_MENU_NEW_GAME),       STR_START_NEW_GAME_TIP),
         makeWidget({0, UpdateButtonDims.height}, MenuButtonDims,   WidgetType::imgBtn, WindowColour::tertiary,  ImageId(SPR_MENU_LOAD_GAME),      STR_CONTINUE_SAVED_GAME_TIP),
         makeWidget({0, UpdateButtonDims.height}, MenuButtonDims,   WidgetType::imgBtn, WindowColour::tertiary,  ImageId(SPR_G2_MENU_MULTIPLAYER), STR_SHOW_MULTIPLAYER_TIP),
@@ -185,7 +192,14 @@ namespace OpenRCT2::Ui::Windows
                 gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_CONVERT_SAVED_GAME_TO_SCENARIO);
                 gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_ROLLER_COASTER_DESIGNER);
                 gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_TRACK_DESIGNS_MANAGER);
+#ifndef OPENRCT2MINI
+                // host-restoration-plan §2e: re-add the "Open User Content
+                // Folder" entry at slot 4 (DDIDX_OPEN_CONTENT_FOLDER),
+                // followed by a separator at slot 5. Custom scripting
+                // items push from slot 6 (DDIDX_CUSTOM_BEGIN).
                 gDropdown.items[i++] = Dropdown::PlainMenuLabel(STR_OPEN_USER_CONTENT_FOLDER);
+                gDropdown.items[i++] = Dropdown::Separator();
+#endif
 
 #ifdef ENABLE_SCRIPTING
                 auto hasCustomItems = false;
@@ -199,7 +213,11 @@ namespace OpenRCT2::Ui::Windows
                             if (!hasCustomItems)
                             {
                                 hasCustomItems = true;
+#ifdef OPENRCT2MINI
+                                // Mini: separator between standard and custom items.
+                                // Host already pushed one after STR_OPEN_USER_CONTENT_FOLDER.
                                 gDropdown.items[i++] = Dropdown::Separator();
+#endif
                             }
 
                             gDropdown.items[i] = Dropdown::PlainMenuLabel(item.Text.c_str());
@@ -211,7 +229,15 @@ namespace OpenRCT2::Ui::Windows
 
                 Widget* widget = &widgets[widgetIndex];
                 int32_t yOffset = 0;
-                if (i > 5)
+                // host-restoration-plan §2e: baseline is 4 on Mini (4
+                // standard entries, no Open Content Folder), 6 on host
+                // (4 standard + open-content + separator). Anything
+                // past the baseline pushes the dropdown upward to fit.
+#ifdef OPENRCT2MINI
+                if (i > 4)
+#else
+                if (i > 6)
+#endif
                 {
                     yOffset = -(widget->height() - 1 + 5 + (i * 12));
                 }
@@ -244,14 +270,19 @@ namespace OpenRCT2::Ui::Windows
                     case DDIDX_TRACK_MANAGER:
                         Editor::LoadTrackManager();
                         break;
+#ifndef OPENRCT2MINI
+                    // host-restoration-plan §2e: opens the user content
+                    // folder (saves / objects / track designs / etc.)
+                    // in the OS file manager. Mini omits this — its SD
+                    // layout is fixed and there's no file manager to
+                    // hand off to.
                     case DDIDX_OPEN_CONTENT_FOLDER:
                     {
-                        auto context = GetContext();
-                        auto& env = context->GetPlatformEnvironment();
-                        auto& uiContext = context->GetUiContext();
-                        uiContext.OpenFolder(env.GetDirectoryPath(DirBase::user));
+                        auto& env = GetContext()->GetPlatformEnvironment();
+                        GetContext()->GetUiContext().OpenFolder(env.GetDirectoryPath(DirBase::user));
                         break;
                     }
+#endif
                     default:
                         InvokeCustomToolboxMenuItem(selectedIndex - DDIDX_CUSTOM_BEGIN);
                         break;

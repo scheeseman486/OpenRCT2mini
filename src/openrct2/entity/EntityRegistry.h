@@ -20,7 +20,12 @@
 
 namespace OpenRCT2
 {
-    constexpr uint16_t kMaxEntities = 65535;
+    // OPENRCT2MINI: kept at RCT2's vanilla cap of 10000 (RCT2::Limits::kMaxEntities).
+    // Cut 1 reduced to 8192 — saved ~925 KB in EntityRegistry::entities[] but a vanilla
+    // save with 8192–9999 entities would fail to load. Reverted per project policy:
+    // no game-limit cuts that risk vanilla compatibility. Note: upstream's 65535 was
+    // the *index* range, not actual capacity; OpenRCT2's persistent cap is 10000.
+    constexpr uint16_t kMaxEntities = 10000;
     constexpr uint16_t kMaxMiscEntities = 3200;
 
     constexpr const uint32_t kSpatialIndexSize = (kMaximumMapSizeTechnical * kMaximumMapSizeTechnical) + 1;

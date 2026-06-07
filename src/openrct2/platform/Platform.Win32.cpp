@@ -35,7 +35,11 @@
 
     #include <cassert>
     #include <cstring>
-    #include <format>
+    // OPENRCT2MINI Windows cross-build: <format> is C++20. The Mini source
+    // is C++17 (cut 33) for the OnionUI toolchain's older GCC; the Windows
+    // mingw build inherits the same C++17 baseline. Use ostringstream-based
+    // wstring concat for the two std::format call sites below instead.
+    #include <sstream>
     #include <iterator>
     #include <locale>
 
@@ -58,6 +62,11 @@ namespace OpenRCT2::Platform
     static std::wstring WIN32_GetModuleFileNameW(HMODULE hModule);
     static u8string WIN32_GetModuleFileNameUTF8(HMODULE hModule);
 
+    // OPENRCT2MINI: forward-declare so GetFolderPath can call it.
+    // Definition lives further down (kept in its original location to
+    // minimise diff against upstream).
+    std::string GetCurrentExecutableDirectory();
+
     std::string GetEnvironmentVariable(std::string_view name)
     {
         std::wstring result;
@@ -70,7 +79,7 @@ namespace OpenRCT2::Platform
         }
         else
         {
-            const auto wBuffer = std::make_unique_for_overwrite<wchar_t[]>(valueSize);
+            const auto wBuffer = std::unique_ptr<wchar_t[]>(new wchar_t[valueSize]);  // OPENRCT2MINI: C++17 equivalent of make_unique_for_overwrite
             GetEnvironmentVariableW(wname.c_str(), wBuffer.get(), valueSize);
             result = wBuffer.get();
         }
@@ -93,11 +102,26 @@ namespace OpenRCT2::Platform
     {
         switch (folder)
         {
-            // We currently store everything under Documents/OpenRCT2
+            // OPENRCT2MINI: self-contained user data. Config / saves /
+            // cache live next to openrct2.exe in <exeDir>\save, matching
+            // the Mini's $APPDIR/save layout. No more files scattered
+            // under Documents\OpenRCT2 — the project tree is fully
+            // portable. PlatformEnvironment skips the "OpenRCT2"
+            // subdirectory append on host, so the result is exactly
+            // <exeDir>\save.
             case SpecialFolder::userCache:
             case SpecialFolder::userConfig:
             case SpecialFolder::userData:
             {
+                auto exeDir = GetCurrentExecutableDirectory();
+                if (!exeDir.empty())
+                {
+                    return Path::Combine(exeDir, u8"save");
+                }
+                // Fallback only if the executable directory can't be
+                // resolved (extremely unlikely on Win32) — preserve
+                // the historical Documents-based path so the binary
+                // still finds somewhere writable.
                 auto path = WIN32_GetKnownFolderPath(FOLDERID_Documents);
                 if (path.empty())
                 {
@@ -414,7 +438,10 @@ namespace OpenRCT2::Platform
             return false;
         }
         // [hRootKey\OpenRCT2.ext\DefaultIcon]
-        const std::wstring szIconW = std::format(L"\"{}\",{}", dllPathW, iconIndex);
+        // C++17 equivalent of std::format(L"\"{}\",{}", dllPathW, iconIndex)
+        std::wostringstream szIconSS;
+        szIconSS << L"\"" << dllPathW << L"\"," << iconIndex;
+        const std::wstring szIconW = szIconSS.str();
         if (RegSetValueW(hKey, L"DefaultIcon", REG_SZ, szIconW.c_str(), 0) != ERROR_SUCCESS)
         {
             RegCloseKey(hKey);
@@ -439,7 +466,10 @@ namespace OpenRCT2::Platform
         }
 
         // [hRootKey\OpenRCT2.sv6\shell\open\command]
-        const std::wstring szCommandW = std::format(L"\"{}\" {}", exePathW, commandArgsW);
+        // C++17 equivalent of std::format(L"\"{}\" {}", exePathW, commandArgsW)
+        std::wostringstream szCommandSS;
+        szCommandSS << L"\"" << exePathW << L"\" " << commandArgsW;
+        const std::wstring szCommandW = szCommandSS.str();
         if (RegSetValueW(hKey, L"shell\\open\\command", REG_SZ, szCommandW.c_str(), 0) != ERROR_SUCCESS)
         {
             RegCloseKey(hKey);
@@ -754,7 +784,7 @@ namespace OpenRCT2::Platform
         }
 
         std::string outPath = "";
-        const auto wSteamPath = std::make_unique_for_overwrite<wchar_t[]>(size);
+        const auto wSteamPath = std::unique_ptr<wchar_t[]>(new wchar_t[size]);  // OPENRCT2MINI: C++17 equivalent of make_unique_for_overwrite
         const auto result = RegQueryValueExW(
             hKey, L"SteamPath", nullptr, &type, reinterpret_cast<LPBYTE>(wSteamPath.get()), &size);
         if (result == ERROR_SUCCESS)
@@ -853,7 +883,10 @@ namespace OpenRCT2::Platform
                     {
                         // [hRootKey\openrct2\shell\open\command]
                         const std::wstring& exePathW = WIN32_GetModuleFileNameW(nullptr);
-                        const std::wstring handle_uri_string = std::format(L"\"{}\" handle-uri \"%1\"", exePathW);
+                        // C++17 equivalent of std::format(L"\"{}\" handle-uri \"%1\"", exePathW)
+                        std::wostringstream handleUriSS;
+                        handleUriSS << L"\"" << exePathW << L"\" handle-uri \"%1\"";
+                        const std::wstring handle_uri_string = handleUriSS.str();
                         if (RegSetValueW(hClassKey, L"shell\\open\\command", REG_SZ, handle_uri_string.c_str(), 0)
                             == ERROR_SUCCESS)
                         {
@@ -862,7 +895,10 @@ namespace OpenRCT2::Platform
                             HKEY hMuiCacheKey;
                             if (RegCreateKeyW(hRootKey, MUI_CACHE, &hMuiCacheKey) == ERROR_SUCCESS)
                             {
-                                const std::wstring friendly_apl_name = std::format(L"{}.FriendlyAppName", exePathW);
+                                // C++17 equivalent of std::format(L"{}.FriendlyAppName", exePathW)
+                                std::wostringstream friendlySS;
+                                friendlySS << exePathW << L".FriendlyAppName";
+                                const std::wstring friendly_apl_name = friendlySS.str();
                                 // mingw-w64 used to define RegSetKeyValueW's signature incorrectly
                                 // You need at least mingw-w64 5.0 including this commit:
                                 //   https://sourceforge.net/p/mingw-w64/mingw-w64/ci/da9341980a4b70be3563ac09b5927539e7da21f7/

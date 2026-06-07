@@ -182,8 +182,8 @@ void TitleScene::Tick()
     // here means it survives. Mirrors the gOpenRCT2ShowChangelog pattern
     // (which is checked in Load — but the error has the extra constraint
     // of needing to outlast a possible double Load when SwitchToStartUpScene
-    // and the catch arm both fire SetActiveScene).
-    static StringId gOpenRCT2PendingParkLoadError = kStringIdNone;
+    // and the catch arm both fire SetActiveScene). The flag itself lives
+    // on the global (OpenRCT2.cpp); we just observe/clear it here.
     if (gOpenRCT2PendingParkLoadError != kStringIdNone)
     {
         auto pendingTitle = gOpenRCT2PendingParkLoadError;

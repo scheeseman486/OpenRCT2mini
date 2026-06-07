@@ -57,7 +57,7 @@ namespace OpenRCT2::Ui::Windows
         optionsTab,
     };
 
-    static constexpr auto makeNewsWidgets = [](StringId title) {
+    static const auto makeNewsWidgets = [](StringId title) {
         return makeWidgets(
             makeWindowShim(title, kWindowSize),
             makeWidget({  0, 43 }, { kWindowSize.width, 257 }, WidgetType::resize, WindowColour::secondary),
@@ -66,12 +66,12 @@ namespace OpenRCT2::Ui::Windows
         );
     };
 
-    static constexpr auto kNewsTabWidgets = makeWidgets(
+    static const auto kNewsTabWidgets = makeWidgets(
         makeNewsWidgets(STR_RECENT_MESSAGES),
         makeWidget({  4, 44 }, { 392, 252 }, WidgetType::scroll,  WindowColour::secondary, SCROLL_VERTICAL)
     );
 
-    static constexpr auto kOptionsTabWidgets = makeWidgets(
+    static const auto kOptionsTabWidgets = makeWidgets(
         makeNewsWidgets(STR_NOTIFICATION_SETTINGS),
         makeWidget({ 10, 49 }, { 380,  14 }, WidgetType::checkbox, WindowColour::secondary)
     );
@@ -414,6 +414,33 @@ namespace OpenRCT2::Ui::Windows
                     * CalculateNewsItemHeight()
                 - kItemSeparatorHeight;
             return { kWindowSize.width, scrollHeight };
+        }
+
+        // OPENRCT2MINI list-focus-plan §3.12: 1D list opt-in. Items
+        // are archived news entries; each row is CalculateNewsItemHeight()
+        // tall. First-pass behaviour: each focus item is one news
+        // row. Activation falls back to the default scrollFocusActivate
+        // which synthesises onScrollMouseDown at the row centre — that
+        // hit-tests for subject / location embedded buttons via the
+        // existing x-range checks and triggers the relevant action when
+        // the centre falls on a button. The plan's follow-up (per-button
+        // focus within a row) can be added later if users request it.
+        int32_t scrollFocusGetItemCount(int32_t scrollIndex) override
+        {
+            return static_cast<int32_t>(getGameState().newsItems.getArchived().size());
+        }
+
+        ScreenRect scrollFocusGetItemRect(int32_t scrollIndex, int32_t itemIndex) override
+        {
+            const int32_t count = scrollFocusGetItemCount(scrollIndex);
+            if (itemIndex < 0 || itemIndex >= count)
+                return {};
+            const int32_t itemHeight = CalculateNewsItemHeight();
+            const int32_t y = itemIndex * itemHeight;
+            return ScreenRect{
+                { 0, y },
+                { kWindowSize.width - 1, y + itemHeight - kItemSeparatorHeight - 1 },
+            };
         }
 
         void onScrollMouseDown(int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override

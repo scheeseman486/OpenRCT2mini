@@ -251,7 +251,7 @@ namespace OpenRCT2::Ui::Windows
     // clang-format off
     constexpr int32_t kRCT1LightOffset = 4;
 
-    static constexpr auto kMainRideWidgets = makeWidgets(
+    static const auto kMainRideWidgets = makeWidgets(
         makeWindowShim(kWindowTitle, kWindowSize),
         makeWidget({  0, 43}, {kMinimumWindowWidth, 137}, WidgetType::resize, WindowColour::secondary),
         makeTab({   3, 17 }, STR_VIEW_OF_RIDE_ATTRACTION_TIP),
@@ -267,7 +267,7 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009ADC34
-    static constexpr auto _mainWidgets = makeWidgets(
+    static const auto _mainWidgets = makeWidgets(
         kMainRideWidgets,
         makeWidget({  3,  62}, {288, 107}, WidgetType::viewport,      WindowColour::secondary                                                                  ),
         makeWidget({ 35,  46}, {222,  14}, WidgetType::dropdownMenu,  WindowColour::secondary, kWidgetContentEmpty,                 STR_VIEW_SELECTION         ),
@@ -289,7 +289,7 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009ADDA8
-    static constexpr auto _vehicleWidgets = makeWidgets(
+    static const auto _vehicleWidgets = makeWidgets(
         kMainRideWidgets,
         makeWidget        ({  7,  50}, {302, 14}, WidgetType::dropdownMenu, WindowColour::secondary                                                          ),
         makeWidget        ({297,  51}, { 11, 12}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH                                      ),
@@ -300,7 +300,7 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009ADEFC
-    static constexpr auto _operatingWidgets = makeWidgets(
+    static const auto _operatingWidgets = makeWidgets(
         kMainRideWidgets,
         makeWidget        ({  7,  47}, {302, 14}, WidgetType::dropdownMenu, WindowColour::secondary, 0xFFFFFFFF,                             STR_SELECT_OPERATING_MODE                   ),
         makeWidget        ({297,  48}, { 11, 12}, WidgetType::button,       WindowColour::secondary, STR_DROPDOWN_GLYPH,                     STR_SELECT_OPERATING_MODE                   ),
@@ -322,7 +322,7 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009AE190
-    static constexpr auto _maintenanceWidgets = makeWidgets(
+    static const auto _maintenanceWidgets = makeWidgets(
         kMainRideWidgets,
         makeProgressBar({107,  47}, { 147, 12}, Drawing::Colour::brightGreen                                                                                                        ),
         makeProgressBar({107,  62}, { 147, 12}, Drawing::Colour::brightRed                                                                                                          ),
@@ -334,7 +334,7 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009AE2A4
-    static constexpr auto _colourWidgets = makeWidgets(
+    static const auto _colourWidgets = makeWidgets(
         kMainRideWidgets,
         makeWidget({  3,  49}, { 68, 47}, WidgetType::spinner,      WindowColour::secondary                                                                              ),
         makeWidget({ 74,  49}, {239, 14}, WidgetType::dropdownMenu, WindowColour::secondary, kStringIdEmpty                                                         ),
@@ -366,7 +366,7 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009AE4C8
-    static constexpr auto _musicWidgets = makeWidgets(
+    static const auto _musicWidgets = makeWidgets(
         kMainRideWidgets,
         makeWidget({  7, 47}, {302,  12}, WidgetType::checkbox,     WindowColour::secondary, STR_PLAY_MUSIC,     STR_SELECT_MUSIC_TIP      ),
         makeWidget({  7, 62}, {302,  14}, WidgetType::dropdownMenu, WindowColour::secondary, kStringIdEmpty                                ),
@@ -376,7 +376,7 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009AE5DC
-    static constexpr auto _measurementWidgets = makeWidgets(
+    static const auto _measurementWidgets = makeWidgets(
         kMainRideWidgets,
         makeWidget({288, 194}, { 24, 24}, WidgetType::flatBtn, WindowColour::secondary, ImageId(SPR_FLOPPY),       STR_SAVE_TRACK_DESIGN),
         makeWidget({  4, 127}, {154, 14}, WidgetType::button,  WindowColour::secondary, STR_SELECT_NEARBY_SCENERY                       ),
@@ -386,7 +386,7 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009AE710
-    static constexpr auto _graphsWidgets = makeWidgets(
+    static const auto _graphsWidgets = makeWidgets(
         kMainRideWidgets,
         makeWidget({  3,  46}, {306, 112}, WidgetType::scroll, WindowColour::secondary, SCROLL_HORIZONTAL,       STR_LOGGING_DATA_FROM_TIP                               ),
         makeWidget({  3, 163}, { 73,  14}, WidgetType::button, WindowColour::secondary, STR_RIDE_STATS_VELOCITY, STR_SHOW_GRAPH_OF_VELOCITY_AGAINST_TIME_TIP             ),
@@ -396,7 +396,7 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009AE844
-    static constexpr auto _incomeWidgets = makeWidgets(
+    static const auto _incomeWidgets = makeWidgets(
         kMainRideWidgets,
         makeWidget        ({ 19,  51}, {126, 14}, WidgetType::label,    WindowColour::secondary                                                                    ),
         makeHoldableSpinnerWidgets({147,  50}, {162, 14}, WidgetType::spinner,  WindowColour::secondary, kStringIdEmpty                                            ), // NB: 3 widgets
@@ -407,14 +407,14 @@ namespace OpenRCT2::Ui::Windows
     );
 
     // 0x009AE9C8
-    static constexpr auto _customerWidgets = makeWidgets(
+    static const auto _customerWidgets = makeWidgets(
         kMainRideWidgets,
         makeWidget({289,  54}, {24, 24}, WidgetType::flatBtn, WindowColour::secondary, ImageId(SPR_SHOW_GUESTS_THOUGHTS_ABOUT_THIS_RIDE_ATTRACTION), STR_SHOW_GUESTS_THOUGHTS_ABOUT_THIS_RIDE_ATTRACTION_TIP),
         makeWidget({289,  78}, {24, 24}, WidgetType::flatBtn, WindowColour::secondary, ImageId(SPR_SHOW_GUESTS_ON_THIS_RIDE_ATTRACTION),             STR_SHOW_GUESTS_ON_THIS_RIDE_ATTRACTION_TIP            ),
         makeWidget({289, 102}, {24, 24}, WidgetType::flatBtn, WindowColour::secondary, ImageId(SPR_SHOW_GUESTS_QUEUING_FOR_THIS_RIDE_ATTRACTION),    STR_SHOW_GUESTS_QUEUING_FOR_THIS_RIDE_ATTRACTION_TIP   )
     );
 
-    static constexpr std::span<const Widget> PageWidgets[] = {
+    static const std::span<const Widget> PageWidgets[] = {
         _mainWidgets,
         _vehicleWidgets,
         _operatingWidgets,
@@ -3028,7 +3028,10 @@ namespace OpenRCT2::Ui::Windows
         {
             size_t count = 0;
 
-            for (int32_t j = 0; j < ride.numCarsPerTrain; ++j)
+            // OPENRCT2MINI: with kMaxCarsPerTrain reduced to the RCT2 original (32),
+            // clamp at runtime since numCarsPerTrain's type is uint8_t (max 255).
+            const int32_t numCars = std::min<int32_t>(ride.numCarsPerTrain, static_cast<int32_t>(out.size()));
+            for (int32_t j = 0; j < numCars; ++j)
             {
                 const int32_t carIndex = isReversed ? (ride.numCarsPerTrain - 1 - j) : j;
 
@@ -3372,7 +3375,7 @@ namespace OpenRCT2::Ui::Windows
             auto currentValue = (widgetIndex == WIDX_MINIMUM_LENGTH) ? ride->minWaitingTime : ride->maxWaitingTime;
             char buffer[5]{};
             snprintf(buffer, std::size(buffer), "%u", currentValue);
-            WindowTextInputRawOpen(this, widgetIndex, title, STR_ENTER_VALUE, ft, buffer, 4);
+            WindowTextInputRawOpen(this, widgetIndex, title, STR_ENTER_VALUE, ft, buffer, 4, OskMode::numpad);
         }
 
         void OperatingTweakTextInput(const Ride& ride)
@@ -3405,7 +3408,7 @@ namespace OpenRCT2::Ui::Windows
             char buffer[6]{};
             snprintf(buffer, std::size(buffer), "%u", currentValue);
 
-            WindowTextInputRawOpen(this, WIDX_MODE_TWEAK, title, STR_ENTER_VALUE, ft, buffer, 4);
+            WindowTextInputRawOpen(this, WIDX_MODE_TWEAK, title, STR_ENTER_VALUE, ft, buffer, 4, OskMode::numpad);
         }
 
         void OperatingOnDropdown(WidgetIndex widgetIndex, int32_t dropdownIndex)
@@ -6573,7 +6576,7 @@ namespace OpenRCT2::Ui::Windows
                         MoneyToString(ride->price[0], _moneyInputText, kMoneyStringMaxlength, true);
                         WindowTextInputRawOpen(
                             this, WIDX_PRIMARY_PRICE, STR_ENTER_NEW_VALUE, STR_ENTER_NEW_VALUE, {}, _moneyInputText,
-                            kMoneyStringMaxlength);
+                            kMoneyStringMaxlength, OskMode::numpad);
                     }
                     break;
                 }
@@ -6587,7 +6590,7 @@ namespace OpenRCT2::Ui::Windows
                     MoneyToString(price64, _moneyInputText, kMoneyStringMaxlength, true);
                     WindowTextInputRawOpen(
                         this, WIDX_SECONDARY_PRICE, STR_ENTER_NEW_VALUE, STR_ENTER_NEW_VALUE, {}, _moneyInputText,
-                        kMoneyStringMaxlength);
+                        kMoneyStringMaxlength, OskMode::numpad);
                 }
                 break;
                 case WIDX_SECONDARY_PRICE_SAME_THROUGHOUT_PARK:

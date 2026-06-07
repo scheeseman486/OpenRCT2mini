@@ -13,6 +13,7 @@
 #include <openrct2/audio/AudioChannel.h>
 #include <openrct2/audio/AudioMixer.h>
 #include <openrct2/entity/EntityRegistry.h>
+#include <openrct2/haptic/HapticEvent.h>
 #include <openrct2/profiling/Profiling.h>
 #include <openrct2/ride/TrainManager.h>
 #include <openrct2/ride/Vehicle.h>
@@ -611,6 +612,49 @@ namespace OpenRCT2::Audio
                     vehicle->sound1_id, vehicle->sound1_volume, &vehicleSoundParams, vehicleSound->trackSound, panVol);
                 UpdateSound<SoundType::OtherNoises>(
                     vehicle->sound2_id, vehicle->sound2_volume, &vehicleSoundParams, vehicleSound->otherSound, panVol);
+
+                // OPENRCT2MINI v2.18: continuous-rumble hook (moved
+                // here from sim-side Vehicle::UpdateSound). This is
+                // where the per-channel playback rate is actually
+                // computed — we hand the same rate to the Haptic
+                // engine so its envelope phase advance scales with
+                // audio pitch and the rumble loop period tracks the
+                // vehicle's speed.
+                //
+                // Focus scope preserved: only the vehicle the player
+                // is currently following gets a rumble call, so
+                // multiple coasters in the park don't fire haptics
+                // simultaneously. Without an active viewport target,
+                // no continuous rumble fires.
+                bool isFollowed = false;
+                if (auto* main = WindowGetMain(); main != nullptr)
+                {
+                    if (main->viewportTargetSprite == vehicle->id)
+                        isFollowed = true;
+                }
+                if (isFollowed)
+                {
+                    if (vehicle->sound1_id != SoundId::null && vehicle->sound1_volume > 0)
+                    {
+                        const uint16_t freq1 = SoundFrequency<SoundType::TrackNoises>(
+                            vehicle->sound1_id, vehicleSoundParams.frequency);
+                        const float rate1 = static_cast<float>(DStoMixerRate(freq1));
+                        OpenRCT2::Haptic::updateContinuousSound(
+                            vehicle->sound1_id,
+                            static_cast<uint8_t>(std::min<int32_t>(vehicle->sound1_volume, 255)),
+                            rate1);
+                    }
+                    if (vehicle->sound2_id != SoundId::null && vehicle->sound2_volume > 0)
+                    {
+                        const uint16_t freq2 = SoundFrequency<SoundType::OtherNoises>(
+                            vehicle->sound2_id, vehicleSoundParams.frequency);
+                        const float rate2 = static_cast<float>(DStoMixerRate(freq2));
+                        OpenRCT2::Haptic::updateContinuousSound(
+                            vehicle->sound2_id,
+                            static_cast<uint8_t>(std::min<int32_t>(vehicle->sound2_volume, 255)),
+                            rate2);
+                    }
+                }
             }
         }
     }

@@ -38,7 +38,9 @@ namespace OpenRCT2::Drawing
 class InteractiveConsole
 {
 private:
-    std::atomic_flag _commandExecuting;
+    // OPENRCT2MINI: cut 33. atomic_flag::test() is C++20-only; use
+    // atomic<bool> which has supported non-mutating .load() since C++11.
+    std::atomic<bool> _commandExecuting{ false };
 
 public:
     virtual ~InteractiveConsole()
