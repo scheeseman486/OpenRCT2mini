@@ -31,8 +31,8 @@ const char gVersionInfoTag[] =
     ;
 
 // OPENRCT2MINI: lead with the fork name + fork version so users know which
-// build they're running. The upstream OpenRCT2 v0.5.0 reference is retained
-// in parentheses for context (save compat is at the OpenRCT2 v0.5.0 level).
+// build they're running. The upstream OpenRCT2 v0.5.2 reference is retained
+// in parentheses for context (save compat is at the OpenRCT2 v0.5.2 level).
 const char gVersionInfoFull[] = "OpenRCT2mini v" kOpenRCT2miniVersion
                                 " (based on " OPENRCT2_NAME " v" kOpenRCT2Version ")"
 #if defined(OPENRCT2_BRANCH) || defined(OPENRCT2_COMMIT_SHA1_SHORT) || !defined(NDEBUG)
