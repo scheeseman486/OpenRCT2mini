@@ -24,8 +24,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # efficiency. The list cross-references CMakeLists.txt find_package calls
 # and what upstream's openrct2-build:24-jammy installs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl wget file git pkg-config \
-        cmake ninja-build g++ make \
+        ca-certificates curl wget file git pkg-config gnupg \
+        ninja-build g++ make \
         libsdl2-dev libpng-dev libzip-dev libzstd-dev \
         libvorbis-dev libogg-dev libflac-dev \
         nlohmann-json3-dev \
@@ -36,6 +36,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pil \
         zip unzip xz-utils \
         patchelf \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upstream v0.5.2 raised cmake_minimum_required to 3.24; jammy ships 3.22.
+# Pull from the official Kitware apt repository.
+RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null \
+        | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg \
+    && echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main' \
+        > /etc/apt/sources.list.d/kitware.list \
+    && apt-get update && apt-get install -y --no-install-recommends cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Pin linuxdeploy to a specific continuous-tag release. Bump intentionally;

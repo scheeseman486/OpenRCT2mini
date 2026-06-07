@@ -387,7 +387,12 @@ if (CXX_WARN_SUGGEST_FINAL_METHODS)
 endif ()
 
 if (MINGW)
-   add_definitions(-fstack-protector-strong)
+   # OPENRCT2MINI: scope the GCC flag to C/C++ so it doesn't leak into the
+   # windres invocation for OpenRCT2.rc — windres rejects unknown options
+   # ("invalid option -f") and CMake's add_definitions doesn't filter by
+   # language. add_compile_options + COMPILE_LANGUAGE generator expression
+   # is the language-aware path.
+   add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-fstack-protector-strong>)
 endif ()
 
 # Include sub-projects

@@ -3571,7 +3571,12 @@ namespace OpenRCT2
 
         if (!ride->getRideTypeDescriptor().flags.has(RtdFlag::noVehicles))
         {
-            Vehicle* vehicle = PeepChooseCarFromRide(*this, *ride, carArray);
+            // OPENRCT2MINI: explicit span construction from sfl::static_vector
+            // for GCC 10 (Windows cross-build's mingw toolchain). GCC 12+ in-
+            // fers it via std::ranges; GCC 10's std::span only auto-accepts
+            // built-in arrays, std::array, and std::vector.
+            Vehicle* vehicle = PeepChooseCarFromRide(
+                *this, *ride, std::span<const uint8_t>(carArray.data(), carArray.size()));
             PeepChooseSeatFromCar(this, *ride, vehicle);
         }
         goToRideEntrance(*ride);
