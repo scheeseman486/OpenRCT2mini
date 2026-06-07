@@ -432,6 +432,13 @@ target_compile_definitions(libopenrct2 PUBLIC
         $<$<BOOL:${DISABLE_TTF}>:DISABLE_TTF>
         $<$<BOOL:${DISABLE_VERSION_CHECKER}>:DISABLE_VERSION_CHECKER>
         $<$<BOOL:${ENABLE_SCRIPTING}>:ENABLE_SCRIPTING>
+        # OPENRCT2MINI: expose the build-variant option as a preprocessor
+        # macro so target-specific gates (#ifdef OPENRCT2MINI) in C++ source
+        # actually fire. ON for the Miyoo Mini cross-build, OFF for host /
+        # AppImage / Windows builds. Without this, sites like Ui.cpp's
+        # mallopt(M_ARENA_MAX, 2) and RideAudio.cpp's cap-of-3 silently
+        # behave like the OFF path on every target, including Miyoo.
+        $<$<BOOL:${OPENRCT2MINI}>:OPENRCT2MINI>
 )
 
 target_compile_options(libopenrct2 PUBLIC $<$<BOOL:${ENABLE_ASAN}>:-fsanitize=address>)

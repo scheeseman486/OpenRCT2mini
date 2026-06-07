@@ -31,6 +31,7 @@ using namespace OpenRCT2::Audio;
 
 namespace OpenRCT2::RideAudio
 {
+#ifdef OPENRCT2MINI
     // OPENRCT2MINI: cut from 32 → 3. With software mixing + on-demand
     // disk streaming on Miyoo Mini hardware, ~4 concurrent music tracks
     // produced choppy audio in user testing on dense parks. The upstream
@@ -40,6 +41,10 @@ namespace OpenRCT2::RideAudio
     // existing per-ride volume formula (CalculateVolume / newVolume in
     // UpdateMusicInstance) already encodes "distance from screen-center",
     // so it's a free priority key.
+    //
+    // Gated to the Miyoo Mini target only; host / AppImage / Windows
+    // builds get upstream's 32-channel + FCFS behaviour, since the cap
+    // is purely a hardware concession to the device's mixer.
     constexpr size_t kMaxRideMusicChannels = 3;
 
     // OPENRCT2MINI: eviction hysteresis. Volume is a int16 in the rough
@@ -58,6 +63,10 @@ namespace OpenRCT2::RideAudio
     // frame's enumeration, so the loudest 3 still end up in the set
     // regardless of enumeration order.
     constexpr int16_t kMusicEvictionHysteresis = 200;
+#else
+    // Upstream default: 32 concurrent ride music channels, FCFS allocation.
+    constexpr size_t kMaxRideMusicChannels = 32;
+#endif
 
     /**
      * Represents an audio channel to play a particular ride's music track.
@@ -341,19 +350,25 @@ namespace OpenRCT2::RideAudio
     {
         if (offset < length)
         {
-            // OPENRCT2MINI: replaced upstream's FCFS rule with
-            // priority-based eviction. Volume here is the per-frame
-            // loudness number from UpdateMusicInstance — a negative
-            // int16 where higher (closer to zero) means closer to the
-            // viewport centre. When the instance list is at cap, drop
-            // the quietest current instance if this one would be
-            // louder. Each frame _musicInstances is cleared by
-            // ClearAllViewportInstances() before rides re-register, so
-            // by the time UpdateMusicChannels runs, _musicInstances
-            // holds exactly the loudest N rides — and the existing
+            // OPENRCT2MINI: on Miyoo (kMaxRideMusicChannels == 3),
+            // replaced upstream's FCFS rule with priority-based
+            // eviction. Volume here is the per-frame loudness number
+            // from UpdateMusicInstance — a negative int16 where higher
+            // (closer to zero) means closer to the viewport centre.
+            // When the instance list is at cap, drop the quietest
+            // current instance if this one would be louder. Each frame
+            // _musicInstances is cleared by ClearAllViewportInstances()
+            // before rides re-register, so by the time
+            // UpdateMusicChannels runs, _musicInstances holds exactly
+            // the loudest N rides — and the existing
             // StopInactiveRideMusicChannels / channel-allocation flow
             // does the rest (tears down channels for evicted rides,
             // creates channels for newly-promoted ones).
+            //
+            // On host (kMaxRideMusicChannels == 32), 32 simultaneous
+            // ride music tracks is well within the desktop mixer's
+            // budget so we fall back to upstream's FCFS: if full, the
+            // ride simply doesn't get a channel this frame.
             if (_musicInstances.size() < kMaxRideMusicChannels)
             {
                 auto& instance = _musicInstances.emplace_back();
@@ -364,6 +379,7 @@ namespace OpenRCT2::RideAudio
                 instance.Pan = pan;
                 instance.Frequency = sampleRate;
             }
+#ifdef OPENRCT2MINI
             else
             {
                 auto quietest = std::min_element(
@@ -397,6 +413,7 @@ namespace OpenRCT2::RideAudio
                     }
                 }
             }
+#endif
             ride.musicPosition = static_cast<uint32_t>(offset);
         }
         else
