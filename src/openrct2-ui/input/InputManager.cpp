@@ -5477,7 +5477,7 @@ void InputManager::process()
     // (with internal hysteresis) to UiContext::SetControllerLED.
     // Submits one trailing (0,0,0) sweep on flash expiry, then
     // idles silently until the next News::AddItemToQueue call.
-    Haptic::tickEngine(nowMs);
+    Led::tickEngine(nowMs);
 
     // OPENRCT2MINI active-window-emphasis plan §4.3: release pass for
     // the cycle-window highlight latch. Runs AFTER processEvents()
