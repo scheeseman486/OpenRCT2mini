@@ -941,7 +941,7 @@ namespace
                     // Close without selecting. _inputState is reset
                     // to Normal so the next click starts clean.
                     OpenRCT2::Ui::Windows::WindowDropdownClose();
-                    OpenRCT2::_inputState = OpenRCT2::InputState::Normal;
+                    OpenRCT2::_inputState = OpenRCT2::InputState::normal;
                     if (OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::widgetPressed))
                     {
                         OpenRCT2::gInputFlags.unset(OpenRCT2::InputFlag::widgetPressed);
@@ -6035,7 +6035,7 @@ bool InputManager::shouldSuppressAction(std::string_view shortcutId, const Input
             && windowMgr->FindByClass(WindowClass::dropdown) != nullptr)
         {
             OpenRCT2::Ui::Windows::WindowDropdownClose();
-            OpenRCT2::_inputState = OpenRCT2::InputState::Normal;
+            OpenRCT2::_inputState = OpenRCT2::InputState::normal;
             if (OpenRCT2::gInputFlags.has(OpenRCT2::InputFlag::widgetPressed))
                 OpenRCT2::gInputFlags.unset(OpenRCT2::InputFlag::widgetPressed);
             // Pop focus back to the widget that opened the dropdown,
@@ -6111,7 +6111,7 @@ void InputManager::handleViewScrolling()
     // Mouse edge scrolling
     if (Config::Get().general.edgeScrolling)
     {
-        if (InputGetState() != InputState::Normal)
+        if (InputGetState() != InputState::normal)
             return;
 
         if (isModifierKeyPressed(ModifierKey::shift) || isModifierKeyPressed(ModifierKey::ctrl))
@@ -6173,7 +6173,7 @@ void InputManager::handleModifiers()
             _modifierKeyState |= EnumValue(ModifierKey::shift);
     }
 
-    if (Config::Get().general.virtualFloorStyle != VirtualFloorStyles::Off)
+    if (Config::Get().general.virtualFloorStyle != VirtualFloorStyles::off)
     {
         // OPENRCT2MINI grid-cursor-plan §17 (2026-05-23): floor
         // visibility gated to "while zLock (PAD Y / Ctrl) is held"

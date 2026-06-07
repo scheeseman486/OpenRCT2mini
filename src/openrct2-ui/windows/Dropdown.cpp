@@ -84,7 +84,7 @@ namespace OpenRCT2::Ui::Windows
             // down press flips this to focus until the next real
             // SDL_MOUSEMOTION arrives.
             gDropdown.navigationSource = Dropdown::NavigationSource::cursor;
-            InputSetState(InputState::DropdownActive);
+            InputSetState(InputState::dropdownActive);
         }
 
         static int32_t GetDefaultRowHeight()
@@ -768,7 +768,7 @@ namespace OpenRCT2::Ui::Windows
         // rightPress block sets _inputState = Normal and clears
         // widgetPressed; replicate that here so the next click
         // starts from a clean slate.
-        _inputState = InputState::Normal;
+        _inputState = InputState::normal;
         if (gInputFlags.has(InputFlag::widgetPressed))
         {
             gInputFlags.unset(InputFlag::widgetPressed);
