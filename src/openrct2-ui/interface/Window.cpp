@@ -564,6 +564,9 @@ namespace OpenRCT2::Ui::Windows
     static bool _usingWidgetTextBox = false;
     static TextInputSession* _textInput;
     static WidgetIdentifier _currentTextBox = { { WindowClass::null, 0 }, 0 };
+    // OPENRCT2MINI gamepad-plan 1.6c.6: token from pushModalHooks in
+    // WindowStartTextbox, passed to popModalHooks in WindowCancelTextbox.
+    static OpenRCT2::Ui::InputManager::ModalHooksToken _textBoxModalHooksToken = 0;
 
     WindowBase* WindowGetListening()
     {
@@ -591,7 +594,7 @@ namespace OpenRCT2::Ui::Windows
     }
 
     void WindowStartTextbox(
-        const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength, OskMode /*oskMode*/)
+        const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength, OskMode oskMode)
     {
         if (_usingWidgetTextBox)
             WindowCancelTextbox();
@@ -608,12 +611,58 @@ namespace OpenRCT2::Ui::Windows
         _textBoxInput = existingText;
 
         _textInput = ContextStartTextInput(_textBoxInput, maxLength);
+
+        // OPENRCT2MINI gamepad-plan 1.6c.6: route kInterfaceDismiss /
+        // kInterfaceConfirm to WindowCancelTextbox (which commits the
+        // current edit and ends the in-place textbox session). Both
+        // dismiss and confirm collapse to the same call site because
+        // the existing textbox model has no separate "discard
+        // typed-but-uncommitted text" path — pressing Escape today
+        // does nothing for textbox edits, while pressing Return
+        // commits via TextComposition's hardcoded SDLK_RETURN switch.
+        // After 1.6c.6 / 1.6c.7 both keys flow through this hook
+        // instead. Stack-based, so the OSK that OskOpenForTextbox
+        // spawns below installs ITS hooks on top — OSK Commit /
+        // Cancel handles the typed-buffer state and ends the
+        // textbox session itself; ours fires only when the OSK has
+        // been dismissed but the textbox session is still active.
+        _textBoxModalHooksToken = OpenRCT2::Ui::GetInputManager().pushModalHooks({
+            /*dismiss=*/[](const OpenRCT2::Ui::InputEvent&) {
+                WindowCancelTextbox();
+                return true;
+            },
+            /*confirm=*/[](const OpenRCT2::Ui::InputEvent&) {
+                WindowCancelTextbox();
+                return true;
+            },
+        });
+
+        // OPENRCT2MINI: spawn the on-screen keyboard. The OSK has its
+        // own buffer; on Start it fires the parent's onTextInput and
+        // ends this textbox session.
+        // osk-overhaul §8: only spawn when the user has the on-screen
+        // keyboard enabled. When off, the ContextStartTextInput call
+        // above keeps SDL_TEXTINPUT flowing into TextComposition, so
+        // a hardware keyboard can drive the textbox directly.
+        if (Config::Get().interface.onScreenKeyboard)
+        {
+            OskOpenForTextbox(
+                const_cast<WindowBase*>(&callW), callWidget, existingText, static_cast<size_t>(maxLength), oskMode);
+        }
     }
 
     void WindowCancelTextbox()
     {
         if (_usingWidgetTextBox)
         {
+            // OPENRCT2MINI gamepad-plan 1.6c.6: pop the textbox modal
+            // hooks. Done first so a re-entrant call (e.g. via OSK
+            // Cancel which itself calls WindowCancelTextbox) idem-
+            // potently leaves the stack with no stale slot. Token is
+            // then reset so the next Start can push fresh.
+            OpenRCT2::Ui::GetInputManager().popModalHooks(_textBoxModalHooksToken);
+            _textBoxModalHooksToken = 0;
+
             auto* windowMgr = GetWindowManager();
             WindowBase* w = windowMgr->FindByNumber(_currentTextBox.window.classification, _currentTextBox.window.number);
             _currentTextBox.window.classification = WindowClass::null;
@@ -625,6 +674,10 @@ namespace OpenRCT2::Ui::Windows
                 windowMgr->InvalidateWidget(*w, _currentTextBox.widgetIndex);
             }
             _currentTextBox.widgetIndex = kWidgetIndexNull;
+            // OPENRCT2MINI: tear down the OSK if it's up. CloseByClass
+            // is idempotent — safe even if our own Commit just called
+            // WindowCancelTextbox after OSK::close().
+            OskClose();
         }
     }
 
