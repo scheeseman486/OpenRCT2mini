@@ -2145,10 +2145,10 @@ namespace OpenRCT2::Ui::Windows
                 {
                     do
                     {
-                        pathElement = el->AsPath();
+                        pathElement = el->asPath();
                         if (pathElement != nullptr)
                             break;
-                    } while (!(el++)->IsLastForTile());
+                    } while (!(el++)->isLastForTile());
                 }
 
                 // Highlight stays at the cursor tile (full-tile —
@@ -2173,7 +2173,7 @@ namespace OpenRCT2::Ui::Windows
                     return;
                 }
 
-                const int32_t pathZ = pathElement->GetBaseZ();
+                const int32_t pathZ = pathElement->getBaseZ();
 
                 // No-change shortcut — matches the mouse path's
                 // simpler check (no quadrant / rotation to compare).
@@ -2213,10 +2213,10 @@ namespace OpenRCT2::Ui::Windows
                 {
                     do
                     {
-                        pathElement = el->AsPath();
+                        pathElement = el->asPath();
                         if (pathElement != nullptr)
                             break;
-                    } while (!(el++)->IsLastForTile());
+                    } while (!(el++)->isLastForTile());
                 }
 
                 gMapSelectFlags.set(MapSelectFlag::enable);
@@ -2245,7 +2245,7 @@ namespace OpenRCT2::Ui::Windows
                 rotation -= GetCurrentRotation();
                 rotation &= 0x3;
 
-                int32_t z = pathElement->GetBaseZ();
+                int32_t z = pathElement->getBaseZ();
                 if (pathElement->IsSloped()
                     && rotation != DirectionReverse(pathElement->GetSlopeDirection()))
                 {
@@ -2307,7 +2307,7 @@ namespace OpenRCT2::Ui::Windows
                     auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
                     if (surfaceElement != nullptr)
                     {
-                        const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+                        const int16_t surfZ = surfaceElement->getBaseZ() & 0xFFF0;
                         constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
                         placeZ = std::clamp<int16_t>(
                             surfZ + gSceneryShiftPressZOffset, 16, kZMax);
@@ -2371,7 +2371,7 @@ namespace OpenRCT2::Ui::Windows
                     auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
                     if (surfaceElement != nullptr)
                     {
-                        const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+                        const int16_t surfZ = surfaceElement->getBaseZ() & 0xFFF0;
                         constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
                         placeZ = std::clamp<int16_t>(
                             surfZ + gSceneryShiftPressZOffset, 16, kZMax);
@@ -2459,7 +2459,7 @@ namespace OpenRCT2::Ui::Windows
                 auto* surfaceElement = MapGetSurfaceElementAt(mapTile);
                 if (surfaceElement != nullptr)
                 {
-                    const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+                    const int16_t surfZ = surfaceElement->getBaseZ() & 0xFFF0;
                     constexpr int16_t kZMax = (255 - 4) * kCoordsZStep;
                     gSceneryPlaceZ = std::clamp<int16_t>(
                         surfZ + gSceneryShiftPressZOffset, 16, kZMax);
@@ -2752,7 +2752,7 @@ namespace OpenRCT2::Ui::Windows
             auto* surfaceElement = MapGetSurfaceElementAt(tile);
             if (surfaceElement == nullptr)
                 return false;
-            const int16_t surfZ = surfaceElement->GetBaseZ() & 0xFFF0;
+            const int16_t surfZ = surfaceElement->getBaseZ() & 0xFFF0;
 
             uint8_t edge = gWindowSceneryRotation;
             edge -= GetCurrentRotation();
@@ -4244,15 +4244,15 @@ namespace OpenRCT2::Ui::Windows
             {
                 do
                 {
-                    pathElement = el->AsPath();
+                    pathElement = el->asPath();
                     if (pathElement != nullptr)
                         break;
-                } while (!(el++)->IsLastForTile());
+                } while (!(el++)->isLastForTile());
             }
             if (pathElement == nullptr)
                 return;
 
-            const int32_t pathZ = pathElement->GetBaseZ();
+            const int32_t pathZ = pathElement->getBaseZ();
             auto footpathAdditionPlaceAction = GameActions::FootpathAdditionPlaceAction(
                 { tile, pathZ }, selection.EntryIndex);
             footpathAdditionPlaceAction.SetCallback(
@@ -4282,10 +4282,10 @@ namespace OpenRCT2::Ui::Windows
             {
                 do
                 {
-                    pathElement = el->AsPath();
+                    pathElement = el->asPath();
                     if (pathElement != nullptr)
                         break;
-                } while (!(el++)->IsLastForTile());
+                } while (!(el++)->isLastForTile());
             }
             if (pathElement == nullptr)
                 return;
@@ -4299,7 +4299,7 @@ namespace OpenRCT2::Ui::Windows
             rotation -= GetCurrentRotation();
             rotation &= 0x3;
 
-            int32_t z = pathElement->GetBaseZ();
+            int32_t z = pathElement->getBaseZ();
             if (pathElement->IsSloped() && rotation != DirectionReverse(pathElement->GetSlopeDirection()))
                 z += (2 * kCoordsZStep);
 
@@ -4545,9 +4545,9 @@ namespace OpenRCT2::Ui::Windows
             return 0;
         do
         {
-            if (auto* path = el->AsPath(); path != nullptr)
+            if (auto* path = el->asPath(); path != nullptr)
                 return path->GetEdges() & 0x0F;
-        } while (!(el++)->IsLastForTile());
+        } while (!(el++)->isLastForTile());
         return 0;
     }
 

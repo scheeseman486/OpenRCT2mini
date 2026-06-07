@@ -312,7 +312,7 @@ namespace OpenRCT2::Ui::Windows
                 if (shortcutManager.isCaptureChordTimerArmed())
                 {
                     const uint32_t msRemaining = shortcutManager.getCaptureCountdownMsRemaining(SDL_GetTicks());
-                    char countdown[32];
+                    char countdown[64];
                     std::snprintf(
                         countdown, sizeof(countdown), "Hold %us for HOLD binding...",
                         static_cast<unsigned>((msRemaining + 999) / 1000));

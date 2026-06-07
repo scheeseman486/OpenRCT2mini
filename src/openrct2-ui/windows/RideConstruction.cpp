@@ -2745,7 +2745,7 @@ namespace OpenRCT2::Ui::Windows
                 gRideEntranceExitPlaceStationIndex, gRideEntranceExitPlaceType == ENTRANCE_TYPE_RIDE_EXIT);
 
             rideEntranceExitPlaceAction.SetCallback(
-                [=](const GameActions::GameAction* ga, const GameActions::Result* result) {
+                [=, this](const GameActions::GameAction* ga, const GameActions::Result* result) {
                     if (result->error != GameActions::Status::ok)
                         return;
 
@@ -5680,7 +5680,7 @@ namespace OpenRCT2::Ui::Windows
     // a visible Z change.
     //
     // Seed: floor2(MapGetHighestZ, 16) matches the mouse path's alignment
-    // at line 3152 (mapZ = floor2(surfaceElement->GetBaseZ(), 16)).
+    // at line 3152 (mapZ = floor2(surfaceElement->getBaseZ(), 16)).
     //
     // _trackPlaceZ == 0 is a sentinel that ShowGhostAtTile treats as
     // "follow ground" (line 5286-5288). We clamp to [kLandHeightStep,
@@ -5795,11 +5795,11 @@ namespace OpenRCT2::Ui::Windows
                 continue;
             do
             {
-                if (tileElement->GetType() != TileElementType::Track)
+                if (tileElement->getType() != TileElementType::Track)
                     continue;
-                if (tileElement->GetBaseZ() != stationBaseZ)
+                if (tileElement->getBaseZ() != stationBaseZ)
                     continue;
-                auto* trackElement = tileElement->AsTrack();
+                auto* trackElement = tileElement->asTrack();
                 if (trackElement->GetRideIndex() != gRideEntranceExitPlaceRideIndex)
                     continue;
                 if (trackElement->GetTrackType() == TrackElemType::maze)
@@ -5807,13 +5807,13 @@ namespace OpenRCT2::Ui::Windows
                 if (trackElement->GetStationIndex() != gRideEntranceExitPlaceStationIndex)
                     continue;
                 Direction relativeDirection
-                    = (DirectionReverse(entranceExitCoords.direction) - tileElement->GetDirection()) & 3;
+                    = (DirectionReverse(entranceExitCoords.direction) - tileElement->getDirection()) & 3;
                 const auto& ted = GetTrackElementDescriptor(trackElement->GetTrackType());
                 auto connectionSides
                     = ted.sequenceData.sequences[trackElement->GetSequenceIndex()].getEntranceConnectionSides();
                 if (connectionSides & (1 << relativeDirection))
                     return true;
-            } while (!(tileElement++)->IsLastForTile());
+            } while (!(tileElement++)->isLastForTile());
         }
         return false;
     }
@@ -5865,11 +5865,11 @@ namespace OpenRCT2::Ui::Windows
                 continue;
             do
             {
-                if (tileElement->GetType() != TileElementType::Track)
+                if (tileElement->getType() != TileElementType::Track)
                     continue;
-                if (tileElement->GetBaseZ() != stationBaseZ)
+                if (tileElement->getBaseZ() != stationBaseZ)
                     continue;
-                auto* trackElement = tileElement->AsTrack();
+                auto* trackElement = tileElement->asTrack();
                 if (trackElement->GetRideIndex() != gRideEntranceExitPlaceRideIndex)
                     continue;
                 bool isMaze = (trackElement->GetTrackType() == TrackElemType::maze);
@@ -5880,7 +5880,7 @@ namespace OpenRCT2::Ui::Windows
                 else
                 {
                     Direction relativeDirection
-                        = (DirectionReverse(entranceExitCoords.direction) - tileElement->GetDirection()) & 3;
+                        = (DirectionReverse(entranceExitCoords.direction) - tileElement->getDirection()) & 3;
                     const auto& ted = GetTrackElementDescriptor(trackElement->GetTrackType());
                     auto connectionSides
                         = ted.sequenceData.sequences[trackElement->GetSequenceIndex()].getEntranceConnectionSides();
@@ -5915,7 +5915,7 @@ namespace OpenRCT2::Ui::Windows
                     VirtualFloorSetHeight(ghostCoords.z);
                 }
                 return true;
-            } while (!(tileElement++)->IsLastForTile());
+            } while (!(tileElement++)->isLastForTile());
         }
 
         gRideEntranceExitPlaceDirection = kInvalidDirection;

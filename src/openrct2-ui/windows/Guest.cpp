@@ -1972,7 +1972,7 @@ namespace OpenRCT2::Ui::Windows
     // WindowClass::peep and the per-window `number` field stores the
     // peep's entity ID). Computes drop Z from the surface element at
     // the cursor tile, mirroring the mouse path's
-    // `tileElement->GetBaseZ()` at Guest.cpp:1021 / Staff.cpp:720.
+    // `tileElement->getBaseZ()` at Guest.cpp:1021 / Staff.cpp:720.
     // The Place action's success callback fires `ToolCancel()` which
     // triggers each window's `onToolAbort` — that's already a no-op
     // because the Cancel action checks against the peep's current
@@ -1999,13 +1999,12 @@ namespace OpenRCT2::Ui::Windows
         if (surface == nullptr)
             return;
         const auto destCoords = tile.ToCoordsXY();
-        const auto baseZ = surface->GetBaseZ();
-        GameActions::PeepPickupAction pickupAction{
-            GameActions::PeepPickupType::Place,
+        const auto baseZ = surface->getBaseZ();
+        GameActions::PeepPickupAction pickupAction(
+            GameActions::PeepPickupType::place,
             EntityId::FromUnderlying(w->number),
             CoordsXYZ{ destCoords, baseZ },
-            Network::GetCurrentPlayerId(),
-        };
+            Network::GetCurrentPlayerId());
         pickupAction.SetCallback([](const GameActions::GameAction*, const GameActions::Result* result) {
             if (result->error != GameActions::Status::ok)
                 return;
@@ -2077,7 +2076,7 @@ namespace OpenRCT2::Ui::Windows
         // the cursor). Reverting to mouse-mode geometry: peep at
         // surface Z, same tiny release jump as mouse mode, but
         // the grid → mouse handoff is seamless.
-        const int32_t pickedZ = surface->GetBaseZ();
+        const int32_t pickedZ = surface->getBaseZ();
 
         auto* mainWindow = WindowGetMain();
         if (mainWindow == nullptr || mainWindow->viewport == nullptr)
@@ -2103,7 +2102,7 @@ namespace OpenRCT2::Ui::Windows
         const auto& pickupAnim = animObj->GetPeepAnimation(peep->AnimationGroup, PeepAnimationType::hanging);
         const auto frameSlot = static_cast<size_t>(w->pickedPeepFrame >> 2);
         uint32_t baseImageId;
-        if (peep->Is<Staff>())
+        if (peep->is<Staff>())
         {
             const auto& offsets = pickupAnim.frameOffsets;
             if (offsets.empty())

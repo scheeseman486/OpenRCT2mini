@@ -210,6 +210,10 @@ namespace OpenRCT2::Ui
         {
             return false;
         }
+
+        void RumbleControllers(float, float, uint32_t) override {}
+        void SetControllerLED(uint8_t, uint8_t, uint8_t) override {}
+        bool ControllerHasLED() override { return false; }
     };
 
     std::unique_ptr<IUiContext> CreateDummyUiContext()

@@ -50,6 +50,16 @@ extern bool gOpenRCT2SilentBreakpad;
 extern u8string gSilentRecordingName;
 extern bool gSilentReplays;
 
+// OPENRCT2MINI defaults-export: when non-empty (set by the --dump-defaults
+// CLI flag), main() should bootstrap the three defaults-producing systems
+// (Config / ShortcutManager / Haptic), serialise each one's built-in
+// defaults to <dir>/{config.ini, shortcuts.json, rumble.json}, and exit
+// instead of launching the game. Used at packaging time to capture the
+// per-build seeds that get embedded into the binary in P3.
+// Lives here (not in the openrct2 lib that owns RootCommands.cpp)
+// because ShortcutManager is openrct2-ui code.
+extern u8string gDumpDefaultsPath;
+
 #ifndef DISABLE_NETWORK
 namespace OpenRCT2::Network
 {

@@ -118,20 +118,22 @@ namespace OpenRCT2
         int16_t right{};
         int16_t top{};
         int16_t bottom{};
-        // OPENRCT2MINI: cut 35 — restored the union layout the renderer expects.
-        // Cut 33 had broken this by converting to plain fields, which silently
-        // dropped the bit-pattern equivalence between content/image/text/string
-        // — the Options-menu renderer reads widget.text but the makeWidget
-        // overload had written to widget.content, so text was 0 and labels
-        // didn't draw. Union restored; the C++17 active-member-change problem
-        // is solved instead by dropping constexpr from makeWidget (consumer
-        // arrays move from `static constexpr auto` to `static const auto`).
-        // `content` is the default-init member; bit-pattern equivalence makes
-        // every union member readable regardless of which one was written.
+        // OPENRCT2MINI: cut 35 / v0.5.2 merge — use upstream's union layout
+        // where `image{}` is the default-active member. This makes the union
+        // constexpr-default-constructible (ImageId has a constexpr ctor) and
+        // lets makeWidget overloads that assign to widget.image keep `image`
+        // as the active member, satisfying C++20 constexpr eval. The renderer
+        // still reads via widget.text / widget.string for non-image widgets;
+        // bit-pattern equivalence makes this work in non-constexpr (runtime)
+        // contexts. Cut 35's original Options-menu rendering bug was that the
+        // makeWidget overload wrote `content` while the renderer read `text` —
+        // upstream's overloads now write through `image`/`text`/`string`
+        // directly, so the bit pattern is correct regardless of which member
+        // the renderer reads through.
         union
         {
-            uint32_t content{};
-            ImageId image;
+            uint32_t content;
+            ImageId image{};
             StringId text;
             const utf8* string;
         };

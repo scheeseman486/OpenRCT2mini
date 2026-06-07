@@ -62,6 +62,10 @@ namespace OpenRCT2
     static u8string _rct1DataPath = {};
     static u8string _rct2DataPath = {};
     static bool _silentBreakpad = false;
+    // OPENRCT2MINI defaults-export: target directory for --dump-defaults.
+    // Carried over to gDumpDefaultsPath in HandleCommandDefault.
+    // Non-empty → main() runs the dump path instead of booting the game.
+    static u8string _dumpDefaultsPath = {};
 
     // clang-format off
     static constexpr CommandLineOptionDefinition kStandardOptions[]
@@ -86,6 +90,12 @@ namespace OpenRCT2
     #ifdef USE_BREAKPAD
         { CMDLINE_TYPE_SWITCH,  &_silentBreakpad,  kNAC, "silent-breakpad",   "make breakpad crash reporting silent"                       },
     #endif // USE_BREAKPAD
+        // OPENRCT2MINI defaults-export: dump current in-source defaults
+        // for Config / Shortcuts / Rumble to <dir>/{config.ini,
+        // shortcuts.json, rumble.json} and exit before booting the game.
+        // Used at packaging time to capture per-build seed files that
+        // are then embedded into the binary via EmbedFileAsArray.
+        { CMDLINE_TYPE_STRING,  &_dumpDefaultsPath, kNAC, "dump-defaults",      "dump current in-source defaults (config.ini / shortcuts.json / rumble.json) to a directory and exit"   },
         kOptionTableEnd
     };
 
@@ -230,6 +240,15 @@ namespace OpenRCT2
         {
             gSilentReplays = _silentReplays;
         }
+
+        // OPENRCT2MINI defaults-export: stash the dump target. The
+        // actual dump runs from Ui.cpp::main after CommandLineRun
+        // returns (it needs ShortcutManager, which lives in the
+        // openrct2-ui library — out of reach from this TU). Returning
+        // EXITCODE_CONTINUE here is intentional: main flips early to
+        // the dump path on seeing this non-empty.
+        if (!_dumpDefaultsPath.empty())
+            gDumpDefaultsPath = Path::GetAbsolute(_dumpDefaultsPath);
 
         return result;
     }

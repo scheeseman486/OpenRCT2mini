@@ -514,4 +514,13 @@ namespace OpenRCT2::Audio
         return static_cast<double>(frequency) / 22050;
     }
 
+    // OPENRCT2MINI v0.5.2 merge stub: RumbleEditor uses this to render
+    // waveform previews. Returning false leaves the editor with a blank
+    // waveform; full impl restored separately.
+    bool getPcmForSoundId(SoundId /*soundId*/, std::vector<uint8_t>& /*outBytes*/, int32_t& outBytesPerSec)
+    {
+        outBytesPerSec = 0;
+        return false;
+    }
+
 } // namespace OpenRCT2::Audio

@@ -19,6 +19,9 @@ u8string gCustomRCT1DataPath = {};
 u8string gCustomRCT2DataPath = {};
 u8string gCustomPassword = {};
 u8string gSilentRecordingName = {};
+// OPENRCT2MINI defaults-export: set by --dump-defaults CLI flag.
+// See OpenRCT2.h for the full rationale.
+u8string gDumpDefaultsPath = {};
 
 bool gOpenRCT2Headless = false;
 bool gOpenRCT2NoGraphics = false;

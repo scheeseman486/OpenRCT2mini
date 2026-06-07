@@ -342,6 +342,15 @@ namespace OpenRCT2::Ui
         widgetDraw(rt, *this, widgetIndex);
     }
 
+    void Window::drawShadedChrome(RenderTarget& rt)
+    {
+        // OPENRCT2MINI W5: WindowDrawWidgets skips widgets that have
+        // WidgetFlag::shadeHidden, which resizeFrame() sets on every body
+        // widget when isShaded is true. So this single call paints frame +
+        // caption + closeBox + shadeBox and nothing else.
+        Windows::WindowDrawWidgets(*this, rt);
+    }
+
     void Window::initScrollWidgets()
     {
         Windows::WindowInitScrollWidgets(*this);
@@ -555,7 +564,8 @@ namespace OpenRCT2::Ui::Windows
         return window.classification;
     }
 
-    void WindowStartTextbox(const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength)
+    void WindowStartTextbox(
+        const WindowBase& callW, WidgetIndex callWidget, u8string existingText, int32_t maxLength, OskMode /*oskMode*/)
     {
         if (_usingWidgetTextBox)
             WindowCancelTextbox();
@@ -1094,5 +1104,33 @@ namespace OpenRCT2::Ui::Windows
             WindowZoomIn(*mainWindow, atCursor);
         else
             WindowZoomOut(*mainWindow, atCursor);
+    }
+
+    // OPENRCT2MINI mouse-input refactor: context-sensitive wheel
+    // dispatch. Mirrors the cursor-position dispatch tree that
+    // WindowAllWheelInput uses for the per-frame _cursorState.wheel
+    // accumulator. We only ZOOM when the cursor is over a viewport-
+    // class window (mainWindow / viewport). For windows that have a
+    // scroll widget under the cursor, we no-op and defer to the
+    // existing wheel feed.
+    void FireZoomOrScrollWheel(bool zoomIn)
+    {
+        if (gInputFlags.has(InputFlag::rightMousePressed))
+            return;
+
+        auto* windowMgr = GetWindowManager();
+        if (windowMgr == nullptr)
+            return;
+        auto cursorState = ContextGetCursorState();
+        WindowBase* w = windowMgr->FindFromPoint(cursorState->position);
+        if (w == nullptr)
+            return;
+
+        if (w->classification == WindowClass::mainWindow || w->classification == WindowClass::viewport)
+        {
+            MainWindowZoom(zoomIn, /*atCursor=*/true);
+            return;
+        }
+        // No-op so the _cursorState.wheel feed handles scroll widgets.
     }
 } // namespace OpenRCT2::Ui::Windows

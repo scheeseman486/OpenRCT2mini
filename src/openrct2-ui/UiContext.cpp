@@ -709,7 +709,7 @@ public:
     // brightness scaler internally so callers don't need to know the
     // config value. Globally gated by gamepadLedEnabled — when off
     // the call is a complete no-op, and the LED keeps whatever colour
-    // it had (Led::tickEngine will issue a 0,0,0 sweep when it next
+    // it had (Haptic::tickEngine will issue a 0,0,0 sweep when it next
     // observes the enabled flag false → clear).
     //
     // Pads SDL reports as having no LED (Xbox, most generic USB pads,
@@ -741,7 +741,7 @@ public:
     }
 
     // OPENRCT2MINI gamepad-plan 1.13: capability probe. Returns true
-    // if any currently-connected pad reports an LED. Led::tickEngine
+    // if any currently-connected pad reports an LED. Haptic::tickEngine
     // uses this to short-circuit the per-frame fade evaluation on
     // setups where no LED is present (host with Xbox pad, the Mini
     // pre-Phase-2, headless test runs) — saves a multiply + branch

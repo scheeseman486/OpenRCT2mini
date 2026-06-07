@@ -363,7 +363,7 @@ namespace OpenRCT2::Ui::Windows
                 entranceOrExitCoords, DirectionReverse(entranceOrExitCoords.direction), rideIndex,
                 gRideEntranceExitPlaceStationIndex, gRideEntranceExitPlaceType == ENTRANCE_TYPE_RIDE_EXIT);
 
-            rideEntranceExitPlaceAction.SetCallback([=](
+            rideEntranceExitPlaceAction.SetCallback([=, this](
                                                         const GameActions::GameAction* ga, const GameActions::Result* result) {
                 if (result->error != GameActions::Status::ok)
                     return;

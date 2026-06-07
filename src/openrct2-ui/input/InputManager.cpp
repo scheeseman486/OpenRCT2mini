@@ -256,23 +256,23 @@ namespace
             auto& console = GetInGameConsole();
             if (!console.IsOpen())
                 return;
-            auto input = ConsoleInput::None;
+            auto input = ConsoleInput::none;
             switch (e.button)
             {
                 case SDLK_UP:
-                    input = ConsoleInput::HistoryPrevious;
+                    input = ConsoleInput::historyPrevious;
                     break;
                 case SDLK_DOWN:
-                    input = ConsoleInput::HistoryNext;
+                    input = ConsoleInput::historyNext;
                     break;
                 case SDLK_PAGEUP:
-                    input = ConsoleInput::ScrollPrevious;
+                    input = ConsoleInput::scrollPrevious;
                     break;
                 case SDLK_PAGEDOWN:
-                    input = ConsoleInput::ScrollNext;
+                    input = ConsoleInput::scrollNext;
                     break;
             }
-            if (input != ConsoleInput::None)
+            if (input != ConsoleInput::none)
                 console.Input(input);
         }
     };
@@ -2956,7 +2956,7 @@ namespace
     // (admin/debug "pick up a guest/staff and drop them elsewhere"
     // tool). Per-tile contract:
     //   PAD A → drop the picked-up peep at the cursor tile. Z comes
-    //           from the surface element's GetBaseZ() at that tile,
+    //           from the surface element's getBaseZ() at that tile,
     //           matching the mouse path (Guest.cpp:1021,
     //           Staff.cpp:720). The Place action's success callback
     //           fires ToolCancel() which clears the tool arm.
@@ -3359,7 +3359,7 @@ namespace
             // OPENRCT2MINI ride-construction-grid-cursor-plan §16
             // (2026-05-29): Z-shift is a Consumed no-op in entranceExit,
             // selected, and none states. Entrance/exit Z is locked to
-            // the station base (RideConstruction.cpp's station.GetBaseZ
+            // the station base (RideConstruction.cpp's station.getBaseZ
             // path), selected just navigates already-placed pieces, and
             // none has no placement at all — bumping gridCursor().raise/
             // lowerZ in those states moved the cursor visual to a Z
@@ -5477,7 +5477,7 @@ void InputManager::process()
     // (with internal hysteresis) to UiContext::SetControllerLED.
     // Submits one trailing (0,0,0) sweep on flash expiry, then
     // idles silently until the next News::AddItemToQueue call.
-    Led::tickEngine(nowMs);
+    Haptic::tickEngine(nowMs);
 
     // OPENRCT2MINI active-window-emphasis plan §4.3: release pass for
     // the cycle-window highlight latch. Runs AFTER processEvents()
@@ -6300,20 +6300,20 @@ void InputManager::process(const InputEvent& e)
     // Chat lives in libopenrct2 and can't directly use the ModalHooks
     // push/pop pattern (cross-library boundary). Handle inline here so
     // both keyboard ESC/RETURN and gamepad PAD BACK / PAD START fire
-    // ChatInput::Close / Send while chat is open. Runs ahead of the
+    // ChatInput::close / Send while chat is open. Runs ahead of the
     // keyboard-only branch below so gamepad events reach it too.
     if (gChatOpen)
     {
         if (auto* sc = shortcutManager.getShortcut(ShortcutId::kInterfaceDismiss);
             sc != nullptr && sc->matches(e, &_heldGamepadButtons))
         {
-            ChatInput(ChatInput::Close);
+            ChatInput(ChatInput::close);
             return;
         }
         if (auto* sc = shortcutManager.getShortcut(ShortcutId::kInterfaceConfirm);
             sc != nullptr && sc->matches(e, &_heldGamepadButtons))
         {
-            ChatInput(ChatInput::Send);
+            ChatInput(ChatInput::send);
             return;
         }
         // Other keys flow through SDL_TEXTINPUT (typing) — chat doesn't

@@ -349,6 +349,6 @@ namespace OpenRCT2::Ui::Windows
         auto staff = getGameState().entities.GetEntity<Staff>(w->GetStaffId());
         if (staff == nullptr)
             return false;
-        return staff->IsPatrolAreaSet(tile.ToCoordsXY());
+        return staff->isPatrolAreaSet(tile.ToCoordsXY());
     }
 } // namespace OpenRCT2::Ui::Windows

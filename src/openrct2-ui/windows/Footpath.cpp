@@ -2501,7 +2501,7 @@ namespace OpenRCT2::Ui::Windows
             // Path is found at that elevation, fall back to the
             // synthesised requested Z so the user can still anchor
             // a bridge in mid-air at their chosen plane.
-            int32_t z = surface->GetBaseZ();
+            int32_t z = surface->getBaseZ();
             uint8_t slope = surface->GetSlope();
             if (slope & kTileSlopeDiagonalFlag)
                 z += 2 * kPathHeightStep;
@@ -2517,25 +2517,25 @@ namespace OpenRCT2::Ui::Windows
                 {
                     do
                     {
-                        if (el->GetType() != TileElementType::Path)
+                        if (el->getType() != TileElementType::Path)
                             continue;
-                        if (el->GetBaseZ() != requestedZ)
+                        if (el->getBaseZ() != requestedZ)
                             continue;
                         // Direction-aware slope step — mirrors the
                         // mouse path's FootpathBridgeGetInfoFromPos
                         // post-processing: if the existing path is
                         // sloped and we'd extend along the slope's
                         // direction, anchor at the top of the slope.
-                        int32_t pathZ = el->GetBaseZ();
-                        if (el->AsPath()->IsSloped()
-                            && direction == el->AsPath()->GetSlopeDirection())
+                        int32_t pathZ = el->getBaseZ();
+                        if (el->asPath()->IsSloped()
+                            && direction == el->asPath()->GetSlopeDirection())
                         {
                             pathZ += kPathHeightStep;
                         }
                         z = pathZ;
                         snapped = true;
                         break;
-                    } while (!(el++)->IsLastForTile());
+                    } while (!(el++)->isLastForTile());
                 }
                 if (!snapped)
                 {

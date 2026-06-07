@@ -90,7 +90,7 @@ namespace OpenRCT2::Ui::Windows
     class LedWindow final : public Window
     {
         // SDL_GetTicks deadline at which the test-fire pulse should
-        // hand off to Led::clear() (engine then fades to black). 0
+        // hand off to Led::Clear() (engine then fades to black). 0
         // means "no test active". Polled by onUpdate; the window
         // must stay open at least one frame past the deadline for
         // the hand-off to actually fire — which is fine because
@@ -112,7 +112,7 @@ namespace OpenRCT2::Ui::Windows
             // safe to call unconditionally.
             if (_testEndsMs != 0)
             {
-                OpenRCT2::Led::clear();
+                OpenRCT2::Led::Clear();
                 _testEndsMs = 0;
             }
         }
@@ -217,7 +217,7 @@ namespace OpenRCT2::Ui::Windows
             // the difference between 1000 ms and 1025 ms.
             if (_testEndsMs != 0 && SDL_GetTicks() >= _testEndsMs)
             {
-                OpenRCT2::Led::clear();
+                OpenRCT2::Led::Clear();
                 _testEndsMs = 0;
             }
         }

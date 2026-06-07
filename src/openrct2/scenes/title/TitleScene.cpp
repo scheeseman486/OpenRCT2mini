@@ -183,6 +183,7 @@ void TitleScene::Tick()
     // (which is checked in Load — but the error has the extra constraint
     // of needing to outlast a possible double Load when SwitchToStartUpScene
     // and the catch arm both fire SetActiveScene).
+    static StringId gOpenRCT2PendingParkLoadError = kStringIdNone;
     if (gOpenRCT2PendingParkLoadError != kStringIdNone)
     {
         auto pendingTitle = gOpenRCT2PendingParkLoadError;

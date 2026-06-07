@@ -674,11 +674,11 @@ namespace OpenRCT2::Ui
     // off first, work down to infrastructure last.
     static int classifyGridCursorPriority(const TileElement& el)
     {
-        switch (el.GetType())
+        switch (el.getType())
         {
             case TileElementType::SmallScenery:
             {
-                const auto* entry = el.AsSmallScenery()->GetEntry();
+                const auto* entry = el.asSmallScenery()->GetEntry();
                 if (entry == nullptr)
                     return 0;  // unknown entry — treat as sub-tile
                 return entry->flags.has(SmallSceneryFlag::occupiesFullTile) ? 1 : 0;
@@ -690,14 +690,14 @@ namespace OpenRCT2::Ui
             case TileElementType::Banner:
                 return 4;
             case TileElementType::Path:
-                return el.AsPath()->HasAddition() ? 5 : 6;
+                return el.asPath()->HasAddition() ? 5 : 6;
             case TileElementType::Entrance:
                 // Park entrance and ride entrance/exit share the
                 // same TileElementType — disambiguate by sub-type.
                 // Park entrance opens the park information window
                 // (§6.2); ride entrance / exit opens ride
                 // construction.
-                return el.AsEntrance()->GetEntranceType() == ENTRANCE_TYPE_PARK_ENTRANCE ? 7 : 8;
+                return el.asEntrance()->GetEntranceType() == ENTRANCE_TYPE_PARK_ENTRANCE ? 7 : 8;
             case TileElementType::Track:
                 return 8;
             case TileElementType::Surface:
@@ -736,33 +736,33 @@ namespace OpenRCT2::Ui
     // classifier's exact int encoding.
     static bool dispatchGridCursorActionForElement(TileElement& el, const CoordsXY& tile)
     {
-        switch (el.GetType())
+        switch (el.getType())
         {
             case TileElementType::SmallScenery:
-                ViewportInteractionRemoveScenery(*el.AsSmallScenery(), tile);
+                ViewportInteractionRemoveScenery(*el.asSmallScenery(), tile);
                 return true;
 
             case TileElementType::LargeScenery:
-                ViewportInteractionRemoveLargeScenery(*el.AsLargeScenery(), tile);
+                ViewportInteractionRemoveLargeScenery(*el.asLargeScenery(), tile);
                 return true;
 
             case TileElementType::Wall:
-                ViewportInteractionRemoveParkWall(*el.AsWall(), tile);
+                ViewportInteractionRemoveParkWall(*el.asWall(), tile);
                 return true;
 
             case TileElementType::Banner:
-                ContextOpenDetailWindow(WindowDetail::banner, el.AsBanner()->GetIndex().ToUnderlying());
+                ContextOpenDetailWindow(WindowDetail::banner, el.asBanner()->GetIndex().ToUnderlying());
                 return true;
 
             case TileElementType::Path:
-                if (el.AsPath()->HasAddition())
-                    ViewportInteractionRemovePathAddition(*el.AsPath(), tile);
+                if (el.asPath()->HasAddition())
+                    ViewportInteractionRemovePathAddition(*el.asPath(), tile);
                 else
-                    ViewportInteractionRemoveFootpath(*el.AsPath(), tile);
+                    ViewportInteractionRemoveFootpath(*el.asPath(), tile);
                 return true;
 
             case TileElementType::Entrance:
-                if (el.AsEntrance()->GetEntranceType() == ENTRANCE_TYPE_PARK_ENTRANCE)
+                if (el.asEntrance()->GetEntranceType() == ENTRANCE_TYPE_PARK_ENTRANCE)
                 {
                     // §6.2 — grid cursor never deletes the park
                     // entrance; instead surface the park info
@@ -839,7 +839,7 @@ namespace OpenRCT2::Ui
                 continue;
             if (useZWindow)
             {
-                const int32_t elZ = el->GetBaseZ();
+                const int32_t elZ = el->getBaseZ();
                 if (elZ < cursorZ - kPathHeightStep || elZ > cursorZ + kPathHeightStep)
                     continue;
             }
@@ -851,7 +851,7 @@ namespace OpenRCT2::Ui
             // delete. Override for walls only: keep updating so we
             // end on the LAST wall in the list (highest Z + latest
             // placed at the same Z). Other bands keep first-wins.
-            const bool isWall = el->GetType() == TileElementType::Wall;
+            const bool isWall = el->getType() == TileElementType::Wall;
             if (!best[p].has_value() || isWall)
                 best[p] = Candidate{ el, order };
             // else: earlier-in-list within band already chosen

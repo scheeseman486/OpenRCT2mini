@@ -197,6 +197,22 @@ void InGameConsole::ClearLine()
     RefreshCaret();
 }
 
+// OPENRCT2MINI v0.5.2 merge stubs: OSK ⇄ console integration. The full
+// implementations got clobbered in the safe-apply; these no-op stubs
+// keep the link clean while the OSK calls through. The console still
+// works fine via the standard text-input path; only the OSK overlay's
+// live-mirror buffer + submit-on-Return path is dormant until restored.
+void InGameConsole::OskMirrorBuffer(std::string_view text, size_t caret)
+{
+    (void)text;
+    (void)caret;
+}
+
+void InGameConsole::OskSubmitLine(std::string_view text)
+{
+    (void)text;
+}
+
 void InGameConsole::Open()
 {
     if (!_isInitialised)
