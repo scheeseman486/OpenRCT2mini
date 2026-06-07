@@ -29,6 +29,11 @@ if (APPLE)
     set(LIBOPENRCT2_LINKAGE STATIC)
 endif()
 add_library(libopenrct2 ${LIBOPENRCT2_LINKAGE} ${OPENRCT2_QUICKJS_NG_SOURCES} ${OPENRCT2_CORE_SOURCES} ${OPENRCT2_CORE_MM_SOURCES})
+
+# OPENRCT2MINI: embedded_defaults headers live under the build dir and
+# need to be on libopenrct2 PUBLIC includes so both libopenrct2 and
+# openrct2-ui can #include them.
+target_include_directories(libopenrct2 PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/embedded_defaults")
 add_library(OpenRCT2::libopenrct2 ALIAS libopenrct2)
 
 if (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "13")
@@ -317,3 +322,81 @@ if (CMAKE_LIBRARY_ARCHITECTURE MATCHES "arm-linux-gnueabihf")
     message(STATUS "Linking to armhf libs; adding libatomic")
     target_link_libraries(libopenrct2 atomic)
 endif()
+# OPENRCT2MINI defaults-export P3: embed per-build defaults into the
+# binary. The seed files under config/{appimage,miyoo_mini}/save/
+# (committed as the canonical source of truth — see P2) are
+# hex-included via cmake/EmbedFileAsArray.cmake. Choice of seed dir
+# is gated on the existing OPENRCT2MINI option, so the Mini build
+# embeds its own per-build defaults and the host/appimage build
+# embeds the appimage variants.
+#
+# The generated headers live under
+# ${CMAKE_CURRENT_BINARY_DIR}/embedded_defaults/ and are added to
+# libopenrct2's PUBLIC include path so both the openrct2 library
+# (Config.cpp / HapticEvent.cpp) and the openrct2-ui sources
+# (ShortcutManager.cpp) can include them.
+#
+# Driven via add_custom_command — editing a seed file (e.g. tweaking
+# a default in config/appimage/save/shortcuts.json) triggers a
+# regenerate of the matching header, which then triggers a recompile
+# of the TU that consumes it.
+include(${ROOT_DIR}/cmake/EmbedFileAsArray.cmake)
+
+if (OPENRCT2MINI)
+    set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/miyoo_mini/save")
+elseif (WIN32)
+    # Windows builds (mingw cross-compile or native MSVC CMake) get the
+    # config/windows/ seed dir. Byte-identical to config/appimage/ at the
+    # commit this branch was introduced; diverging later is a seed-file
+    # edit only (no source change).
+    set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/windows/save")
+else ()
+    set(_OPENRCT2MINI_DEFAULTS_SEED_DIR "${ROOT_DIR}/config/appimage/save")
+endif ()
+
+set(_OPENRCT2MINI_EMBED_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/embedded_defaults")
+file(MAKE_DIRECTORY "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}")
+
+embed_file_as_array(
+    "${_OPENRCT2MINI_DEFAULTS_SEED_DIR}/config.ini"
+    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ConfigIniDefault.h"
+    "kConfigIniDefault")
+embed_file_as_array(
+    "${_OPENRCT2MINI_DEFAULTS_SEED_DIR}/shortcuts.json"
+    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ShortcutsJsonDefault.h"
+    "kShortcutsJsonDefault")
+embed_file_as_array(
+    "${_OPENRCT2MINI_DEFAULTS_SEED_DIR}/rumble.json"
+    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/RumbleJsonDefault.h"
+    "kRumbleJsonDefault")
+
+# OPENRCT2MINI disabled-settings: a fourth per-build manifest, sibling
+# of the save/ defaults but living one level up under
+# config/<build>/disabled_settings.json. Lists widgets to grey out and
+# UI items to remove on a per-build basis (Options pane gates, etc.).
+# Consumed at runtime by src/openrct2/ui/DisabledSettings.cpp.
+if (OPENRCT2MINI)
+    set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/miyoo_mini/disabled_settings.json")
+elseif (WIN32)
+    set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/windows/disabled_settings.json")
+else ()
+    set(_OPENRCT2MINI_DISABLED_SETTINGS_SRC "${ROOT_DIR}/config/appimage/disabled_settings.json")
+endif ()
+embed_file_as_array(
+    "${_OPENRCT2MINI_DISABLED_SETTINGS_SRC}"
+    "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/DisabledSettingsDefault.h"
+    "kDisabledSettingsDefault")
+
+# An ALL-target depending on the three generated headers ensures the
+# custom commands actually run (a header that's nobody's `target_sources`
+# input would never be built otherwise). add_dependencies(libopenrct2 ...)
+# then hooks the generation into libopenrct2's build, so a clean build
+# always materialises the headers before any .cpp that #includes them.
+add_custom_target(openrct2mini_embedded_defaults ALL
+    DEPENDS
+        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ConfigIniDefault.h"
+        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/ShortcutsJsonDefault.h"
+        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/RumbleJsonDefault.h"
+        "${_OPENRCT2MINI_EMBED_OUTPUT_DIR}/DisabledSettingsDefault.h")
+add_dependencies(libopenrct2 openrct2mini_embedded_defaults)
+
