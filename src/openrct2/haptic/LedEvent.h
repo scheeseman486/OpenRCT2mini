@@ -1,23 +1,16 @@
 #pragma once
 #include <cstdint>
 
-// OPENRCT2MINI v0.5.2 merge: the News::Severity enum that LED.cpp + the
-// classifier rely on lives in management/NewsItem.h in our pre-merge code,
-// but the v0.5.2 safe-apply of NewsItem.h overwrote that addition. The LED
-// feature is currently feature-disabled (this file's stubs are no-ops), so
-// rather than chase the NewsItem.h merge we forward-declare News::Severity
-// here just so LED.cpp parses. When LED is reactivated, restore the real
-// definition in NewsItem.h and drop this stub block.
-namespace OpenRCT2::News
-{
-    enum class Severity : uint8_t
-    {
-        info,
-        warning,
-        critical,
-        money,
-    };
-}
+// OPENRCT2MINI v0.5.2 merge: News::Severity now lives in its
+// canonical home (management/NewsItem.h) — the safe-apply that
+// clobbered NewsItem.h had us forward-declare it here as a temporary
+// stub; phase 5d restored the enum properly. The full GetSeverity
+// classifier impl + per-Item severity cache field on News::Item are
+// still pending re-merge (see plans/docs/upstream-merge-v0.5.2-status.md).
+// LED engine itself remains stubbed (setActive / forceClear / Update
+// are no-ops) so the LED Options UI shell compiles + links; the actual
+// SDL2 controller-LED writes will be re-wired in a follow-up.
+#include "../management/NewsItem.h"
 
 namespace OpenRCT2::Led
 {

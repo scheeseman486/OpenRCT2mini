@@ -48,6 +48,34 @@ namespace OpenRCT2::News
 
     constexpr size_t ItemTypeCount = static_cast<size_t>(ItemType::count);
 
+    // OPENRCT2MINI gamepad-plan 1.12: severity classification for
+    // news items. ItemType groups by CATEGORY (peep / money /
+    // research / …); a single category can span multiple severities
+    // ("guest drowned" and "guest joined queue" are both peep). This
+    // enum is the orthogonal severity axis, used by the DualShock
+    // LED indicator (1.13) and the critical-news rumble pulse hook
+    // deferred from 1.11.
+    //   info     — generic / cosmetic notifications, no signal needed
+    //   money    — financial / progression-positive events
+    //   warning  — actionable problem (mechanic en route, queue jam,
+    //              cash flow warning, multi-week rating countdown)
+    //   critical — emergency requiring immediate attention (ride
+    //              crash, guest drowned, vandalism, park closure /
+    //              1-week-remaining countdown)
+    // OPENRCT2MINI v0.5.2 merge: full GetSeverity classifier impl
+    // and the per-Item severity cache field are NOT yet re-merged
+    // (the safe-apply of NewsItem.cpp overwrote them, and the
+    // upstream cpp uses the new camelCase queue names — re-merge
+    // is non-trivial). The enum lives here so LED.cpp + the LED
+    // stubs in haptic/LedEvent.h reference a single canonical type.
+    enum class Severity : uint8_t
+    {
+        info,
+        money,
+        warning,
+        critical,
+    };
+
     enum ItemTypeProperty : uint8_t
     {
         hasLocation = 1,
